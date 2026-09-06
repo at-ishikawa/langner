@@ -2,6 +2,7 @@ package datasync
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -9,10 +10,22 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/yaml.v3"
 )
+
+// binaryValuePrefix tags a base64-encoded BINARY (non-UTF-8) bytea value in the
+// YAML dump. Only []byte values that are NOT valid UTF-8 (e.g. AES-GCM
+// ciphertext in users.email_encrypted / user_llm_credentials.api_key_encrypted)
+// are wrapped; text/JSONB byteas stay plain strings. Because the wrap triggers
+// only on non-UTF-8 input, the prefix guards data that could never be valid
+// UTF-8 text — so a plain string carrying this prefix is unambiguously our own
+// encoding, and denormalizeValue decodes it back to the exact bytes for a
+// lossless bytea round trip (marshalling raw []byte would be lossy: yaml.v3
+// renders a []byte inside an interface{} as a sequence of ints).
+const binaryValuePrefix = "!!bytea-base64:"
 
 // DataTablesInDependencyOrder lists every persisted-data table with child
 // tables (whose foreign key points at another table in the list) BEFORE
@@ -235,8 +248,9 @@ func normalizeRow(raw map[string]any) map[string]any {
 
 // normalizeValue renders one DB value as a YAML-serialisable scalar without
 // losing information:
-//   - time.Time  -> RFC3339 with nanoseconds, in UTC (stable, comparable)
-//   - []byte     -> string (covers JSONB text and any bytea)
+//   - time.Time      -> RFC3339 with nanoseconds, in UTC (stable, comparable)
+//   - []byte (UTF-8) -> string (covers JSONB text and text-shaped bytea)
+//   - []byte (binary)-> binaryValuePrefix + base64 (lossless for ciphertext)
 //   - everything else (int64, float64, bool, string, nil) passes through.
 func normalizeValue(v any) any {
 	switch t := v.(type) {
@@ -245,7 +259,10 @@ func normalizeValue(v any) any {
 	case time.Time:
 		return t.UTC().Format(time.RFC3339Nano)
 	case []byte:
-		return string(t)
+		if utf8.Valid(t) {
+			return string(t)
+		}
+		return binaryValuePrefix + base64.StdEncoding.EncodeToString(t)
 	default:
 		return v
 	}
@@ -253,17 +270,23 @@ func normalizeValue(v any) any {
 
 // denormalizeValue converts a YAML-decoded value back into a form the DB
 // driver accepts for INSERT. Timestamp columns (identified from the live
-// schema, not a name heuristic) are parsed back into time.Time; every other
-// value inserts as-is (pgx coerces int/float/bool/string, and a JSON string
-// into a jsonb column).
+// schema, not a name heuristic) are parsed back into time.Time; a value tagged
+// with binaryValuePrefix is decoded back into raw []byte so it re-inserts as
+// bytea losslessly; every other value inserts as-is (pgx coerces
+// int/float/bool/string, and a JSON string into a jsonb column).
 func denormalizeValue(v any, isTimestamp bool) any {
 	if v == nil {
 		return nil
 	}
-	if isTimestamp {
-		if s, ok := v.(string); ok {
+	if s, ok := v.(string); ok {
+		if isTimestamp {
 			if parsed, err := time.Parse(time.RFC3339Nano, s); err == nil {
 				return parsed
+			}
+		}
+		if encoded, found := strings.CutPrefix(s, binaryValuePrefix); found {
+			if b, err := base64.StdEncoding.DecodeString(encoded); err == nil {
+				return b
 			}
 		}
 	}

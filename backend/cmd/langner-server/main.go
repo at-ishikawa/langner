@@ -233,7 +233,7 @@ func run(ctx context.Context) error {
 		mux.HandleFunc("/auth/me", authSetup.handler.Me)
 	}
 
-	var rootHandler http.Handler = h2c.NewHandler(mux, &http2.Server{})
+	rootHandler := h2c.NewHandler(mux, &http2.Server{})
 	if authSetup != nil {
 		// Lifts a verified session cookie into the request context for both the
 		// connect interceptor and /auth/me. Does NOT reject — /auth/* and CORS
