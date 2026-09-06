@@ -22,17 +22,17 @@ import (
 func mapGradeError(err error) *connect.Error {
 	if errors.Is(err, inference.ErrNoCredential) {
 		return connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("No API key configured. Add one in Settings to grade answers."))
+			errors.New("no API key configured — add one in Settings to grade answers"))
 	}
 	var pe *inference.ProviderError
 	if errors.As(err, &pe) {
 		if pe.IsQuota() {
 			return connect.NewError(connect.CodeResourceExhausted,
-				fmt.Errorf("Your %s API key has no remaining credits — update it in Settings.", pe.Provider))
+				fmt.Errorf("%s API key has no remaining credits — update it in Settings", pe.Provider))
 		}
 		if pe.IsInvalidKey() {
 			return connect.NewError(connect.CodeUnauthenticated,
-				fmt.Errorf("Your %s API key is invalid — update it in Settings.", pe.Provider))
+				fmt.Errorf("%s API key is invalid — update it in Settings", pe.Provider))
 		}
 	}
 	return connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
