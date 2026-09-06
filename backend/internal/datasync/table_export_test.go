@@ -114,55 +114,84 @@ func TestTableDumpSerializationRoundTrip(t *testing.T) {
 	assert.Equal(t, int64(7), toInt64(row["interval_days"]))
 }
 
-// TestTableDumpBinaryByteaRoundTrip proves BINARY bytea columns survive the
+// TestTableDumpBinaryByteaRoundTrip proves bytea columns survive the
 // dump/restore losslessly WITHOUT a database. AES-GCM ciphertext (auth's
-// users.email_encrypted / user_llm_credentials.api_key_encrypted) is not valid
-// UTF-8: string()-ing it and re-inserting produced `invalid byte sequence for
-// encoding "UTF8": 0x00`. This drives a byte slice with 0x00 and high bytes
-// through the real serialize -> yaml.Marshal(writeTableFile) ->
-// yaml.Unmarshal(readTableFile) -> denormalizeValue and asserts the bytes come
-// back byte-for-byte identical (and re-serialise stably, matching the live
-// round-trip's A==B proof).
+// users.email_encrypted / users.name_encrypted / user_llm_credentials.
+// api_key_encrypted) can hold bytes Postgres text/varchar cannot: string()-ing
+// them and re-inserting produced `invalid byte sequence for encoding "UTF8":
+// 0x00`. Crucially, a lone NUL (0x00) is VALID UTF-8 (U+0000) yet Postgres text
+// still rejects it — so "valid UTF-8" is NOT enough to send as a text string;
+// the value must also be NUL-free. Each case is driven through the real
+// serialize -> yaml.Marshal(writeTableFile) -> yaml.Unmarshal(readTableFile) ->
+// denormalizeValue path and asserted byte-for-byte, with a stable re-serialise.
 func TestTableDumpBinaryByteaRoundTrip(t *testing.T) {
-	binary := []byte{0x00, 0x01, 0xDE, 0xAD, 0xBE, 0xEF, 0xFF}
-	original := map[string]any{
-		"id":              int64(1),
-		"email_encrypted": binary,
+	cases := []struct {
+		name string
+		// value is the original bytea. wantTagged is true when it must be
+		// base64-tagged (binary OR contains a NUL) rather than a plain string.
+		value      []byte
+		wantTagged bool
+	}{
+		// Non-UTF-8 ciphertext (high bytes + NUL).
+		{"non_utf8_ciphertext", []byte{0x00, 0x01, 0xDE, 0xAD, 0xBE, 0xEF, 0xFF}, true},
+		// A lone NUL: the EXACT round-trip seed value ('\x00'). Valid UTF-8 but
+		// Postgres text rejects it — the hole the first fix missed.
+		{"lone_null_byte", []byte{0x00}, true},
+		// Valid UTF-8 text with an embedded NUL — still cannot go through a text bind.
+		{"utf8_text_with_embedded_null", []byte("ab\x00cd"), true},
+		// Valid UTF-8, no NUL: JSONB / text-shaped bytea stays a plain string.
+		{"utf8_json_no_null", []byte(`{"word":"break the ice"}`), false},
 	}
 
-	normalized := normalizeRow(original)
-	// Binary bytea normalises to a tagged base64 STRING (yaml-safe), never a raw
-	// []byte (which yaml.v3 would render as a lossy sequence of ints).
-	encoded, ok := normalized["email_encrypted"].(string)
-	require.True(t, ok, "binary bytea must normalise to a string, got %T", normalized["email_encrypted"])
-	assert.True(t, strings.HasPrefix(encoded, binaryValuePrefix),
-		"binary bytea must be tagged with the binary prefix; got %q", encoded)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			original := map[string]any{"id": int64(1), "email_encrypted": tc.value}
 
-	dir := t.TempDir()
-	tablesDir := filepath.Join(dir, "tables")
-	require.NoError(t, os.MkdirAll(tablesDir, 0o755))
-	path := filepath.Join(tablesDir, "users.yml")
-	require.NoError(t, writeTableFile(path, []map[string]any{normalized}))
+			normalized := normalizeRow(original)
+			s, ok := normalized["email_encrypted"].(string)
+			require.True(t, ok, "bytea must normalise to a string, got %T", normalized["email_encrypted"])
+			if tc.wantTagged {
+				assert.True(t, strings.HasPrefix(s, binaryValuePrefix),
+					"a value Postgres text cannot hold (non-UTF-8 or containing NUL) must be base64-tagged; got %q", s)
+				assert.NotContains(t, s, "\x00", "the serialised form must not embed a raw NUL byte")
+			} else {
+				assert.False(t, strings.HasPrefix(s, binaryValuePrefix),
+					"plain UTF-8 text (no NUL) must stay an untagged string; got %q", s)
+			}
 
-	readBack, err := readTableFile(path)
-	require.NoError(t, err)
-	require.Len(t, readBack, 1)
+			dir := t.TempDir()
+			tablesDir := filepath.Join(dir, "tables")
+			require.NoError(t, os.MkdirAll(tablesDir, 0o755))
+			path := filepath.Join(tablesDir, "users.yml")
+			require.NoError(t, writeTableFile(path, []map[string]any{normalized}))
 
-	// email_encrypted is NOT a timestamp column -> isTimestamp=false. It must
-	// decode back to the exact original bytes so pgx re-inserts it as bytea.
-	got, ok := denormalizeValue(readBack[0]["email_encrypted"], false).([]byte)
-	require.True(t, ok, "binary bytea must denormalise back to []byte, got %T", denormalizeValue(readBack[0]["email_encrypted"], false))
-	assert.Equal(t, binary, got, "binary bytea round-trip must be byte-for-byte identical")
+			readBack, err := readTableFile(path)
+			require.NoError(t, err)
+			require.Len(t, readBack, 1)
 
-	// Re-serialising the read-back row yields the identical file (the live
-	// round-trip's byte-for-byte A==B losslessness proof holds for binary too).
-	path2 := filepath.Join(tablesDir, "users2.yml")
-	require.NoError(t, writeTableFile(path2, []map[string]any{normalizeRow(readBack[0])}))
-	a, err := os.ReadFile(path)
-	require.NoError(t, err)
-	b, err := os.ReadFile(path2)
-	require.NoError(t, err)
-	assert.Equal(t, string(a), string(b), "binary bytea must re-serialise stably")
+			// email_encrypted is NOT a timestamp column -> isTimestamp=false.
+			got := denormalizeValue(readBack[0]["email_encrypted"], false)
+			if tc.wantTagged {
+				b, ok := got.([]byte)
+				require.True(t, ok, "a tagged bytea must denormalise back to []byte, got %T", got)
+				assert.Equal(t, tc.value, b, "bytea round-trip must be byte-for-byte identical")
+			} else {
+				assert.Equal(t, string(tc.value), got, "plain UTF-8 text round-trips as the same string")
+			}
+
+			// Mirror the DB round trip export A -> import -> export B: re-normalise
+			// the DENORMALISED value (what would be re-inserted) and assert the file
+			// is byte-for-byte identical (the losslessness A==B proof).
+			path2 := filepath.Join(tablesDir, "users2.yml")
+			reNormalized := normalizeRow(map[string]any{"id": int64(1), "email_encrypted": got})
+			require.NoError(t, writeTableFile(path2, []map[string]any{reNormalized}))
+			a, err := os.ReadFile(path)
+			require.NoError(t, err)
+			b, err := os.ReadFile(path2)
+			require.NoError(t, err)
+			assert.Equal(t, string(a), string(b), "bytea must re-serialise stably")
+		})
+	}
 }
 
 // --- migration-schema parsing helpers (self-contained; mirrors the guard in
