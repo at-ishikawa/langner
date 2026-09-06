@@ -67,6 +67,16 @@ Acceptable placements: inline directly under the answered item, or a pinned/stic
 
 **Consequence:** the "Next" button must not sit above the feedback it is meant to follow. If feedback is a bottom sheet, reserve bottom padding so it never covers the item or the controls.
 
+## U4 — A per-word affordance must reach EVERY surface the word is shown, and be gated to the revealed state
+
+When you add a control that renders next to a displayed headword — a pronunciation (🔊) button (`PronounceButton`), a per-word menu, a copy/lookup/definition affordance, any future per-word UI — it must appear on **all** surfaces where that word is revealed, not just the shared `QuizResultCard`. The trap: the **relearn single-card session screen** (`frontend/src/app/quiz/relearn/session/page.tsx`) builds its **own** layout and does **NOT** reuse `QuizResultCard`, so editing `QuizResultCard` alone silently misses it — the learner sees the affordance in a normal quiz result but not while relearning the same word. That screen renders the word itself in two places: the recognition **prompt heading** (`promptText` when not reverse) and the post-answer **feedback block** (`current.entry`).
+
+Before shipping a per-word affordance, enumerate and cover every word-display surface — grep for the strings that render a headword (`item.entry`, `current.entry`, `lookup.word`, the `relearn-prompt` heading): `QuizResultCard` (vocab results + batch relearn), the relearn single-card screen's prompt + feedback (`session/page.tsx`), `WordLookupPopup`, `WordDetailView`, and any grammar/origin post that shows a headword.
+
+Gate every such affordance to the **revealed** state only, reusing the reverse-hiding rule (see U1 and the origin-card reference rules): never render it on a reverse quiz's question/front state, where the word is the hidden answer — pronouncing or echoing it leaks the answer. On the relearn single-card screen that means: recognition prompt (word = the question) ✓, post-answer feedback (word revealed) ✓, reverse question state ✗.
+
+**Consequence:** a per-word feature is NOT "done" when `QuizResultCard` shows it. Cover each surface, and add a test that the affordance is **absent while a reverse word is still hidden** and **present once feedback reveals it** (e.g. the `PronounceButton` regression test in `quiz/relearn/session/page.test.tsx`).
+
 ---
 
 *The historical PR-by-PR worked examples (the #37/#38/#41 iterations that removed the standalone etymology-origin quiz, removed skip/Exclude from Relearn, moved feedback into a pinned sheet, fixed horizontal overflow, and added in-session re-drill of wrong grammar blanks) previously lived here. They have been dropped as changelog — that narrative belongs in git history. U1–U3 above are the current contract; when they change, update them here rather than appending another PR note.*
