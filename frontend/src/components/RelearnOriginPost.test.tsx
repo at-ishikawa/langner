@@ -105,6 +105,49 @@ describe("RelearnOriginPost", () => {
     });
   });
 
+  // A reverse word hides the answer (prompt is the meaning), so the pronounce
+  // button must not appear while asking — it would leak the answer — but must
+  // appear beside the revealed word once the review sheet opens.
+  it("shows the pronounce button only after a reverse origin word is revealed", async () => {
+    // jsdom has no speechSynthesis; stub it so PronounceButton renders.
+    vi.stubGlobal("speechSynthesis", {
+      speak: vi.fn(),
+      cancel: vi.fn(),
+      getVoices: () => [],
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    try {
+      submitMock.mockResolvedValueOnce(gradeResponse());
+      render(
+        <ChakraProvider value={defaultSystem}>
+          <RelearnOriginPost
+            originText="liber"
+            originMeaning="free"
+            type="root"
+            language="Latin"
+            englishForms={["lib"]}
+            words={[word("liberty", 1, 2)]}
+            onComplete={vi.fn()}
+          />
+        </ChakraProvider>,
+      );
+
+      // Reverse asking: the word is hidden, so no pronounce control.
+      expect(screen.queryByLabelText(/Play pronunciation/)).not.toBeInTheDocument();
+
+      const input = screen.getByLabelText('Word for "liberty-meaning"');
+      fireEvent.change(input, { target: { value: "wrong guess" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      await screen.findByTestId("relearn-origin-feedback");
+      // Review sheet: the word is revealed, so it can be pronounced.
+      expect(await screen.findByLabelText("Play pronunciation of liberty")).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("renders a reverse-direction word as meaning + a word input, and a recognition word as word + a meaning input, under one origin header", () => {
     render(
       <ChakraProvider value={defaultSystem}>

@@ -67,6 +67,25 @@ Acceptable placements: inline directly under the answered item, or a pinned/stic
 
 **Consequence:** the "Next" button must not sit above the feedback it is meant to follow. If feedback is a bottom sheet, reserve bottom padding so it never covers the item or the controls.
 
+## U4 — A per-word affordance must reach EVERY surface the word is shown, and be gated to the revealed state
+
+When you add a control that renders next to a displayed headword — a pronunciation (🔊) button (`PronounceButton`), a per-word menu, a copy/lookup/definition affordance, any future per-word UI — it must appear on **all** surfaces where that word is revealed, not just the shared `QuizResultCard`. The trap: the **relearn single-card session screen** (`frontend/src/app/quiz/relearn/session/page.tsx`) builds its **own** layout and does **NOT** reuse `QuizResultCard`, so editing `QuizResultCard` alone silently misses it — the learner sees the affordance in a normal quiz result but not while relearning the same word. That screen renders the word itself in two places: the recognition **prompt heading** (`promptText` when not reverse) and the post-answer **feedback block** (`current.entry`).
+
+Before shipping a per-word affordance, cover **every** word-display surface below — this is the checklist, not a sample. "Vocabulary quiz" spans ALL of these (etymology words are ordinary vocabulary — there is no standalone etymology quiz, see the top of this doc — so the etymology **origin family relearn card counts as a vocabulary-quiz surface** and MUST be covered whenever the vocabulary quiz is in scope). Grep for the headword-rendering strings (`item.entry`, `current.entry`, `word.entry`, `selectedWord.entry`, `m.word`, `card.entry`, `lookup.word`, the `relearn-prompt` heading) and cover each:
+
+- **`QuizResultCard`** — the batch feedback card shared by the standard / reverse / freeform vocab quizzes (via `BatchFeedback`) AND batch relearn. (revealed)
+- **Standard (recognition) quiz prompt** — `app/quiz/standard/page.tsx`, the `card.entry` heading (word = the question). Reverse's prompt shows the meaning — no button.
+- **Relearn single-card screen** — `app/quiz/relearn/session/page.tsx`: the recognition prompt heading AND the post-answer feedback block (`current.entry`).
+- **Relearn etymology ORIGIN family card** — `RelearnOriginPost.tsx`, THREE revealed spots: the review sheet (`selectedWord.entry`), the recognition per-word prompt (`word.entry`), and the "Related words from this origin" reference (`m.word`). NOT the reverse per-word question state (the word is the hidden answer).
+- **`WordLookupPopup`** (the reader's tap-a-word lookup) and **`WordDetailView`**.
+- Any grammar/origin post that renders a headword.
+
+Gate every such affordance to the **revealed** state only, reusing the reverse-hiding rule (see U1 and the origin-card reference rules): never render it on a reverse quiz's question/front state, where the word is the hidden answer — pronouncing or echoing it leaks the answer. On the relearn single-card screen that means: recognition prompt (word = the question) ✓, post-answer feedback (word revealed) ✓, reverse question state ✗.
+
+**Consequence:** a per-word feature is NOT "done" when `QuizResultCard` shows it. Cover each surface, and add a test that the affordance is **absent while a reverse word is still hidden** and **present once feedback reveals it** (e.g. the `PronounceButton` regression test in `quiz/relearn/session/page.test.tsx`).
+
+**SSR trap:** such affordances are client-only (they read `window` / `speechSynthesis`). Do NOT branch on `typeof window` **during render** — the server renders nothing and the client renders the control, a hydration mismatch that leaves it **missing on the live SSR'd app** even though jsdom tests (which never SSR) show it. Resolve the client-only capability with `useSyncExternalStore(subscribe, clientSnapshot, () => false)` (server snapshot `false`) so the server and first client render agree and the control reveals after hydration. A green jsdom test is not proof the control appears in the running app.
+
 ---
 
 *The historical PR-by-PR worked examples (the #37/#38/#41 iterations that removed the standalone etymology-origin quiz, removed skip/Exclude from Relearn, moved feedback into a pinned sheet, fixed horizontal overflow, and added in-session re-drill of wrong grammar blanks) previously lived here. They have been dropped as changelog — that narrative belongs in git history. U1–U3 above are the current contract; when they change, update them here rather than appending another PR note.*

@@ -46,6 +46,7 @@
           id: rapidity-latin-roots
           meaning: "speed; quickness"
           part_of_speech: noun
+          pronunciation: "/rəˈpɪdɪti/"
           note: 'from rapere "to snatch" — the quality of moving fast'
           examples:
             - text: "The rapidity of the change caught everyone off guard."

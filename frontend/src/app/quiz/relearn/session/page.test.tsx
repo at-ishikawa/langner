@@ -193,6 +193,38 @@ describe("RelearnSessionPage", () => {
     expect(submitRelearnAnswer).toHaveBeenCalledWith(expect.objectContaining({ isSkipped: true }));
   });
 
+  // A reverse card hides the word (the prompt is the meaning), so the pronounce
+  // button must NOT appear while answering — it would leak the answer — but must
+  // appear beside the revealed word once feedback is shown.
+  it("shows the pronounce button only after a reverse word is revealed", async () => {
+    // jsdom has no speechSynthesis; provide a stub so PronounceButton renders
+    // (it returns null when the API is unavailable).
+    vi.stubGlobal("speechSynthesis", {
+      speak: vi.fn(),
+      cancel: vi.fn(),
+      getVoices: () => [],
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    try {
+      useRelearnStore.getState().seedQueue([reverseCard("nimble", "quick and light in movement")]);
+      submitRelearnAnswer.mockResolvedValue({ correct: false, meaning: "quick and light in movement", reason: "nope" });
+      renderPage();
+
+      // Answering phase: the word is hidden, so no pronounce control.
+      expect(screen.queryByLabelText(/Play pronunciation/)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Don't Know" }));
+      await screen.findByText("✗ Incorrect");
+
+      // Feedback phase: the word is revealed, so it can be pronounced. The
+      // button mounts after its support-check effect, so await it.
+      expect(await screen.findByLabelText("Play pronunciation of nimble")).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("navigates to complete when the last word is cleared", async () => {
     useRelearnStore.getState().seedQueue([card("alpha")]);
     submitRelearnAnswer.mockResolvedValue({ correct: true, meaning: "the first", reason: "ok" });

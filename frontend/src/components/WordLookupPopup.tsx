@@ -21,6 +21,7 @@ import {
   type NotebookWord,
   type WordDefinition,
 } from "@/lib/client";
+import { PronounceButton } from "./PronounceButton";
 
 // LookupState is exported so callers can read e.g. `lookup !== null` to decide
 // whether to render the popup, or to attach keyboard handlers.
@@ -281,6 +282,7 @@ function SavedDefinitionView({
       >
         <Box display="flex" alignItems="center" gap={2}>
           <Heading size="sm">{lookup.word}</Heading>
+          <PronounceButton text={lookup.word} size="xs" />
           <Text
             fontSize="xs"
             px={2}
@@ -398,20 +400,23 @@ function NewDefinitionView({
         alignItems="center"
         mb={3}
       >
-        <Heading size="sm">
-          {lookup.word}
-          {lookup.source && (
-            <Text
-              as="span"
-              fontWeight="normal"
-              fontSize="xs"
-              color="fg.muted"
-              ml={2}
-            >
-              ({lookup.source})
-            </Text>
-          )}
-        </Heading>
+        <Box display="flex" alignItems="center" gap={2}>
+          <Heading size="sm">
+            {lookup.word}
+            {lookup.source && (
+              <Text
+                as="span"
+                fontWeight="normal"
+                fontSize="xs"
+                color="fg.muted"
+                ml={2}
+              >
+                ({lookup.source})
+              </Text>
+            )}
+          </Heading>
+          <PronounceButton text={lookup.word} size="xs" />
+        </Box>
         <Button size="xs" variant="ghost" onClick={onClose}>
           Close
         </Button>
