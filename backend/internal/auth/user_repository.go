@@ -88,52 +88,6 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*User, 
 	return r.decrypt(row)
 }
 
-// DebugStats reports which database/schema the repository's connection reads
-// and a small sample of the users table. It is used only by temporary e2e-auth
-// diagnostics; each query is guarded so a failure never aborts the caller.
-//
-// TEMP DIAGNOSTIC (e2e auth debug) — remove once root-caused
-func (r *UserRepository) DebugStats(ctx context.Context) UserDebugStats {
-	var stats UserDebugStats
-	if err := r.db.GetContext(ctx, &stats.CurrentDatabase, `SELECT current_database()`); err != nil {
-		stats.CurrentDatabaseErr = err.Error()
-	}
-	if err := r.db.GetContext(ctx, &stats.CurrentSchema, `SELECT current_schema()`); err != nil {
-		stats.CurrentSchemaErr = err.Error()
-	}
-	if err := r.db.GetContext(ctx, &stats.UserCount, `SELECT count(*) FROM users`); err != nil {
-		stats.UserCountErr = err.Error()
-	}
-	if err := r.db.SelectContext(ctx, &stats.Sample,
-		`SELECT id, google_sub FROM users ORDER BY id LIMIT 5`); err != nil {
-		stats.SampleErr = err.Error()
-	}
-	return stats
-}
-
-// UserDebugStats is a snapshot of the connection's database/schema and a small
-// users sample, for temporary e2e-auth diagnostics.
-//
-// TEMP DIAGNOSTIC (e2e auth debug) — remove once root-caused
-type UserDebugStats struct {
-	CurrentDatabase    string
-	CurrentDatabaseErr string
-	CurrentSchema      string
-	CurrentSchemaErr   string
-	UserCount          int64
-	UserCountErr       string
-	Sample             []UserDebugRow
-	SampleErr          string
-}
-
-// UserDebugRow is one row of the users sample (never carries PII).
-//
-// TEMP DIAGNOSTIC (e2e auth debug) — remove once root-caused
-type UserDebugRow struct {
-	ID        int64  `db:"id"`
-	GoogleSub string `db:"google_sub"`
-}
-
 func (r *UserRepository) decrypt(row userRow) (*User, error) {
 	email, err := r.enc.Decrypt(row.EmailEncrypted)
 	if err != nil {
