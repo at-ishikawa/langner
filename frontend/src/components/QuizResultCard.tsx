@@ -4,6 +4,7 @@ import { Box, Button, Text } from "@chakra-ui/react";
 import type { WordDetail } from "@/store/quizStore";
 import { WordDetailView } from "./WordDetailView";
 import { OriginBreakdown, type OriginPartDisplay } from "./OriginBreakdown";
+import { PronounceButton } from "./PronounceButton";
 
 export type { OriginPartDisplay };
 
@@ -149,6 +150,10 @@ export function QuizResultCard({
             </Text>
           )}
         </Text>
+        {/* The entry (headword) is always revealed on this result card, so
+            playing its pronunciation leaks nothing. */}
+        <PronounceButton text={item.entry} />
+
         {(item.pronunciation || item.partOfSpeech) && (
           <Text fontSize="xs" color="fg.muted" flexShrink={0}>
             {[
