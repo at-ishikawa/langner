@@ -116,6 +116,11 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	// decryption, so seeding placeholder bytes is sufficient.
 	seedIfEmpty(ctx, t, db, "users",
 		`INSERT INTO users (google_sub, email_encrypted, email_hash, name_encrypted) VALUES ('roundtrip-seed-sub', '\x00', 'roundtrip-seed-hash', '\x00')`)
+	// notebooks: an ownership OVERLAY that stays empty on the example config
+	// (a notebook_id absent from it is treated as public+unowned), so nothing
+	// populates it on a data-only import — seed one unowned public row.
+	seedIfEmpty(ctx, t, db, "notebooks",
+		`INSERT INTO notebooks (notebook_id, visibility) VALUES ('roundtrip-seed', 'public')`)
 	seedIfEmpty(ctx, t, db, "note_images",
 		`INSERT INTO note_images (note_id, url, sort_order) SELECT MIN(id), 'https://example.com/ice.png', 0 FROM notes`)
 	seedIfEmpty(ctx, t, db, "note_references",
