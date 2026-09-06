@@ -6,6 +6,7 @@ import { Box, Heading, Spinner, Text } from "@chakra-ui/react";
 import { quizClient, QuizType, type SubmitRelearnAnswerResponse } from "@/lib/client";
 import { AnswerInput } from "@/components/AnswerInput";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { PronounceButton } from "@/components/PronounceButton";
 import { RelearnGrammarPost } from "@/components/RelearnGrammarPost";
 import { RelearnOriginPost } from "@/components/RelearnOriginPost";
 import { useRelearnStore } from "@/store/relearnStore";
@@ -172,9 +173,15 @@ export default function RelearnSessionPage() {
           {sourceLabel(current.sourceQuizType)}
         </Text>
 
-        <Heading size="lg" textAlign="center" data-testid="relearn-prompt">
-          {promptText}
-        </Heading>
+        <Box display="flex" alignItems="center" justifyContent="center" gap={2}>
+          <Heading size="lg" textAlign="center" data-testid="relearn-prompt">
+            {promptText}
+          </Heading>
+          {/* Recognition shows the word as the prompt, so pronouncing it is safe.
+              Reverse hides the word (the prompt is the meaning) — never render it
+              here, or it would leak the answer. */}
+          {!isReverse && <PronounceButton text={current.entry} />}
+        </Box>
 
         {/* Hints: examples for recognition, masked contexts for reverse. */}
         {!isReverse && current.examples.length > 0 && (
@@ -241,9 +248,14 @@ export default function RelearnSessionPage() {
               {/* Show the word, its correct meaning, and what the learner typed
                   so they can see exactly what was off. */}
               <Box display="flex" flexDirection="column" gap={1}>
-                <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
-                  {current.entry}
-                </Text>
+                {/* The word is revealed in feedback (for both reverse and
+                    recognition), so pronouncing it here leaks nothing. */}
+                <Box display="flex" alignItems="center" gap={2}>
+                  <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
+                    {current.entry}
+                  </Text>
+                  <PronounceButton text={current.entry} />
+                </Box>
                 <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>
                   <Text as="span" fontWeight="semibold">Meaning: </Text>
                   <Text as="span" data-testid={isReverse ? undefined : "relearn-answer"}>
