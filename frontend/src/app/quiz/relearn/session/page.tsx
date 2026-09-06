@@ -254,6 +254,9 @@ export default function RelearnSessionPage() {
                   <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
                     {current.entry}
                   </Text>
+                  {feedback.wordDetail?.pronunciation && (
+                    <Text fontSize="sm" color="fg.muted">/{feedback.wordDetail.pronunciation}/</Text>
+                  )}
                   <PronounceButton text={current.entry} />
                 </Box>
                 <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>

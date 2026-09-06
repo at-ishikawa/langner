@@ -520,6 +520,9 @@ export function RelearnOriginPost({
               so pronouncing it leaks nothing. */}
           <Box display="flex" alignItems="center" gap={2}>
             <Text fontWeight="bold">{selectedWord.entry}</Text>
+            {selected.res.wordDetail?.pronunciation && (
+              <Text fontSize="sm" color="fg.muted">/{selected.res.wordDetail.pronunciation}/</Text>
+            )}
             <PronounceButton text={selectedWord.entry} />
           </Box>
           <Text fontSize="sm" mb={1}>
