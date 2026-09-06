@@ -188,19 +188,6 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	user, err := h.users.FindByID(r.Context(), sess.UserID)
 	if err != nil {
 		slog.Error("auth: find user for /auth/me failed", "error", err)
-		// TEMP DIAGNOSTIC (e2e auth debug) — remove once root-caused
-		stats := h.users.DebugStats(r.Context())
-		slog.Error("auth: /auth/me user-not-found DIAGNOSTIC",
-			"lookup_user_id", sess.UserID,
-			"current_database", stats.CurrentDatabase,
-			"current_database_err", stats.CurrentDatabaseErr,
-			"current_schema", stats.CurrentSchema,
-			"current_schema_err", stats.CurrentSchemaErr,
-			"user_count", stats.UserCount,
-			"user_count_err", stats.UserCountErr,
-			"sample_rows", stats.Sample,
-			"sample_err", stats.SampleErr,
-		)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(meResponse{Authenticated: false, AvailableProviders: inference.AvailableProviders()})
