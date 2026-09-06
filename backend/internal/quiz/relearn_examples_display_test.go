@@ -99,3 +99,33 @@ func TestExampleData_DefinitionsExamplesShownInRelearn(t *testing.T) {
 		})
 	}
 }
+
+// TestExampleData_DefinitionsPronunciationInRelearn pins that a definitions-book
+// word's `pronunciation` survives the relearn build path (LoadRelearnPool →
+// LoadAllWords → buildWordDetail) into the card's WordDetail, so the relearn
+// origin family / single card can render the phonetic /…/. rapidity carries a
+// pronunciation and an origin (rapere), so it becomes an origin family card.
+// Driven end to end through the real Service/Reader from examples/.
+func TestExampleData_DefinitionsPronunciationInRelearn(t *testing.T) {
+	ctx := context.Background()
+	svc := newExampleService(t, t.TempDir())
+
+	reverse, err := svc.LoadReverseCards([]string{"latin-roots-book"}, false, true, nil)
+	require.NoError(t, err)
+	var rc *ReverseCard
+	for i := range reverse {
+		if reverse[i].Expression == "rapidity" {
+			rc = &reverse[i]
+		}
+	}
+	require.NotNil(t, rc, "reverse quiz must serve rapidity")
+
+	require.NoError(t, svc.SaveReverseResult(ctx, *rc, GradeResult{Correct: false, Quality: 0}, 1000))
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	card := relearnCardFor(pool, "rapidity")
+	require.NotNil(t, card, "reverse-missed rapidity must be in the relearn pool")
+	assert.Equal(t, "/rəˈpɪdɪti/", card.WordDetail.Pronunciation,
+		"definitions-book pronunciation must reach the relearn card's WordDetail")
+}
