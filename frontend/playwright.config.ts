@@ -11,22 +11,43 @@ const testDir = defineBddConfig({
 
 const TEST_CONFIG_PATH = process.env.LANGNER_TEST_CONFIG ?? "config.e2e.yml";
 
-// The backend webServer and globalSetup run concurrently: globalSetup drops +
-// recreates the DB, imports notebooks, and (via `auth issue-test-cookie`)
-// upserts the e2e user, while Playwright launches `langner-server`. Without a
-// gate the server begins serving before the user is seeded, so `/auth/me`
-// returns user-not-found and every authenticated page redirects to /login.
-// Block the server on the seeded `users` row so it never serves an unseeded DB.
-// DB coords mirror global-setup.ts (same LANGNER_TEST_DB_* env / config.e2e.yml).
+// Playwright starts the webServers and awaits their readiness BEFORE running
+// globalSetup. So the backend server must provision its own database — nothing
+// globalSetup does is available yet. The backend webServer command therefore
+// (re)creates the test DB, imports notebooks, upserts the allowlisted e2e user
+// and writes that user's signed session cookie to a file, all BEFORE binding
+// its port. This makes the seed a hard prerequisite of "server ready": the
+// server can never serve `/auth/me` before the user exists, which is the race
+// that redirected every authenticated page to /login. globalSetup then only
+// turns the cookie file into Playwright storage state (see global-setup.ts).
+// DB coords come from the LANGNER_TEST_DB_* env (config.e2e.yml in CI).
 const DB_HOST = process.env.LANGNER_TEST_DB_HOST ?? "127.0.0.1";
 const DB_PORT = process.env.LANGNER_TEST_DB_PORT ?? "5432";
 const DB_USER = process.env.LANGNER_TEST_DB_USER ?? "postgres";
 const DB_PASSWORD = process.env.LANGNER_TEST_DB_PASSWORD ?? "password";
 const DB_NAME = process.env.LANGNER_TEST_DB_NAME ?? "langner_e2e";
-const waitForAuthSeed =
-  `until PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} ` +
-  `-d ${DB_NAME} -tAc 'SELECT 1 FROM users LIMIT 1' 2>/dev/null | grep -q 1; ` +
-  `do echo 'waiting for e2e auth seed…'; sleep 1; done`;
+const E2E_EMAIL = "e2e@example.com";
+// Cookie file the backend command writes and global-setup.ts reads. Kept next
+// to the storage state under frontend/e2e/.auth/.
+const COOKIE_FILE = "frontend/e2e/.auth/cookie.txt";
+// Recreate the DB, seed it, mint the cookie, verify the user persisted, then
+// exec the server — all in a committed script (e2e/seed-and-serve.sh) rather
+// than a long `&&`-joined string here. The script runs `set -euo pipefail`
+// (any failed step fails the webServer, surfaced by Playwright, instead of
+// silently starting an unseeded server), prints `[seed]` markers so CI shows
+// which steps ran, and hard-fails if the users table is empty after seeding.
+// The seed is complete before `langner-server` binds BACKEND_PORT. Coords are
+// passed via env below.
+const seedEnv: Record<string, string> = {
+  DB_HOST,
+  DB_PORT,
+  DB_USER,
+  DB_PASSWORD,
+  DB_NAME,
+  E2E_EMAIL,
+  TEST_CONFIG_PATH,
+  COOKIE_FILE,
+};
 
 export default defineConfig({
   testDir,
@@ -54,10 +75,13 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `cd .. && make -C backend build && ${waitForAuthSeed} && ./langner-server --config ${TEST_CONFIG_PATH}`,
+      command: "bash e2e/seed-and-serve.sh",
+      env: seedEnv,
       port: BACKEND_PORT,
       reuseExistingServer: !process.env.CI,
-      timeout: 120000,
+      // Generous: this build (two binaries) + DB recreate + import + seed all
+      // run before the port opens.
+      timeout: 180000,
     },
     {
       command: `pnpm dev --port ${FRONTEND_PORT}`,
