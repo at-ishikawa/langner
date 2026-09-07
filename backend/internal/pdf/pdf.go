@@ -43,6 +43,9 @@ func ConvertMarkdownToPDF(markdownPath string) (string, error) {
 
 	renderer := pdf.New(
 		pdf.WithContext(context.Background()),
+		// This is a PDF, not HTML: never turn `"` `<` `>` `&` into HTML entities
+		// (goldmark-pdf otherwise renders a literal `&quot;` etc.).
+		pdf.WithEscapeHTML(false),
 		pdf.WithHeadingFont(pdf.GetTextFont(bodyFontFamily, pdf.FontCharisSIL)),
 		pdf.WithBodyFont(pdf.GetTextFont(bodyFontFamily, pdf.FontCharisSIL)),
 		pdf.WithCodeFont(pdf.GetCodeFont(codeFontFamily, pdf.FontRobotoMono)),
