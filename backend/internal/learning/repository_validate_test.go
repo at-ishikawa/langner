@@ -16,6 +16,7 @@ import (
 // rule in isolation.
 func validLog() *LearningLog {
 	return &LearningLog{
+		UserID:       7,
 		NoteID:       42,
 		Status:       "understood",
 		QuizType:     "notebook",
@@ -74,6 +75,9 @@ func TestValidateLearningLog(t *testing.T) {
 
 		// learned_at rule.
 		{name: "zero learned_at rejected", mutate: func(l *LearningLog) { l.LearnedAt = time.Time{} }, wantErr: true, errContains: "learned_at is zero"},
+
+		// user_id rule (auth Phase 2): a runtime write must be attributed.
+		{name: "zero user_id rejected at runtime", mutate: func(l *LearningLog) { l.UserID = 0 }, wantErr: true, errContains: "user_id is zero"},
 	}
 
 	for _, tt := range tests {
@@ -106,6 +110,13 @@ func TestValidateLearningLog_BatchImportSkipsIntervalRule(t *testing.T) {
 	structurallyBroken := validLog()
 	structurallyBroken.QuizType = "etymology_breakdown"
 	assert.Error(t, validateLearningLog(structurallyBroken, false), "import must still reject an unknown quiz_type")
+
+	// user_id is enforced only at runtime: import faithfully copies pre-auth
+	// (user_id 0) rows for later backfill, but a runtime write must be attributed.
+	zeroUser := validLog()
+	zeroUser.UserID = 0
+	assert.NoError(t, validateLearningLog(zeroUser, false), "import must accept a pre-auth row with user_id 0")
+	assert.Error(t, validateLearningLog(zeroUser, true), "runtime write must reject user_id 0")
 }
 
 // TestDBLearningRepository_Create_RejectsUncomputedInterval proves the guard
@@ -142,7 +153,7 @@ func TestDBLearningRepository_Create_RejectsUncomputedInterval(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err = repo.Create(context.Background(), &LearningLog{
-			NoteID: 1258, Status: "understood", LearnedAt: base,
+			UserID: 7, NoteID: 1258, Status: "understood", LearnedAt: base,
 			Quality: 4, QuizType: "reverse", IntervalDays: 1,
 		})
 		require.NoError(t, err)
@@ -159,7 +170,7 @@ func TestDBLearningRepository_Create_RejectsUncomputedInterval(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		err = repo.Create(context.Background(), &LearningLog{
-			NoteID: 1258, Status: "misunderstood", LearnedAt: base,
+			UserID: 7, NoteID: 1258, Status: "misunderstood", LearnedAt: base,
 			Quality: 1, QuizType: "reverse", IntervalDays: 0,
 		})
 		require.NoError(t, err)

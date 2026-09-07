@@ -63,7 +63,7 @@ func TestService_OverrideAnswer_PersistsCorrectionToYAML_StandardScene(t *testin
 		MarkCorrect:  &markCorrect,
 	}
 
-	_, err := svc.OverrideAnswer(info, notebook.QuizTypeNotebook)
+	_, err := svc.OverrideAnswer(0, info, notebook.QuizTypeNotebook)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "test-story.yml"))
@@ -130,7 +130,7 @@ func TestService_OverrideAnswer_PersistsCorrectionToYAML_DefinitionEntryFallback
 		MarkCorrect:        &markCorrect,
 	}
 
-	_, err := svc.OverrideAnswer(info, notebook.QuizTypeNotebook)
+	_, err := svc.OverrideAnswer(0, info, notebook.QuizTypeNotebook)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "wpme.yml"))
@@ -194,7 +194,7 @@ func TestService_OverrideAnswer_TargetsLearnedAt_NotJustLatest(t *testing.T) {
 	markCorrect := true
 	info.MarkCorrect = &markCorrect
 
-	_, err := svc.OverrideAnswer(info, notebook.QuizTypeNotebook)
+	_, err := svc.OverrideAnswer(0, info, notebook.QuizTypeNotebook)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "test-story.yml"))
@@ -255,7 +255,7 @@ func TestService_OverrideAnswer_Freeform_KeepsLearnedAndReverseLogsInSync(t *tes
 		MarkCorrect:  &markCorrect,
 	}
 
-	_, err := svc.OverrideAnswer(info, notebook.QuizTypeFreeform)
+	_, err := svc.OverrideAnswer(0, info, notebook.QuizTypeFreeform)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "test-story.yml"))
@@ -315,7 +315,7 @@ func TestService_UndoOverrideAnswer_RestoresOriginalStateOnDisk(t *testing.T) {
 		OriginalIntervalDays: 1,
 	}
 
-	correct, _, err := svc.UndoOverrideAnswer(info, notebook.QuizTypeNotebook)
+	correct, _, err := svc.UndoOverrideAnswer(0, info, notebook.QuizTypeNotebook)
 	require.NoError(t, err)
 	assert.False(t, correct, "restored log has quality 1 < 3, so undo reports correct=false")
 
@@ -366,7 +366,7 @@ func TestService_OverrideAnswer_PersistsCorrectionToYAML_StandardFlashcard(t *te
 		MarkCorrect:  &markCorrect,
 	}
 
-	_, err := svc.OverrideAnswer(info, notebook.QuizTypeNotebook)
+	_, err := svc.OverrideAnswer(0, info, notebook.QuizTypeNotebook)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "test-vocab.yml"))

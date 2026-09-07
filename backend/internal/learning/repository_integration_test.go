@@ -50,8 +50,16 @@ func TestDBLearningRepository_Create_LivePostgres_Integration(t *testing.T) {
 	repo := NewDBLearningRepository(db)
 	baseTime := time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC)
 
+	// A runtime learning-log write must be attributed to a user (auth Phase 2),
+	// so seed an account and stamp every log below with its id.
+	var userID int64
+	require.NoError(t, db.Get(&userID,
+		`INSERT INTO users (google_sub, email_encrypted, email_hash, name_encrypted)
+		 VALUES ('repo-int-user', '\x00'::bytea, 'repo-int-hash', '\x00'::bytea) RETURNING id`))
+
 	// First quiz answer for "cardiology" — note doesn't exist yet.
 	logA := &LearningLog{
+		UserID:     userID,
 		Expression: "cardiology", OriginalExpression: "",
 		Status: "understood", LearnedAt: baseTime, Quality: 4, ResponseTimeMs: 1500,
 		QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "wpme",
@@ -68,6 +76,7 @@ func TestDBLearningRepository_Create_LivePostgres_Integration(t *testing.T) {
 	// constraint. New behavior: UPSERT returns the existing id and
 	// the log lands cleanly.
 	logB := &LearningLog{
+		UserID:     userID,
 		Expression: "cardiology", OriginalExpression: "",
 		Status: "misunderstood", LearnedAt: baseTime.Add(1 * time.Hour), Quality: 1, ResponseTimeMs: 3000,
 		QuizType: "notebook", IntervalDays: 1, SourceNotebookID: "wpme",
@@ -92,6 +101,7 @@ func TestDBLearningRepository_Create_LivePostgres_Integration(t *testing.T) {
 	// uses (Expression, OriginalExpression) as (usage, entry), and
 	// must handle that shape without error too.
 	logC := &LearningLog{
+		UserID:     userID,
 		Expression: "cardiologist", OriginalExpression: "cardiologists",
 		Status: "understood", LearnedAt: baseTime.Add(2 * time.Hour), Quality: 4, ResponseTimeMs: 1200,
 		QuizType: "notebook", IntervalDays: 3, SourceNotebookID: "wpme",

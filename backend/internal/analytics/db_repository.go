@@ -58,6 +58,9 @@ func (r *DBRepository) DailySummaries(ctx context.Context, rangeDays int, filter
 	if filters.QuizType != "" {
 		conds = append(conds, "quiz_type = "+pb.next(filters.QuizType))
 	}
+	if filters.UserID != 0 {
+		conds = append(conds, "user_id = "+pb.next(filters.UserID))
+	}
 	where := ""
 	if len(conds) > 0 {
 		where = "WHERE " + strings.Join(conds, " AND ")
@@ -117,6 +120,9 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 	}
 	if filters.QuizType != "" {
 		conds = append(conds, "ll.quiz_type = "+pb.next(filters.QuizType))
+	}
+	if filters.UserID != 0 {
+		conds = append(conds, "ll.user_id = "+pb.next(filters.UserID))
 	}
 	whereDay := "WHERE " + strings.Join(conds, " AND ")
 
@@ -182,7 +188,7 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 	// helpers can compute the pattern and the streaks around the day's attempt.
 	words := make([]WrongWord, 0, len(wrongs))
 	for _, w := range wrongs {
-		attempts, err := r.recentAttempts(ctx, w.NoteID, w.OriginID, w.QuizType, w.LearnedAt)
+		attempts, err := r.recentAttempts(ctx, filters.UserID, w.NoteID, w.OriginID, w.QuizType, w.LearnedAt)
 		if err != nil {
 			return DayDetail{}, err
 		}
@@ -224,6 +230,9 @@ func (r *DBRepository) daySummary(ctx context.Context, dayStr string, filters Fi
 	if filters.QuizType != "" {
 		conds = append(conds, "quiz_type = "+pb.next(filters.QuizType))
 	}
+	if filters.UserID != 0 {
+		conds = append(conds, "user_id = "+pb.next(filters.UserID))
+	}
 	where := "WHERE " + strings.Join(conds, " AND ")
 	query := `
 		SELECT
@@ -256,7 +265,7 @@ func (r *DBRepository) daySummary(ctx context.Context, dayStr string, filters Fi
 
 // recentAttempts returns up to RecentPatternLength most recent attempts for the
 // given (note, quiz_type) on or before upTo (inclusive of upTo).
-func (r *DBRepository) recentAttempts(ctx context.Context, noteID, originID sql.NullInt64, quizType string, upTo time.Time) ([]Attempt, error) {
+func (r *DBRepository) recentAttempts(ctx context.Context, userID int64, noteID, originID sql.NullInt64, quizType string, upTo time.Time) ([]Attempt, error) {
 	// Key by whichever ID identifies this log: etymology-origin logs by
 	// origin_id, vocab logs by note_id.
 	idCol := "note_id"
@@ -269,6 +278,7 @@ func (r *DBRepository) recentAttempts(ctx context.Context, noteID, originID sql.
 		SELECT status, learned_at, quality, quiz_type
 		FROM learning_logs
 		WHERE ` + idCol + ` = $1 AND quiz_type = $2 AND learned_at <= $3
+		  AND ($5 = 0 OR user_id = $5)
 		ORDER BY learned_at DESC
 		LIMIT $4
 	`
@@ -278,7 +288,7 @@ func (r *DBRepository) recentAttempts(ctx context.Context, noteID, originID sql.
 		Quality   int       `db:"quality"`
 		QuizType  string    `db:"quiz_type"`
 	}
-	if err := r.db.SelectContext(ctx, &rows, query, idVal, quizType, upTo, RecentPatternLength); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, idVal, quizType, upTo, RecentPatternLength, userID); err != nil {
 		return nil, fmt.Errorf("recent attempts: %w", err)
 	}
 	out := make([]Attempt, len(rows))
@@ -305,6 +315,9 @@ func (r *DBRepository) adjacentDayDates(ctx context.Context, day time.Time, filt
 	if filters.QuizType != "" {
 		prevConds = append(prevConds, "quiz_type = "+pbPrev.next(filters.QuizType))
 	}
+	if filters.UserID != 0 {
+		prevConds = append(prevConds, "user_id = "+pbPrev.next(filters.UserID))
+	}
 
 	var prev sql.NullTime
 	if err := r.db.GetContext(ctx, &prev,
@@ -320,6 +333,9 @@ func (r *DBRepository) adjacentDayDates(ctx context.Context, day time.Time, filt
 	}
 	if filters.QuizType != "" {
 		nextConds = append(nextConds, "quiz_type = "+pbNext.next(filters.QuizType))
+	}
+	if filters.UserID != 0 {
+		nextConds = append(nextConds, "user_id = "+pbNext.next(filters.UserID))
 	}
 	var next sql.NullTime
 	if err := r.db.GetContext(ctx, &next,
@@ -356,7 +372,7 @@ func (r *DBRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistor
 	query := `
 		SELECT status, learned_at, quality, quiz_type
 		FROM learning_logs
-		WHERE note_id = $1 AND quiz_type = $2
+		WHERE note_id = $1 AND quiz_type = $2 AND ($3 = 0 OR user_id = $3)
 		ORDER BY learned_at DESC
 	`
 	var rows []struct {
@@ -365,7 +381,7 @@ func (r *DBRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistor
 		Quality   int       `db:"quality"`
 		QuizType  string    `db:"quiz_type"`
 	}
-	if err := r.db.SelectContext(ctx, &rows, query, ref.NoteID, ref.QuizType); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, ref.NoteID, ref.QuizType, ref.UserID); err != nil {
 		return WordHistory{}, fmt.Errorf("word history: %w", err)
 	}
 	flat := make([]Attempt, len(rows))
@@ -440,6 +456,9 @@ func (r *DBRepository) Trends(ctx context.Context, q TrendsQuery) (TrendsResult,
 	}
 	if q.Filters.QuizType != "" {
 		conds = append(conds, "ll.quiz_type = "+pb.next(q.Filters.QuizType))
+	}
+	if q.Filters.UserID != 0 {
+		conds = append(conds, "ll.user_id = "+pb.next(q.Filters.UserID))
 	}
 	where := ""
 	if len(conds) > 0 {

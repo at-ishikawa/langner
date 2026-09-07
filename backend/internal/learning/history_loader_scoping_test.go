@@ -45,10 +45,10 @@ func (scopeSkipRepo) FindNoteFlags(context.Context, []int64) ([]notebook.NoteSki
 func (scopeSkipRepo) FindOriginFlags(context.Context, []int64) ([]notebook.OriginSkipFlagRecord, error) {
 	return nil, nil
 }
-func (scopeSkipRepo) SkipNote(context.Context, int64, string, time.Time) error   { return nil }
-func (scopeSkipRepo) ResumeNote(context.Context, int64, string) error            { return nil }
-func (scopeSkipRepo) SkipOrigin(context.Context, int64, string, time.Time) error { return nil }
-func (scopeSkipRepo) ResumeOrigin(context.Context, int64, string) error          { return nil }
+func (scopeSkipRepo) SkipNote(context.Context, int64, int64, string, time.Time) error   { return nil }
+func (scopeSkipRepo) ResumeNote(context.Context, int64, int64, string) error            { return nil }
+func (scopeSkipRepo) SkipOrigin(context.Context, int64, int64, string, time.Time) error { return nil }
+func (scopeSkipRepo) ResumeOrigin(context.Context, int64, int64, string) error          { return nil }
 
 func ts(t *testing.T, s string) time.Time {
 	t.Helper()
@@ -110,7 +110,7 @@ func TestDBHistoryStore_LoadAll_ScopesSharedNoteLogsPerNotebook(t *testing.T) {
 	}
 	store := NewDBHistoryStore(&scopeNoteRepo{notes: notes}, &scopeLearnRepo{logs: logs}, nil, scopeSkipRepo{}, nil)
 
-	histories, err := store.LoadAll(context.Background())
+	histories, err := store.LoadAll(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestDBHistoryStore_LoadAll_EmptySourceFallback(t *testing.T) {
 	}
 	store := NewDBHistoryStore(&scopeNoteRepo{notes: notes}, &scopeLearnRepo{logs: logs}, nil, scopeSkipRepo{}, nil)
 
-	histories, err := store.LoadAll(context.Background())
+	histories, err := store.LoadAll(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestWriteAllLoadAll_YAMLParity_SharedNote(t *testing.T) {
 
 	// DB side: reconstruct from the same rows.
 	store := NewDBHistoryStore(&scopeNoteRepo{notes: notes}, &scopeLearnRepo{logs: logs}, nil, scopeSkipRepo{}, nil)
-	dbHistories, err := store.LoadAll(context.Background())
+	dbHistories, err := store.LoadAll(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}

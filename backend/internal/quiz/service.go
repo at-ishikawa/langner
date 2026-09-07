@@ -85,9 +85,14 @@ func (s *Service) SetSkipStores(skipFlagRepo notebook.SkipFlagRepository, noteRe
 // data comes from the database, otherwise from the YAML learning_notes files.
 // The two sources return the identical map shape, so callers never branch on
 // which one served the read.
-func (s *Service) loadHistories() (map[string][]notebook.LearningHistory, error) {
+// userID scopes the read to one account's learning history (auth Phase 2). It
+// is threaded as a PARAMETER from the connect handler (which reads it from the
+// request context via auth.UserIDFromContext), never stored on the shared
+// Service. In YAML-only mode the on-disk reader is single-tenant and ignores
+// userID.
+func (s *Service) loadHistories(userID int64) (map[string][]notebook.LearningHistory, error) {
 	if s.historyStore != nil {
-		return s.historyStore.LoadAll(context.Background())
+		return s.historyStore.LoadAll(context.Background(), userID)
 	}
 	return notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 }
@@ -130,13 +135,13 @@ func (s *Service) NewReader() (*notebook.Reader, error) {
 // still within their SR interval. When false (default), counts are
 // due-only, matching the conservative default the quiz uses without
 // the toggle.
-func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummary, error) {
+func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]NotebookSummary, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -279,7 +284,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 	}
 
 	// Add stories that have grammar annotations (grammar quiz)
-	grammarSummaries, err := s.LoadGrammarStorySummaries()
+	grammarSummaries, err := s.LoadGrammarStorySummaries(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load grammar story summaries: %w", err)
 	}
@@ -370,13 +375,13 @@ func buildWordDetail(note *notebook.Note, originMap map[string]notebook.Etymolog
 // sections (story events for stories, sub-notebook titles for flashcards)
 // matching the listed titles are returned. A nil or empty list for a
 // notebook means "all sections".
-func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]Card, error) {
+func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]Card, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -670,6 +675,7 @@ func canonicalNoteSurface(displaySurface, word string) (usage, entry string) {
 // Returns 0 only when histories cannot be loaded; a first-ever attempt (no
 // priors) legitimately yields the ladder's first step (>=1 for a success).
 func (s *Service) nextIntervalDays(
+	userID int64,
 	notebookName, id string,
 	quizType notebook.QuizType,
 	isCorrect bool,
@@ -690,7 +696,7 @@ func (s *Service) nextIntervalDays(
 		QuizType:       string(quizType),
 	}
 
-	histories, err := s.loadHistories()
+	histories, err := s.loadHistories(userID)
 	if err != nil {
 		return 0
 	}
@@ -710,7 +716,7 @@ func (s *Service) nextIntervalDays(
 // surviving label happens to be a non-head member (post-collapse) would
 // be saved as a fresh per-member row — silently undoing the migration
 // every time a member-named concept card is graded.
-func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult, responseTimeMs int64) error {
+func (s *Service) SaveResult(ctx context.Context, userID int64, card Card, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
@@ -726,6 +732,7 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 		senseID = ""
 	}
 	log := &learning.LearningLog{
+		UserID: userID,
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeNotebook),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
@@ -733,7 +740,7 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeNotebook, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	log.IntervalDays = s.nextIntervalDays(userID, card.NotebookName, senseID, notebook.QuizTypeNotebook, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -1065,13 +1072,13 @@ type ReverseContext struct {
 //
 // sectionTitlesByID narrows results to the listed sections per notebook (see
 // LoadCards). A nil/empty list for a notebook means "all sections".
-func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
+func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1583,7 +1590,7 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answ
 
 // SaveReverseResult updates learning history via the repository.
 // Same head-redirection as SaveResult; see SaveResult for details.
-func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, result GradeResult, responseTimeMs int64) error {
+func (s *Service) SaveReverseResult(ctx context.Context, userID int64, card ReverseCard, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
@@ -1596,6 +1603,7 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 		senseID = ""
 	}
 	log := &learning.LearningLog{
+		UserID: userID,
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeReverse),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
@@ -1603,7 +1611,7 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeReverse, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	log.IntervalDays = s.nextIntervalDays(userID, card.NotebookName, senseID, notebook.QuizTypeReverse, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -1641,7 +1649,7 @@ type FreeformCard struct {
 }
 
 // LoadAllWords loads all words from all notebooks for freeform quiz.
-func (s *Service) LoadAllWords() ([]FreeformCard, error) {
+func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
@@ -1654,7 +1662,7 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 	var cards []FreeformCard
 
 	for notebookID := range storyIndexes {
-		words, err := s.loadStoryWords(reader, notebookID, originMap)
+		words, err := s.loadStoryWords(userID, reader, notebookID, originMap)
 		if err != nil {
 			continue
 		}
@@ -1662,7 +1670,7 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 	}
 
 	for notebookID := range flashcardIndexes {
-		words, err := s.loadFlashcardWords(reader, notebookID, originMap)
+		words, err := s.loadFlashcardWords(userID, reader, notebookID, originMap)
 		if err != nil {
 			continue
 		}
@@ -1670,7 +1678,7 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 	}
 
 	// Also load from definitions-only books
-	learningHistories, _ := s.loadHistories()
+	learningHistories, _ := s.loadHistories(userID)
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
 		if _, isStory := storyIndexes[nbID]; isStory {
 			continue
@@ -1810,13 +1818,13 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 	return cards
 }
 
-func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
+func (s *Service) loadStoryWords(userID int64, reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
 		return nil, err
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1857,13 +1865,13 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 	return cards, nil
 }
 
-func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
+func (s *Service) loadFlashcardWords(userID int64, reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		return nil, err
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -2000,7 +2008,7 @@ type FreeformGradeResult struct {
 
 // SaveFreeformResult updates learning history via the repository.
 // Same head-redirection as SaveResult; see SaveResult for details.
-func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
+func (s *Service) SaveFreeformResult(ctx context.Context, userID int64, card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
@@ -2013,6 +2021,7 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 		senseID = ""
 	}
 	log := &learning.LearningLog{
+		UserID: userID,
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeFreeform),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
@@ -2020,7 +2029,7 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeFreeform, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	log.IntervalDays = s.nextIntervalDays(userID, card.NotebookName, senseID, notebook.QuizTypeFreeform, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -2042,13 +2051,13 @@ func kindFromIndex(index notebook.Index) string {
 
 // GetFreeformNextReviewDates returns a map of lowercase expression -> next review date ("YYYY-MM-DD").
 // Only expressions that are NOT yet due are included; due or never-studied expressions are omitted.
-func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]string, error) {
+func (s *Service) GetFreeformNextReviewDates(userID int64, cards []FreeformCard) (map[string]string, error) {
 	// In test mode, never gate the freeform Submit button on a future review
 	// date — the test suite submits the same expression repeatedly across scenarios.
 	if s.disableShuffle {
 		return map[string]string{}, nil
 	}
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -2139,8 +2148,8 @@ func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 
 // GetLatestLearnedInfo returns the learned_at and next_review_date for the latest log
 // of a given expression in a specific notebook.
-func (s *Service) GetLatestLearnedInfo(notebookName, id, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
-	learningHistories, err := s.loadHistories()
+func (s *Service) GetLatestLearnedInfo(userID int64, notebookName, id, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return "", ""
 	}

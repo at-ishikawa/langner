@@ -40,7 +40,7 @@ type GrammarBlank struct {
 // its corrections (the grammars notebook) by entry title, and filters blanks by
 // SM-2 (due when unseen or forward review is due). When entryTitles is non-empty
 // only those entries (by title) are included; empty means every entry.
-func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]GrammarPost, error) {
+func (s *Service) LoadGrammarPosts(userID int64, notebookID string, entryTitles []string) ([]GrammarPost, error) {
 	var entryFilter map[string]struct{}
 	if len(entryTitles) > 0 {
 		entryFilter = make(map[string]struct{}, len(entryTitles))
@@ -62,7 +62,7 @@ func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]G
 		name = index.Name
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
@@ -145,7 +145,7 @@ type GrammarMistake struct {
 // path filters on, so a mistake excluded here disappears from the live quiz and
 // Relearn pool and reappears on Resume. When entryTitles is non-empty only
 // those entries (by title) are included; empty means every entry.
-func (s *Service) LoadGrammarMistakes(notebookID string, entryTitles []string) ([]GrammarMistake, error) {
+func (s *Service) LoadGrammarMistakes(userID int64, notebookID string, entryTitles []string) ([]GrammarMistake, error) {
 	var entryFilter map[string]struct{}
 	if len(entryTitles) > 0 {
 		entryFilter = make(map[string]struct{}, len(entryTitles))
@@ -161,7 +161,7 @@ func (s *Service) LoadGrammarMistakes(notebookID string, entryTitles []string) (
 	if err != nil {
 		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookID, err)
 	}
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
@@ -235,12 +235,12 @@ func grammarExpressionsByID(histories []notebook.LearningHistory) map[string]not
 // LoadGrammarStorySummaries returns one NotebookSummary per story that has a
 // grammars notebook, with GrammarReviewCount set to the number of mistakes
 // currently due.
-func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
+func (s *Service) LoadGrammarStorySummaries(userID int64) ([]NotebookSummary, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistories(userID)
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
@@ -368,12 +368,13 @@ func (s *Service) GradeGrammarBlank(ctx context.Context, content string, blank G
 
 // SaveGrammarBlank records the grade for one blank in the notebook's learning
 // history, keyed by the correction id under the flat "journal" bucket.
-func (s *Service) SaveGrammarBlank(ctx context.Context, notebookID, senseID string, result GradeResult, responseTimeMs int64) error {
+func (s *Service) SaveGrammarBlank(ctx context.Context, userID int64, notebookID, senseID string, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
 	}
 	log := &learning.LearningLog{
+		UserID:           userID,
 		Status:           status,
 		LearnedAt:        time.Now(),
 		Quality:          result.Quality,
@@ -387,7 +388,7 @@ func (s *Service) SaveGrammarBlank(ctx context.Context, notebookID, senseID stri
 		IsCorrect:        result.Correct,
 		LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(notebookID, senseID, notebook.QuizTypeGrammar, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, senseID)
+	log.IntervalDays = s.nextIntervalDays(userID, notebookID, senseID, notebook.QuizTypeGrammar, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, senseID)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save grammar learning log for %q: %w", notebookID, err)
 	}

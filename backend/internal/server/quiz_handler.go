@@ -16,6 +16,7 @@ import (
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -69,7 +70,8 @@ func (h *QuizHandler) SetNoteRepository(repo notebook.NoteRepository) {
 }
 
 func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[apiv1.GetQuizOptionsRequest]) (*connect.Response[apiv1.GetQuizOptionsResponse], error) {
-	summaries, err := h.svc.LoadNotebookSummaries(req.Msg.GetIncludeUnstudied())
+	userID, _ := auth.UserIDFromContext(ctx)
+	summaries, err := h.svc.LoadNotebookSummaries(userID, req.Msg.GetIncludeUnstudied())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load notebook summaries: %w", err))
 	}
@@ -115,7 +117,8 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 	if err != nil {
 		return nil, err
 	}
-	cards, err := h.svc.LoadCards(notebookIDs, req.Msg.GetIncludeUnstudied(), sectionTitles)
+	userID, _ := auth.UserIDFromContext(ctx)
+	cards, err := h.svc.LoadCards(userID, notebookIDs, req.Msg.GetIncludeUnstudied(), sectionTitles)
 	if err != nil {
 		var notFoundErr *quiz.NotFoundError
 		if errors.As(err, &notFoundErr) {
@@ -150,6 +153,7 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
 	h.mu.Lock()
 	card, ok := h.noteStore[noteID]
@@ -167,10 +171,10 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
 		}
 	}
-	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+	if err := h.svc.SaveResult(ctx, userID, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Entry, notebook.QuizTypeNotebook)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(userID, card.NotebookName, card.ID, card.Entry, notebook.QuizTypeNotebook)
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
 		Correct: grade.Correct, Meaning: card.Meaning, Reason: grade.Reason,
 		WordDetail: toProtoWordDetail(card.WordDetail), NextReviewDate: nextReviewDate,
@@ -249,7 +253,8 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, err
 	}
-	cards, err := h.svc.LoadReverseCards(notebookIDs, req.Msg.GetListMissingContext(), req.Msg.GetIncludeUnstudied(), sectionTitles)
+	userID, _ := auth.UserIDFromContext(ctx)
+	cards, err := h.svc.LoadReverseCards(userID, notebookIDs, req.Msg.GetListMissingContext(), req.Msg.GetIncludeUnstudied(), sectionTitles)
 	if err != nil {
 		var notFoundErr *quiz.NotFoundError
 		if errors.As(err, &notFoundErr) {
@@ -285,6 +290,7 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
 	h.mu.Lock()
 	card, ok := h.reverseStore[noteID]
@@ -303,7 +309,7 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 		}
 	}
 	if grade.Classification != string(inference.ClassificationSynonym) {
-		if err := h.svc.SaveReverseResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+		if err := h.svc.SaveReverseResult(ctx, userID, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
 	}
@@ -311,7 +317,7 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	for _, c := range card.Contexts {
 		contexts = append(contexts, c.Context)
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Expression, notebook.QuizTypeReverse)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(userID, card.NotebookName, card.ID, card.Expression, notebook.QuizTypeReverse)
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
 		Correct: grade.Correct, Expression: card.Expression, Meaning: card.Meaning, Reason: grade.Reason,
 		Contexts: contexts, WordDetail: toProtoWordDetail(card.WordDetail), Classification: grade.Classification,
@@ -320,11 +326,12 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 }
 
 func (h *QuizHandler) StartFreeformQuiz(ctx context.Context, req *connect.Request[apiv1.StartFreeformQuizRequest]) (*connect.Response[apiv1.StartFreeformQuizResponse], error) {
-	cards, err := h.svc.LoadAllWords()
+	userID, _ := auth.UserIDFromContext(ctx)
+	cards, err := h.svc.LoadAllWords(userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load all words: %w", err))
 	}
-	nextReviewDates, err := h.svc.GetFreeformNextReviewDates(cards)
+	nextReviewDates, err := h.svc.GetFreeformNextReviewDates(userID, cards)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get next review dates: %w", err))
 	}
@@ -353,6 +360,7 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	h.mu.Lock()
 	cards := h.freeformCards
 	h.mu.Unlock()
@@ -361,14 +369,14 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
 	}
 	if grade.MatchedCard != nil {
-		if err := h.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
+		if err := h.svc.SaveFreeformResult(ctx, userID, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
 	}
 	var learnedAt, nextReviewDate, senseID string
 	var noteID int64
 	if grade.MatchedCard != nil {
-		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.ID, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
+		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(userID, grade.MatchedCard.NotebookName, grade.MatchedCard.ID, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
 		senseID = grade.MatchedCard.ID
 		h.mu.Lock()
 		noteID = h.nextID
@@ -497,7 +505,8 @@ func (h *QuizHandler) SkipWord(ctx context.Context, req *connect.Request[apiv1.S
 		return nil, err
 	}
 	quizTypes := protoQuizTypesToNotebook(req.Msg.GetQuizTypes())
-	if err := h.svc.SkipWord(*info, req.Msg.GetSkipUntil(), quizTypes); err != nil {
+	userID, _ := auth.UserIDFromContext(ctx)
+	if err := h.svc.SkipWord(userID, *info, req.Msg.GetSkipUntil(), quizTypes); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("skip word: %w", err))
 	}
 	return connect.NewResponse(&apiv1.SkipWordResponse{}), nil
@@ -512,7 +521,8 @@ func (h *QuizHandler) ResumeWord(ctx context.Context, req *connect.Request[apiv1
 		return nil, err
 	}
 	quizTypes := protoQuizTypesToNotebook(req.Msg.GetQuizTypes())
-	if err := h.svc.ResumeWord(*info, quizTypes); err != nil {
+	userID, _ := auth.UserIDFromContext(ctx)
+	if err := h.svc.ResumeWord(userID, *info, quizTypes); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume word: %w", err))
 	}
 	return connect.NewResponse(&apiv1.ResumeWordResponse{}), nil
@@ -548,14 +558,15 @@ func etymologyWordCardInfo(notebookID, expression string) quiz.CardInfo {
 // when the word has no log yet) every other card's Exclude uses — no DB note_id
 // required, so it works for YAML-only notebooks.
 func (h *QuizHandler) ExcludeEtymologyWord(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[apiv1.ExcludeEtymologyWordRequest],
 ) (*connect.Response[apiv1.ExcludeEtymologyWordResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	info := etymologyWordCardInfo(req.Msg.GetNotebookId(), req.Msg.GetExpression())
-	if err := h.svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}); err != nil {
+	if err := h.svc.SkipWord(userID, info, "", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("exclude etymology word: %w", err))
 	}
 	return connect.NewResponse(&apiv1.ExcludeEtymologyWordResponse{}), nil
@@ -564,14 +575,15 @@ func (h *QuizHandler) ExcludeEtymologyWord(
 // ResumeEtymologyWord clears the etymology-origin skipped_at marker for one
 // derived family word, making it due again in its origin family.
 func (h *QuizHandler) ResumeEtymologyWord(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[apiv1.ResumeEtymologyWordRequest],
 ) (*connect.Response[apiv1.ResumeEtymologyWordResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	info := etymologyWordCardInfo(req.Msg.GetNotebookId(), req.Msg.GetExpression())
-	if err := h.svc.ResumeWord(info, []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}); err != nil {
+	if err := h.svc.ResumeWord(userID, info, []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume etymology word: %w", err))
 	}
 	return connect.NewResponse(&apiv1.ResumeEtymologyWordResponse{}), nil
@@ -593,8 +605,9 @@ func (h *QuizHandler) OverrideAnswer(ctx context.Context, req *connect.Request[a
 		info.MarkCorrect = &mc
 	}
 	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	userID, _ := auth.UserIDFromContext(ctx)
 
-	res, err := h.svc.OverrideAnswer(*info, quizType)
+	res, err := h.svc.OverrideAnswer(userID, *info, quizType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override answer: %w", err))
 	}
@@ -621,7 +634,8 @@ func (h *QuizHandler) UndoOverrideAnswer(ctx context.Context, req *connect.Reque
 	info.OriginalStatus = req.Msg.GetOriginalStatus()
 	info.OriginalIntervalDays = int(req.Msg.GetOriginalIntervalDays())
 	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
-	correct, nextReviewDate, err := h.svc.UndoOverrideAnswer(*info, quizType)
+	userID, _ := auth.UserIDFromContext(ctx)
+	correct, nextReviewDate, err := h.svc.UndoOverrideAnswer(userID, *info, quizType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("undo override answer: %w", err))
 	}

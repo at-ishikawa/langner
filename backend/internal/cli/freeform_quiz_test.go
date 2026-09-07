@@ -261,7 +261,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 
 			// Simulate the save path: if grade has MatchedCard, call SaveFreeformResult
 			if grade.MatchedCard != nil {
-				err := cli.svc.SaveFreeformResult(context.Background(), *grade.MatchedCard, grade, 1000)
+				err := cli.svc.SaveFreeformResult(context.Background(), 0, *grade.MatchedCard, grade, 1000)
 				require.NoError(t, err)
 			}
 

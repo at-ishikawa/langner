@@ -75,7 +75,7 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
 
 	// 1. A fresh notebook yields one due entry carrying the full text + a blank.
-	posts, err := svc.LoadGrammarPosts("journal", nil)
+	posts, err := svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	require.Len(t, posts, 1)
 	post := posts[0]
@@ -92,7 +92,7 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 	result, err := svc.GradeGrammarBlank(ctx, post.Content, blank, "John", 1200)
 	require.NoError(t, err)
 	assert.True(t, result.Correct)
-	require.NoError(t, svc.SaveGrammarBlank(ctx, post.NotebookID, blank.SenseID, result, 1200))
+	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, post.NotebookID, blank.SenseID, result, 1200))
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "journal.yml"))
 	require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 	assert.Equal(t, notebook.LearnedStatusUnderstood, got[0].Expressions[0].LearnedLogs[0].Status)
 
 	// 3. Having just been answered correctly, the entry has no due blanks.
-	posts, err = svc.LoadGrammarPosts("journal", nil)
+	posts, err = svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	assert.Empty(t, posts)
 }
@@ -191,7 +191,7 @@ func TestService_GrammarQuiz_CollidingIDsStayIndependent(t *testing.T) {
 	learningDir := t.TempDir()
 	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
 
-	posts, err := svc.LoadGrammarPosts("journal", nil)
+	posts, err := svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	theJohn := findGrammarBlank(t, posts, "the John")
 	anApple := findGrammarBlank(t, posts, "a apple")
@@ -202,11 +202,11 @@ func TestService_GrammarQuiz_CollidingIDsStayIndependent(t *testing.T) {
 	result, err := svc.GradeGrammarBlank(ctx, posts[0].Content, theJohn, "John", 1000)
 	require.NoError(t, err)
 	require.True(t, result.Correct)
-	require.NoError(t, svc.SaveGrammarBlank(ctx, "journal", theJohn.SenseID, result, 1000))
+	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, "journal", theJohn.SenseID, result, 1000))
 
 	// The other correction is still due — it was NOT conflated with the answered
 	// one, so it remains in the live grammar quiz...
-	posts, err = svc.LoadGrammarPosts("journal", nil)
+	posts, err = svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	still := findGrammarBlank(t, posts, "a apple")
 	assert.Equal(t, anApple.SenseID, still.SenseID)
@@ -220,9 +220,9 @@ func TestService_GrammarQuiz_CollidingIDsStayIndependent(t *testing.T) {
 	wrong, err := svc.GradeGrammarBlank(ctx, "", still, "", 500)
 	require.NoError(t, err)
 	require.False(t, wrong.Correct)
-	require.NoError(t, svc.SaveGrammarBlank(ctx, "journal", still.SenseID, wrong, 500))
+	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, "journal", still.SenseID, wrong, 500))
 
-	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
 	var found bool
 	for _, card := range pool {
@@ -269,7 +269,7 @@ func TestService_GrammarQuiz_ByteIdenticalDuplicateDeduped(t *testing.T) {
 `), 0o644))
 
 	svc := newGrammarService(t, filepath.Join(base, "stories"), filepath.Join(base, "grammars"), t.TempDir())
-	posts, err := svc.LoadGrammarPosts("journal", nil)
+	posts, err := svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	require.Len(t, posts, 1)
 	assert.Len(t, posts[0].Blanks, 1, "byte-identical duplicate corrections collapse to one blank")
@@ -280,7 +280,7 @@ func TestService_LoadGrammarStorySummaries(t *testing.T) {
 	learningDir := t.TempDir()
 	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
 
-	summaries, err := svc.LoadGrammarStorySummaries()
+	summaries, err := svc.LoadGrammarStorySummaries(0)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
 	assert.Equal(t, "journal", summaries[0].NotebookID)
@@ -298,7 +298,7 @@ func TestService_GrammarQuiz_WrongAnswerStaysDue(t *testing.T) {
 	learningDir := t.TempDir()
 	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
 
-	posts, err := svc.LoadGrammarPosts("journal", nil)
+	posts, err := svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	require.Len(t, posts, 1)
 	blank := posts[0].Blanks[0]
@@ -307,10 +307,10 @@ func TestService_GrammarQuiz_WrongAnswerStaysDue(t *testing.T) {
 	result, err := svc.GradeGrammarBlank(ctx, posts[0].Content, blank, "wrong guess", 900)
 	require.NoError(t, err)
 	assert.False(t, result.Correct)
-	require.NoError(t, svc.SaveGrammarBlank(ctx, posts[0].NotebookID, blank.SenseID, result, 900))
+	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, posts[0].NotebookID, blank.SenseID, result, 900))
 
 	// A misunderstood mistake remains due on the next load.
-	posts, err = svc.LoadGrammarPosts("journal", nil)
+	posts, err = svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	require.Len(t, posts, 1)
 	require.Len(t, posts[0].Blanks, 1)
@@ -364,7 +364,7 @@ func TestLoadNotebookSummaries_JournalTaggedKind(t *testing.T) {
 		quizCfg,
 	)
 
-	summaries, err := svc.LoadNotebookSummaries(true)
+	summaries, err := svc.LoadNotebookSummaries(0, true)
 	require.NoError(t, err)
 
 	var journalKind, grammarKind bool
@@ -402,7 +402,7 @@ func TestService_LoadGrammarMistakes_DueAndExcluded(t *testing.T) {
 	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
 
 	// A fresh notebook: the one correction is listed, due, not excluded.
-	mistakes, err := svc.LoadGrammarMistakes("journal", nil)
+	mistakes, err := svc.LoadGrammarMistakes(0, "journal", nil)
 	require.NoError(t, err)
 	require.Len(t, mistakes, 1)
 	assert.Equal(t, "note-the-john", mistakes[0].SenseID)
@@ -412,7 +412,7 @@ func TestService_LoadGrammarMistakes_DueAndExcluded(t *testing.T) {
 
 	// Exclude it via the same SkipWord path the handler / live quiz uses.
 	info := CardInfo{NotebookName: "journal", StoryTitle: notebook.JournalStoryTitle, Expression: "note-the-john"}
-	require.NoError(t, svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeGrammar}))
+	require.NoError(t, svc.SkipWord(0, info, "", []notebook.QuizType{notebook.QuizTypeGrammar}))
 
 	// The on-disk YAML records the grammar exclusion.
 	raw, err := os.ReadFile(filepath.Join(learningDir, "journal.yml"))
@@ -426,23 +426,23 @@ func TestService_LoadGrammarMistakes_DueAndExcluded(t *testing.T) {
 		"Exclude must set the grammar skipped_at marker")
 
 	// The list still returns it, now flagged excluded...
-	mistakes, err = svc.LoadGrammarMistakes("journal", nil)
+	mistakes, err = svc.LoadGrammarMistakes(0, "journal", nil)
 	require.NoError(t, err)
 	require.Len(t, mistakes, 1)
 	assert.True(t, mistakes[0].IsExcluded, "an excluded mistake stays in the list flagged is_excluded")
 
 	// ...but the live quiz path no longer offers it (same marker).
-	posts, err := svc.LoadGrammarPosts("journal", nil)
+	posts, err := svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	assert.Empty(t, posts, "Exclude removes the mistake from the live grammar quiz / Relearn pool")
 
 	// Resume clears it: it is due and offered again.
-	require.NoError(t, svc.ResumeWord(info, []notebook.QuizType{notebook.QuizTypeGrammar}))
-	mistakes, err = svc.LoadGrammarMistakes("journal", nil)
+	require.NoError(t, svc.ResumeWord(0, info, []notebook.QuizType{notebook.QuizTypeGrammar}))
+	mistakes, err = svc.LoadGrammarMistakes(0, "journal", nil)
 	require.NoError(t, err)
 	require.Len(t, mistakes, 1)
 	assert.False(t, mistakes[0].IsExcluded, "Resume clears the exclusion")
-	posts, err = svc.LoadGrammarPosts("journal", nil)
+	posts, err = svc.LoadGrammarPosts(0, "journal", nil)
 	require.NoError(t, err)
 	require.Len(t, posts, 1, "Resume makes the mistake due again")
 }

@@ -29,14 +29,14 @@ func TestDBLearningRepository_FindAll(t *testing.T) {
 				}).
 					AddRow(1, 10, "understood", now, 4, 1500, "notebook", 7, "", now, now).
 					AddRow(2, 11, "misunderstood", now, 1, 3000, "freeform", 1, "", now, now)
-				mock.ExpectQuery("SELECT id, COALESCE\\(note_id, 0\\) AS note_id, COALESCE\\(origin_id, 0\\) AS origin_id").WillReturnRows(rows)
+				mock.ExpectQuery("SELECT id, COALESCE\\(user_id, 0\\) AS user_id").WillReturnRows(rows)
 			},
 			wantLen: 2,
 		},
 		{
 			name: "db error",
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT id, COALESCE\\(note_id, 0\\) AS note_id, COALESCE\\(origin_id, 0\\) AS origin_id").
+				mock.ExpectQuery("SELECT id, COALESCE\\(user_id, 0\\) AS user_id").
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
 			wantErr: true,
@@ -82,16 +82,16 @@ func TestDBLearningRepository_Create(t *testing.T) {
 	}{
 		{
 			name: "inserts a single learning log",
-			log:  &LearningLog{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
+			log:  &LearningLog{UserID: 5, NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO learning_logs").
-					WithArgs(int64(10), int64(0), int64(0), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
+					WithArgs(int64(5), int64(10), int64(0), int64(0), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
 		{
 			name: "db error propagates",
-			log:  &LearningLog{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
+			log:  &LearningLog{UserID: 5, NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO learning_logs").
 					WillReturnError(fmt.Errorf("connection refused"))
@@ -105,6 +105,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			// the new id (61); the log then lands with that id.
 			name: "quiz answer without NoteID upserts note then writes log",
 			log: &LearningLog{
+				UserID:     5,
 				Expression: "serendipity", OriginalExpression: "",
 				Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500,
 				QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1",
@@ -114,7 +115,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 					WithArgs("serendipity", "serendipity", "").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(61)))
 				mock.ExpectExec("INSERT INTO learning_logs").
-					WithArgs(int64(61), int64(0), int64(0), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
+					WithArgs(int64(5), int64(61), int64(0), int64(0), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -129,6 +130,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			// refactor can't reintroduce the race.
 			name: "quiz answer when note already exists returns existing id via ON CONFLICT",
 			log: &LearningLog{
+				UserID:     5,
 				Expression: "cardiology", OriginalExpression: "",
 				Status: "misunderstood", LearnedAt: now, Quality: 1, ResponseTimeMs: 3000,
 				QuizType: "notebook", IntervalDays: 1, SourceNotebookID: "wpme",
@@ -138,7 +140,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 					WithArgs("cardiology", "cardiology", "").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
 				mock.ExpectExec("INSERT INTO learning_logs").
-					WithArgs(int64(42), int64(0), int64(0), "misunderstood", now, 1, 3000, "notebook", 1, "wpme", "").
+					WithArgs(int64(5), int64(42), int64(0), int64(0), "misunderstood", now, 1, 3000, "notebook", 1, "wpme", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -183,10 +185,10 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, origin_id, correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5, \\$6, \\$7, \\$8, \\$9, \\$10, \\$11\\), \\(\\$12, \\$13, \\$14, \\$15, \\$16, \\$17, \\$18, \\$19, \\$20, \\$21, \\$22\\)").
+				mock.ExpectExec("INSERT INTO learning_logs \\(user_id, note_id, origin_id, correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5, \\$6, \\$7, \\$8, \\$9, \\$10, \\$11, \\$12\\), \\(\\$13, \\$14, \\$15, \\$16, \\$17, \\$18, \\$19, \\$20, \\$21, \\$22, \\$23, \\$24\\)").
 					WithArgs(
-						int64(10), nil, nil, "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
-						int64(11), nil, nil, "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
+						nil, int64(10), nil, nil, "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
+						nil, int64(11), nil, nil, "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
 					).
 					WillReturnResult(sqlmock.NewResult(1, 2))
 				mock.ExpectCommit()
@@ -249,7 +251,7 @@ func TestDBLearningRepository_UpdateLog_MarkCorrect(t *testing.T) {
 
 	learnedAt := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
 	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
-		WithArgs(int64(42), "notebook", "2026-06-29").
+		WithArgs(int64(42), "notebook", "2026-06-29", int64(0)).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "quality", "interval_days", "learned_at"}).
 			AddRow(int64(7), "misunderstood", 1, 1, learnedAt))
 	mock.ExpectExec(`UPDATE learning_logs SET status = \$1, quality = \$2, interval_days = \$3 WHERE id = \$4`).
@@ -285,7 +287,7 @@ func TestDBLearningRepository_UpdateLog_Mirror(t *testing.T) {
 
 	learnedAt := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
 	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
-		WithArgs(int64(42), "notebook", "2026-06-29").
+		WithArgs(int64(42), "notebook", "2026-06-29", int64(0)).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "quality", "interval_days", "learned_at"}).
 			AddRow(int64(7), "misunderstood", 1, 1, learnedAt))
 	mock.ExpectExec(`UPDATE learning_logs SET status = \$1, quality = \$2, interval_days = \$3 WHERE id = \$4`).
@@ -320,7 +322,7 @@ func TestDBLearningRepository_UpdateLog_NoMatch(t *testing.T) {
 	repo := NewDBLearningRepository(sqlxDB)
 
 	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
-		WithArgs(int64(42), "notebook", "2026-06-29").
+		WithArgs(int64(42), "notebook", "2026-06-29", int64(0)).
 		WillReturnError(fmt.Errorf("sql: no rows in result set"))
 
 	markCorrect := true

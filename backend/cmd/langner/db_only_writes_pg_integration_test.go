@@ -120,6 +120,22 @@ func findExpressionInHistories(histories []notebook.LearningHistory, usage, entr
 // new one, the before/after the owner wants demonstrated, here against a real
 // Postgres.
 //
+// seedIntegrationUser upserts a users row (auth Phase 2) so runtime learning-log
+// writes have a valid, non-zero owner to stamp — DBLearningRepository.Create
+// rejects an unattributed (user_id 0) runtime write. The PII columns hold
+// placeholder bytes (these tests never decrypt them); idempotent via
+// ON CONFLICT so re-runs against a shared DB reuse the same row.
+func seedIntegrationUser(t *testing.T, db *sqlx.DB, sub string) int64 {
+	t.Helper()
+	var id int64
+	require.NoError(t, db.GetContext(context.Background(), &id,
+		`INSERT INTO users (google_sub, email_encrypted, email_hash, name_encrypted)
+		 VALUES ($1, '\x00'::bytea, $2, '\x00'::bytea)
+		 ON CONFLICT (google_sub) DO UPDATE SET google_sub = EXCLUDED.google_sub
+		 RETURNING id`, sub, sub+"-hash"))
+	return id
+}
+
 // Requires LANGNER_INTEGRATION_DB_URL (CI's postgres:16); skipped otherwise.
 // DROPs and recreates the public schema, so it must run isolated (own workflow
 // step, or -p 1).
@@ -201,6 +217,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 
 	svc := quiz.NewService(nbFrozen, nil, nil, repos.Learning, cfg.Quiz)
 	svc.SetHistoryStore(repos.HistoryStore)
+	userID := seedIntegrationUser(t, db, "dbonly-user")
 
 	before := snapshotDir(t, frozenDir)
 
@@ -208,7 +225,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 	require.NoError(t, db.GetContext(ctx, &logsBefore,
 		`SELECT COUNT(*) FROM learning_logs WHERE note_id = $1`, target.ID))
 
-	require.NoError(t, svc.SaveResult(ctx, cardFor(target), result, 1500))
+	require.NoError(t, svc.SaveResult(ctx, userID, cardFor(target), result, 1500))
 
 	// (a) learning_notes is byte-for-byte unchanged.
 	assert.Equal(t, before, snapshotDir(t, frozenDir),
@@ -231,7 +248,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 	assert.Equal(t, string(notebook.QuizTypeNotebook), row.QuizType)
 
 	// (c) reading back through DBHistoryStore reflects the attempt.
-	histories, err := repos.HistoryStore.LoadAll(ctx)
+	histories, err := repos.HistoryStore.LoadAll(ctx, userID)
 	require.NoError(t, err)
 	expr, ok := findExpressionInHistories(histories[target.NotebookID], target.Usage, target.Entry)
 	require.True(t, ok, "the just-saved word must appear in the DB-reconstructed history")
@@ -244,7 +261,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 
 	beforeSkip := snapshotDir(t, frozenDir)
 	skipInfo := quiz.CardInfo{NotebookName: target.NotebookID, Expression: target.Usage, NoteID: target.ID}
-	require.NoError(t, svc.SkipWord(skipInfo, "", []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, svc.SkipWord(userID, skipInfo, "", []notebook.QuizType{notebook.QuizTypeNotebook}))
 
 	// (a) learning_notes still byte-for-byte unchanged.
 	assert.Equal(t, beforeSkip, snapshotDir(t, frozenDir),
@@ -255,7 +272,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 		`SELECT COUNT(*) FROM note_skip_flags WHERE note_id = $1 AND quiz_type = 'notebook'`, target.ID))
 	assert.Equal(t, 1, skipCount, "Exclude must UPSERT a note_skip_flags row")
 	// (c) the loaders' read side now sees the word excluded (L2 symmetry).
-	histAfterSkip, err := repos.HistoryStore.LoadAll(ctx)
+	histAfterSkip, err := repos.HistoryStore.LoadAll(ctx, userID)
 	require.NoError(t, err)
 	exprSkip, ok := findExpressionInHistories(histAfterSkip[target.NotebookID], target.Usage, target.Entry)
 	require.True(t, ok)
@@ -263,7 +280,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 		"the DB read-back must show the word excluded — proving the skip lands where the loaders read it")
 
 	// ResumeWord clears it, still without writing YAML.
-	require.NoError(t, svc.ResumeWord(skipInfo, []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, svc.ResumeWord(userID, skipInfo, []notebook.QuizType{notebook.QuizTypeNotebook}))
 	require.NoError(t, db.GetContext(ctx, &skipCount,
 		`SELECT COUNT(*) FROM note_skip_flags WHERE note_id = $1 AND quiz_type = 'notebook'`, target.ID))
 	assert.Equal(t, 0, skipCount, "Resume must DELETE the note_skip_flags row")
@@ -327,7 +344,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 	svcControl := quiz.NewService(nbControl, nil, nil, dualWrite, cfg.Quiz)
 
 	controlBefore := snapshotDir(t, controlDir)
-	require.NoError(t, svcControl.SaveResult(ctx, cardFor(control), result, 1500))
+	require.NoError(t, svcControl.SaveResult(ctx, userID, cardFor(control), result, 1500))
 	assert.NotEqual(t, controlBefore, snapshotDir(t, controlDir),
 		"the pre-change dual-write wiring MUST rewrite learning_notes YAML — proving the freeze assertion fails before this PR and passes after")
 }

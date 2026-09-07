@@ -132,14 +132,15 @@ func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 // relies on. Until migration moves logs to the head, the simplest way to
 // keep both reads-from-head and reads-from-members consistent is to write
 // the skip on each member entry.
-func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook.QuizType) error {
+func (s *Service) SkipWord(userID int64, info CardInfo, skipUntil string, quizTypes []notebook.QuizType) error {
 	if len(quizTypes) == 0 {
 		return fmt.Errorf("at least one quiz type is required to skip a word")
 	}
 	// DB mode: record the exclude marker in the DB skip-flag tables and DO NOT
-	// touch the on-disk learning_notes YAML (DB-only writes).
+	// touch the on-disk learning_notes YAML (DB-only writes). The marker is
+	// stamped with userID so it excludes the word only for this account.
 	if s.skipFlagRepo != nil {
-		return s.setSkipDB(context.Background(), info, quizTypes, true)
+		return s.setSkipDB(context.Background(), userID, info, quizTypes, true)
 	}
 	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
@@ -201,7 +202,7 @@ func (s *Service) conceptMembersOrSelf(notebookName, expression string) []string
 // writes under (note_id/origin_id + quiz_type) is the SAME key the read side
 // (DBHistoryStore) reconstructs skip flags under, keeping the loaders' skip
 // filter symmetric with the write (learning-history invariant L2).
-func (s *Service) setSkipDB(ctx context.Context, info CardInfo, quizTypes []notebook.QuizType, skip bool) error {
+func (s *Service) setSkipDB(ctx context.Context, userID int64, info CardInfo, quizTypes []notebook.QuizType, skip bool) error {
 	// Grammar corrections are not notes or origins and have no DB skip-flag
 	// table, so a grammar exclude cannot be persisted in DB mode today (its
 	// read side is reconstructed from grammar_corrections, which carries no
@@ -230,13 +231,13 @@ func (s *Service) setSkipDB(ctx context.Context, info CardInfo, quizTypes []note
 			var applyErr error
 			switch {
 			case noteID > 0 && skip:
-				applyErr = s.skipFlagRepo.SkipNote(ctx, noteID, string(qt), at)
+				applyErr = s.skipFlagRepo.SkipNote(ctx, userID, noteID, string(qt), at)
 			case noteID > 0:
-				applyErr = s.skipFlagRepo.ResumeNote(ctx, noteID, string(qt))
+				applyErr = s.skipFlagRepo.ResumeNote(ctx, userID, noteID, string(qt))
 			case skip:
-				applyErr = s.skipFlagRepo.SkipOrigin(ctx, originID, string(qt), at)
+				applyErr = s.skipFlagRepo.SkipOrigin(ctx, userID, originID, string(qt), at)
 			default:
-				applyErr = s.skipFlagRepo.ResumeOrigin(ctx, originID, string(qt))
+				applyErr = s.skipFlagRepo.ResumeOrigin(ctx, userID, originID, string(qt))
 			}
 			if applyErr != nil {
 				return fmt.Errorf("record exclude for %q (%s) in notebook %q: %w", expr, qt, info.NotebookName, applyErr)
@@ -327,14 +328,15 @@ func (s *Service) resolveSkipTarget(ctx context.Context, info CardInfo, expressi
 // word excluded from multiple modes only resumes the ones the caller lists.
 // Batched into a single read-modify-write for the same race-free reason as
 // SkipWord.
-func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error {
+func (s *Service) ResumeWord(userID int64, info CardInfo, quizTypes []notebook.QuizType) error {
 	if len(quizTypes) == 0 {
 		return fmt.Errorf("at least one quiz type is required to resume a word")
 	}
 	// DB mode: clear the exclude marker from the DB skip-flag tables and DO NOT
-	// touch the on-disk learning_notes YAML (DB-only writes).
+	// touch the on-disk learning_notes YAML (DB-only writes). Only this user's
+	// marker is cleared.
 	if s.skipFlagRepo != nil {
-		return s.setSkipDB(context.Background(), info, quizTypes, false)
+		return s.setSkipDB(context.Background(), userID, info, quizTypes, false)
 	}
 	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
@@ -388,11 +390,12 @@ type OverrideResult struct {
 //
 // Returns the new next-review date as YYYY-MM-DD (empty when no
 // matching log was found).
-func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (OverrideResult, error) {
+func (s *Service) OverrideAnswer(userID int64, info CardInfo, quizType notebook.QuizType) (OverrideResult, error) {
 	if s.learningRepository == nil {
 		return OverrideResult{}, fmt.Errorf("no learning repository configured")
 	}
 	res, err := s.learningRepository.UpdateLog(context.Background(), learning.UpdateLogInput{
+		UserID:             userID,
 		NoteID:             info.NoteID,
 		NotebookName:       info.NotebookName,
 		StoryTitle:         info.StoryTitle,
@@ -425,11 +428,12 @@ func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (Ove
 // pre-set to the originals — neither markCorrect nor the calculator
 // is consulted, so the restored row is byte-identical to what it was
 // before the user clicked Mark-as-Correct.
-func (s *Service) UndoOverrideAnswer(info CardInfo, quizType notebook.QuizType) (correct bool, nextReview string, err error) {
+func (s *Service) UndoOverrideAnswer(userID int64, info CardInfo, quizType notebook.QuizType) (correct bool, nextReview string, err error) {
 	if s.learningRepository == nil {
 		return false, "", fmt.Errorf("no learning repository configured")
 	}
 	res, err := s.learningRepository.UpdateLog(context.Background(), learning.UpdateLogInput{
+		UserID:             userID,
 		NoteID:             info.NoteID,
 		NotebookName:       info.NotebookName,
 		StoryTitle:         info.StoryTitle,

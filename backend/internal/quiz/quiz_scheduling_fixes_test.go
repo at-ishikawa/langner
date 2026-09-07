@@ -87,7 +87,7 @@ func TestExampleData_ReverseEligibilityIsTrackPure(t *testing.T) {
 
 	served := func(t *testing.T, svc *Service, notebookID, word string) bool {
 		t.Helper()
-		cards, err := svc.LoadReverseCards([]string{notebookID}, false, true, nil) // includeUnstudied=true
+		cards, err := svc.LoadReverseCards(0, []string{notebookID}, false, true, nil) // includeUnstudied=true
 		require.NoError(t, err)
 		for _, c := range cards {
 			if c.Expression == word {
@@ -155,7 +155,7 @@ func TestExampleData_RelearnReAskDedupsByExpression(t *testing.T) {
 	for _, K := range []int{0, 1, 4} {
 		learningDir := t.TempDir()
 		svc := newExampleService(t, learningDir)
-		all, err := svc.LoadAllWords()
+		all, err := svc.LoadAllWords(0)
 		require.NoError(t, err)
 
 		failed := map[string]bool{}
@@ -167,11 +167,11 @@ func TestExampleData_RelearnReAskDedupsByExpression(t *testing.T) {
 				}
 			}
 			require.NotNilf(t, card, "example flashcard %q must load", w)
-			require.NoError(t, svc.SaveFreeformResult(ctx, *card, FreeformGradeResult{Correct: false, Quality: 1}, 1000))
+			require.NoError(t, svc.SaveFreeformResult(ctx, 0, *card, FreeformGradeResult{Correct: false, Quality: 1}, 1000))
 			failed[w] = true
 		}
 
-		pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+		pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 		require.NoError(t, err)
 
 		require.Lenf(t, pool, K,
@@ -195,7 +195,7 @@ func TestExampleData_RelearnReAskDedupsByExpression(t *testing.T) {
 // (the toggle state the user reported the bug under).
 func reverseCountFor(t *testing.T, svc *Service, notebookID string) int {
 	t.Helper()
-	summaries, err := svc.LoadNotebookSummaries(true)
+	summaries, err := svc.LoadNotebookSummaries(0, true)
 	require.NoError(t, err)
 	for i := range summaries {
 		if summaries[i].NotebookID == notebookID {
@@ -320,7 +320,7 @@ func reverseCardsContain(cards []ReverseCard, word string) bool {
 func TestExampleData_ReverseReviewCountEqualsLoaded(t *testing.T) {
 	loadedLen := func(t *testing.T, svc *Service, id string) int {
 		t.Helper()
-		cards, err := svc.LoadReverseCards([]string{id}, false, true, nil)
+		cards, err := svc.LoadReverseCards(0, []string{id}, false, true, nil)
 		require.NoError(t, err)
 		return len(cards)
 	}
@@ -333,7 +333,7 @@ func TestExampleData_ReverseReviewCountEqualsLoaded(t *testing.T) {
 		svc := newExampleService(t, t.TempDir())
 
 		base := reverseCountFor(t, svc, notebookID)
-		cards, err := svc.LoadReverseCards([]string{notebookID}, false, true, nil)
+		cards, err := svc.LoadReverseCards(0, []string{notebookID}, false, true, nil)
 		require.NoError(t, err)
 		require.Equalf(t, len(cards), base, "precondition: count must equal loaded before any skip")
 		require.Truef(t, reverseCardsContain(cards, word), "precondition: %q must be served", word)
@@ -345,14 +345,14 @@ func TestExampleData_ReverseReviewCountEqualsLoaded(t *testing.T) {
 			}
 		}
 		require.NotNil(t, target)
-		require.NoError(t, svc.SkipWord(CardInfoFromReverseCard(*target), "", []notebook.QuizType{notebook.QuizTypeReverse}))
+		require.NoError(t, svc.SkipWord(0, CardInfoFromReverseCard(*target), "", []notebook.QuizType{notebook.QuizTypeReverse}))
 
 		after := reverseCountFor(t, svc, notebookID)
 		assert.Equalf(t, loadedLen(t, svc, notebookID), after,
 			"count must equal loaded after excluding a reverse word (display = reality)")
 		assert.Equalf(t, base-1, after,
 			"a reverse-skipped word must drop the badge by one (it is no longer served)")
-		postCards, err := svc.LoadReverseCards([]string{notebookID}, false, true, nil)
+		postCards, err := svc.LoadReverseCards(0, []string{notebookID}, false, true, nil)
 		require.NoError(t, err)
 		assert.Falsef(t, reverseCardsContain(postCards, word), "the excluded word must not be served")
 	})
@@ -372,7 +372,7 @@ func TestExampleData_ReverseReviewCountEqualsLoaded(t *testing.T) {
 		base := reverseCountFor(t, svc, notebookID)
 		require.Equalf(t, loadedLen(t, svc, notebookID), base, "count == loaded on the pristine flashcard notebook")
 
-		cards, err := svc.LoadReverseCards([]string{notebookID}, false, true, nil)
+		cards, err := svc.LoadReverseCards(0, []string{notebookID}, false, true, nil)
 		require.NoError(t, err)
 		var target *ReverseCard
 		for i := range cards {
@@ -381,7 +381,7 @@ func TestExampleData_ReverseReviewCountEqualsLoaded(t *testing.T) {
 			}
 		}
 		require.NotNil(t, target)
-		require.NoError(t, svc.SkipWord(CardInfoFromReverseCard(*target), "", []notebook.QuizType{notebook.QuizTypeReverse}))
+		require.NoError(t, svc.SkipWord(0, CardInfoFromReverseCard(*target), "", []notebook.QuizType{notebook.QuizTypeReverse}))
 
 		assert.Equalf(t, loadedLen(t, svc, notebookID), reverseCountFor(t, svc, notebookID),
 			"count must equal loaded after a skip attempt (both apply the same filter)")
@@ -391,7 +391,7 @@ func TestExampleData_ReverseReviewCountEqualsLoaded(t *testing.T) {
 	// count. Covers definitions books (concepts + skip via countDefinitionNotes).
 	t.Run("all example notebooks: count == loaded", func(t *testing.T) {
 		svc := newExampleService(t, t.TempDir())
-		summaries, err := svc.LoadNotebookSummaries(true)
+		summaries, err := svc.LoadNotebookSummaries(0, true)
 		require.NoError(t, err)
 		checked := 0
 		for _, s := range summaries {

@@ -96,7 +96,7 @@ func TestExampleData_OriginGroupsInRelearn(t *testing.T) {
 	} {
 		t.Run(tc.word+"/reverse", func(t *testing.T) {
 			svc := newExampleService(t, t.TempDir())
-			reverse, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+			reverse, err := svc.LoadReverseCards(0, []string{"roots-demo"}, false, true, nil)
 			require.NoError(t, err)
 			var rc *ReverseCard
 			for i := range reverse {
@@ -109,8 +109,8 @@ func TestExampleData_OriginGroupsInRelearn(t *testing.T) {
 			require.NotEmptyf(t, rc.WordDetail.OriginParts,
 				"normal reverse quiz must resolve origin for %q", tc.word)
 
-			require.NoError(t, svc.SaveReverseResult(ctx, *rc, GradeResult{Correct: false, Quality: 0}, 1000))
-			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			require.NoError(t, svc.SaveReverseResult(ctx, 0, *rc, GradeResult{Correct: false, Quality: 0}, 1000))
+			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 			require.NoError(t, err)
 
 			card := relearnCardFor(pool, tc.word)
@@ -140,11 +140,11 @@ func TestExampleData_OriginGroupsInRelearn(t *testing.T) {
 func TestExampleData_OriginResolutionParity(t *testing.T) {
 	svc := newExampleService(t, t.TempDir())
 
-	reverse, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+	reverse, err := svc.LoadReverseCards(0, []string{"roots-demo"}, false, true, nil)
 	require.NoError(t, err)
-	forward, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+	forward, err := svc.LoadCards(0, []string{"roots-demo"}, true, nil)
 	require.NoError(t, err)
-	all, err := svc.LoadAllWords()
+	all, err := svc.LoadAllWords(0)
 	require.NoError(t, err)
 
 	reverseHas := func(expr string) bool {
@@ -220,22 +220,22 @@ func TestExampleData_OriginGroupingIndependentOfEtymologyOriginSkip(t *testing.T
 		t.Helper()
 		switch direction {
 		case notebook.QuizTypeReverse:
-			cards, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+			cards, err := svc.LoadReverseCards(0, []string{"roots-demo"}, false, true, nil)
 			require.NoError(t, err)
 			for i := range cards {
 				if cards[i].Expression == expr {
 					require.NotEmpty(t, cards[i].WordDetail.OriginParts, "normal quiz shows origin (primaryOrigin=true)")
-					require.NoError(t, svc.SaveReverseResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+					require.NoError(t, svc.SaveReverseResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 					return
 				}
 			}
 		case notebook.QuizTypeNotebook:
-			cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+			cards, err := svc.LoadCards(0, []string{"roots-demo"}, true, nil)
 			require.NoError(t, err)
 			for i := range cards {
 				if cards[i].Entry == expr {
 					require.NotEmpty(t, cards[i].WordDetail.OriginParts, "normal quiz shows origin (primaryOrigin=true)")
-					require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+					require.NoError(t, svc.SaveResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 					return
 				}
 			}
@@ -256,7 +256,7 @@ func TestExampleData_OriginGroupingIndependentOfEtymologyOriginSkip(t *testing.T
 
 			// Set the vestigial etymology_origin skip marker on "deficient" via the
 			// real write path, and confirm it landed on disk.
-			require.NoError(t, svc.SkipWord(
+			require.NoError(t, svc.SkipWord(0, 
 				CardInfo{NotebookName: "roots-demo", Expression: "deficient"},
 				"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}))
 			histories, err := notebook.NewLearningHistories(learningDir)
@@ -268,7 +268,7 @@ func TestExampleData_OriginGroupingIndependentOfEtymologyOriginSkip(t *testing.T
 			recordMiss(t, svc, tc.direction, "deficient") // marked word
 			recordMiss(t, svc, tc.direction, "transact")  // unmarked control
 
-			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 			require.NoError(t, err)
 
 			// The marked word groups under its root DESPITE the vestigial marker,
