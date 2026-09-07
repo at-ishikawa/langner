@@ -30,19 +30,24 @@ const E2E_EMAIL = "e2e@example.com";
 // Cookie file the backend command writes and global-setup.ts reads. Kept next
 // to the storage state under frontend/e2e/.auth/.
 const COOKIE_FILE = "frontend/e2e/.auth/cookie.txt";
-// Recreate the DB, seed it, mint the cookie, then start the server. `&&`
-// chaining makes any failed step fail the webServer (surfaced by Playwright),
-// and the seed is complete before `langner-server` binds BACKEND_PORT.
-const backendSeedAndServe = [
-  "cd ..",
-  "(cd backend && go build -o ../langner ./cmd/langner && go build -o ../langner-server ./cmd/langner-server)",
-  `PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d postgres -v ON_ERROR_STOP=1 ` +
-    `-c "DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE)" -c "CREATE DATABASE ${DB_NAME} ENCODING 'UTF8'"`,
-  `DB_PASSWORD=${DB_PASSWORD} ./langner migrate import-db --config ${TEST_CONFIG_PATH}`,
-  `mkdir -p frontend/e2e/.auth`,
-  `DB_PASSWORD=${DB_PASSWORD} ./langner auth issue-test-cookie --email ${E2E_EMAIL} --config ${TEST_CONFIG_PATH} > ${COOKIE_FILE}`,
-  `./langner-server --config ${TEST_CONFIG_PATH}`,
-].join(" && ");
+// Recreate the DB, seed it, mint the cookie, verify the user persisted, then
+// exec the server — all in a committed script (e2e/seed-and-serve.sh) rather
+// than a long `&&`-joined string here. The script runs `set -euo pipefail`
+// (any failed step fails the webServer, surfaced by Playwright, instead of
+// silently starting an unseeded server), prints `[seed]` markers so CI shows
+// which steps ran, and hard-fails if the users table is empty after seeding.
+// The seed is complete before `langner-server` binds BACKEND_PORT. Coords are
+// passed via env below.
+const seedEnv: Record<string, string> = {
+  DB_HOST,
+  DB_PORT,
+  DB_USER,
+  DB_PASSWORD,
+  DB_NAME,
+  E2E_EMAIL,
+  TEST_CONFIG_PATH,
+  COOKIE_FILE,
+};
 
 export default defineConfig({
   testDir,
@@ -70,7 +75,8 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: backendSeedAndServe,
+      command: "bash e2e/seed-and-serve.sh",
+      env: seedEnv,
       port: BACKEND_PORT,
       reuseExistingServer: !process.env.CI,
       // Generous: this build (two binaries) + DB recreate + import + seed all
