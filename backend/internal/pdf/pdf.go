@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	_ "embed"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,26 @@ import (
 
 // boldPattern matches **bold** text in markdown
 var boldPattern = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+
+// DejaVu Sans is embedded so the exported PDF can render Unicode glyphs — in
+// particular IPA (ˈ ˌ ɛ ɪ ŋ ð ʃ …) in pronunciation fields. mdtopdf's stylers
+// default to "Arial", a Latin-1 core font that renders non-Latin-1 glyphs as
+// boxes; every styler is repointed at this font in ConvertMarkdownToPDF. The
+// font ships in fonts/ (see fonts/LICENSE) and is compiled into the binary, so
+// no system fonts are required at runtime or in CI.
+const unicodeFont = "dejavu"
+
+//go:embed fonts/DejaVuSans.ttf
+var fontRegular []byte
+
+//go:embed fonts/DejaVuSans-Bold.ttf
+var fontBold []byte
+
+//go:embed fonts/DejaVuSans-Oblique.ttf
+var fontItalic []byte
+
+//go:embed fonts/DejaVuSans-BoldOblique.ttf
+var fontBoldItalic []byte
 
 // ConvertMarkdownToPDF converts a markdown file to PDF using mdtopdf package
 // The PDF file will be created in the same directory as the markdown file
@@ -58,6 +79,22 @@ func ConvertMarkdownToPDF(markdownPath string) (string, error) {
 
 	renderer := mdtopdf.NewPdfRenderer("P", "A4", tmpPath, "", nil, mdtopdf.LIGHT)
 	renderer.UpdateBlockquoteStyler()
+
+	// Register the embedded Unicode font (regular/bold/italic/bold-italic) and
+	// point every styler at it so setStyler()/SetFont() renders IPA and other
+	// non-Latin-1 glyphs instead of boxes.
+	renderer.Pdf.AddUTF8FontFromBytes(unicodeFont, "", fontRegular)
+	renderer.Pdf.AddUTF8FontFromBytes(unicodeFont, "B", fontBold)
+	renderer.Pdf.AddUTF8FontFromBytes(unicodeFont, "I", fontItalic)
+	renderer.Pdf.AddUTF8FontFromBytes(unicodeFont, "BI", fontBoldItalic)
+	for _, s := range []*mdtopdf.Styler{
+		&renderer.Normal, &renderer.Link, &renderer.Backtick, &renderer.Blockquote,
+		&renderer.H1, &renderer.H2, &renderer.H3, &renderer.H4, &renderer.H5, &renderer.H6,
+		&renderer.THeader, &renderer.TBody, &renderer.Code,
+	} {
+		s.Font = unicodeFont
+	}
+
 	if err := renderer.Process(content); err != nil {
 		return "", fmt.Errorf("renderer.Process() > %w", err)
 	}
