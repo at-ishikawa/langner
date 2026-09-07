@@ -1562,23 +1562,138 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answ
 	}
 
 	isCorrect := validation.Classification == inference.ClassificationSameWord
-	quality := 1
-	if isCorrect {
-		if responseTimeMs < 3000 {
-			quality = 5
-		} else if responseTimeMs < 10000 {
-			quality = 4
-		} else {
-			quality = 3
-		}
-	}
 
 	return GradeResult{
 		Correct:        isCorrect,
 		Reason:         validation.Reason,
-		Quality:        quality,
+		Quality:        reverseQuality(isCorrect, responseTimeMs),
 		Classification: string(validation.Classification),
 	}, nil
+}
+
+// reverseQuality is the SRS quality for a graded reverse answer: 1 when wrong,
+// otherwise faster answers score higher. Shared by the single-answer and
+// batched reverse graders so both assign identical quality.
+func reverseQuality(correct bool, responseTimeMs int64) int {
+	if !correct {
+		return 1
+	}
+	switch {
+	case responseTimeMs < 3000:
+		return 5
+	case responseTimeMs < 10000:
+		return 4
+	default:
+		return 3
+	}
+}
+
+// emptyAnswerGrade is the deterministic wrong result for an empty /
+// whitespace-only answer (see GradeReverseAnswer / GradeNotebookAnswer): the
+// miss is recorded without any LLM call (quiz-ui-invariants U1).
+func emptyAnswerGrade() GradeResult {
+	return GradeResult{Correct: false, Reason: "No answer provided.", Quality: int(notebook.QualityWrong)}
+}
+
+// GradeReverseAnswerBatch grades several reverse answers with a SINGLE LLM call
+// (ValidateWordFormBatch) instead of one call per answer — the fix for the
+// batch-submit 429 burst. Empty answers are graded deterministically and never
+// reach the model. Results are returned in the same order as the inputs, with
+// the same per-item semantics (classification, correctness, quality) as
+// GradeReverseAnswer. The three slices must be the same length.
+//
+// It returns inference.ErrMalformedResponse (wrapped) when the batched response
+// is unusable (unparseable or wrong-length) so the caller can fall back to
+// per-item grading; a transport failure (network / 429) is returned as-is so
+// the caller does NOT re-issue N calls and re-trigger the rate limit.
+func (s *Service) GradeReverseAnswerBatch(ctx context.Context, cards []ReverseCard, answers []string, responseTimes []int64) ([]GradeResult, error) {
+	results := make([]GradeResult, len(cards))
+	reqs := make([]inference.ValidateWordFormRequest, 0, len(cards))
+	reqIdx := make([]int, 0, len(cards))
+	for i := range cards {
+		if strings.TrimSpace(answers[i]) == "" {
+			results[i] = emptyAnswerGrade()
+			continue
+		}
+		var contextStr string
+		if len(cards[i].Contexts) > 0 {
+			contextStr = cards[i].Contexts[0].Context
+		}
+		reqs = append(reqs, inference.ValidateWordFormRequest{
+			Expected:       cards[i].Expression,
+			UserAnswer:     answers[i],
+			Meaning:        cards[i].Meaning,
+			Context:        contextStr,
+			ResponseTimeMs: responseTimes[i],
+		})
+		reqIdx = append(reqIdx, i)
+	}
+	if len(reqs) == 0 {
+		return results, nil
+	}
+
+	validations, err := s.openaiClient.ValidateWordFormBatch(ctx, reqs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate words: %w", err)
+	}
+	if len(validations) != len(reqs) {
+		return nil, fmt.Errorf("reverse batch grade got %d results for %d answers: %w", len(validations), len(reqs), inference.ErrMalformedResponse)
+	}
+	for j, v := range validations {
+		i := reqIdx[j]
+		correct := v.Classification == inference.ClassificationSameWord
+		results[i] = GradeResult{
+			Correct:        correct,
+			Reason:         v.Reason,
+			Quality:        reverseQuality(correct, responseTimes[i]),
+			Classification: string(v.Classification),
+		}
+	}
+	return results, nil
+}
+
+// GradeNotebookAnswerBatch grades several standard (recognition) answers with a
+// SINGLE AnswerMeanings call for all of them, instead of one call per answer.
+// AnswerMeanings is already a multi-expression API, so this simply packs every
+// answered card into one request and maps the array back by index. Empty
+// answers are graded deterministically without the model. Same ordering and
+// per-item semantics as GradeNotebookAnswer. Returns inference.ErrMalformedResponse
+// (wrapped) on a wrong-length response so the caller can fall back to per-item.
+func (s *Service) GradeNotebookAnswerBatch(ctx context.Context, cards []Card, answers []string, responseTimes []int64) ([]GradeResult, error) {
+	results := make([]GradeResult, len(cards))
+	exprs := make([]inference.Expression, 0, len(cards))
+	reqIdx := make([]int, 0, len(cards))
+	for i := range cards {
+		if strings.TrimSpace(answers[i]) == "" {
+			results[i] = emptyAnswerGrade()
+			continue
+		}
+		exprs = append(exprs, inference.Expression{
+			Expression:        cards[i].Entry,
+			Meaning:           answers[i],
+			Contexts:          cards[i].Contexts,
+			IsExpressionInput: false,
+			ResponseTimeMs:    responseTimes[i],
+		})
+		reqIdx = append(reqIdx, i)
+	}
+	if len(exprs) == 0 {
+		return results, nil
+	}
+
+	resp, err := s.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{Expressions: exprs})
+	if err != nil {
+		return nil, fmt.Errorf("failed to grade answers: %w", err)
+	}
+	if len(resp.Answers) != len(exprs) {
+		return nil, fmt.Errorf("notebook batch grade got %d answers for %d expressions: %w", len(resp.Answers), len(exprs), inference.ErrMalformedResponse)
+	}
+	for j, ans := range resp.Answers {
+		i := reqIdx[j]
+		correct, reason, quality := extractAnswerResult(ans)
+		results[i] = GradeResult{Correct: correct, Reason: reason, Quality: quality}
+	}
+	return results, nil
 }
 
 // SaveReverseResult updates learning history via the repository.

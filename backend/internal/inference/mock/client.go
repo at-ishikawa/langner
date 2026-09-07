@@ -114,6 +114,21 @@ func (c *Client) ValidateWordForm(_ context.Context, params inference.ValidateWo
 	}, nil
 }
 
+// ValidateWordFormBatch grades each item with the same per-item logic as
+// ValidateWordForm, in a loop and with no network call, so tests and the e2e
+// mock behave identically whether the handler batches or not.
+func (c *Client) ValidateWordFormBatch(ctx context.Context, params []inference.ValidateWordFormRequest) ([]inference.ValidateWordFormResponse, error) {
+	results := make([]inference.ValidateWordFormResponse, len(params))
+	for i, p := range params {
+		res, err := c.ValidateWordForm(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		results[i] = res
+	}
+	return results, nil
+}
+
 func (c *Client) LookupWord(_ context.Context, params inference.LookupWordRequest) (inference.LookupWordResponse, error) {
 	return inference.LookupWordResponse{
 		Definitions: []inference.LookupWordDefinition{

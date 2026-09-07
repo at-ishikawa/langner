@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -86,25 +87,26 @@ func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 				h.noteStore[2] = quiz.Card{NotebookName: "n2", Entry: "word2", Meaning: "meaning2"}
 			},
 			setupMock: func(m *mock_inference.MockClient) {
-				// The batch handler fires two concurrent AnswerMeanings calls; gomock
-				// matches any order so either arrival sequence is fine.
+				// The batch handler now grades all answers in ONE AnswerMeanings
+				// call, returning one answer per input expression in order.
 				m.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(_ context.Context, req inference.AnswerMeaningsRequest) (inference.AnswerMeaningsResponse, error) {
-						expr := req.Expressions[0]
-						isCorrect := expr.Expression == "word1"
-						reason := "ok"
-						if !isCorrect {
-							reason = "no"
-						}
-						return inference.AnswerMeaningsResponse{
-							Answers: []inference.AnswerMeaning{{
-								Expression: expr.Expression,
-								Meaning:    expr.Meaning,
+						answers := make([]inference.AnswerMeaning, len(req.Expressions))
+						for i, expr := range req.Expressions {
+							isCorrect := expr.Expression == "word1"
+							reason := "ok"
+							if !isCorrect {
+								reason = "no"
+							}
+							answers[i] = inference.AnswerMeaning{
+								Expression:        expr.Expression,
+								Meaning:           expr.Meaning,
 								AnswersForContext: []inference.AnswersForContext{{Correct: isCorrect, Reason: reason, Quality: 3}},
-							}},
-						}, nil
+							}
+						}
+						return inference.AnswerMeaningsResponse{Answers: answers}, nil
 					},
-				).Times(2)
+				).Times(1)
 			},
 			wantResponseCount: 2,
 			wantFirstCorrect:  true,
@@ -250,12 +252,13 @@ func TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence(t *testing.T) 
 				Meaning:      "to become angry",
 			}
 
-			mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(
-				inference.ValidateWordFormResponse{
+			// The reverse batch now grades through the single-call batched path.
+			mockClient.EXPECT().ValidateWordFormBatch(gomock.Any(), gomock.Any()).Return(
+				[]inference.ValidateWordFormResponse{{
 					Classification: inference.ClassificationSynonym,
 					Reason:         "valid synonym",
 					Quality:        2,
-				}, nil,
+				}}, nil,
 			)
 
 			resp, err := handler.BatchSubmitReverseAnswers(
@@ -286,4 +289,146 @@ func TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence(t *testing.T) 
 			}
 		})
 	}
+}
+
+// TestQuizHandler_BatchSubmitReverseAnswers_OneLLMCallForBatch is the core
+// regression test for the 429-burst fix: a batch submit with N>1 non-skipped
+// answers makes EXACTLY ONE ValidateWordFormBatch call (not one per answer),
+// returns the correct per-item grade in order, and never sends a skipped item
+// to the LLM (nor calls the per-item ValidateWordForm grader).
+func TestQuizHandler_BatchSubmitReverseAnswers_OneLLMCallForBatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler := newTestHandler(t, mockClient)
+
+	handler.reverseStore[1] = quiz.ReverseCard{NotebookName: "n", Expression: "break the ice", Meaning: "to ease tension"}
+	handler.reverseStore[2] = quiz.ReverseCard{NotebookName: "n", Expression: "lose one's temper", Meaning: "to become angry"}
+	handler.reverseStore[3] = quiz.ReverseCard{NotebookName: "n", Expression: "hit the sack", Meaning: "to go to bed"}
+	handler.reverseStore[4] = quiz.ReverseCard{NotebookName: "n", Expression: "spill the beans", Meaning: "to reveal a secret"}
+
+	// Exactly ONE batched call grades the three non-skipped answers; the per-item
+	// grader must never be reached.
+	mockClient.EXPECT().
+		ValidateWordFormBatch(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, params []inference.ValidateWordFormRequest) ([]inference.ValidateWordFormResponse, error) {
+			require.Len(t, params, 3, "skipped answers must not be sent to the LLM")
+			out := make([]inference.ValidateWordFormResponse, len(params))
+			for i, p := range params {
+				if strings.EqualFold(strings.TrimSpace(p.UserAnswer), p.Expected) {
+					out[i] = inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "match", Quality: 5}
+				} else {
+					out[i] = inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "no match", Quality: 1}
+				}
+			}
+			return out, nil
+		}).
+		Times(1)
+	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Times(0)
+
+	resp, err := handler.BatchSubmitReverseAnswers(context.Background(),
+		connect.NewRequest(&apiv1.BatchSubmitReverseAnswersRequest{
+			Answers: []*apiv1.SubmitReverseAnswerRequest{
+				{NoteId: 1, Answer: "break the ice"},  // correct
+				{NoteId: 2, Answer: "totally unrelated"}, // wrong
+				{NoteId: 4, IsSkipped: true},           // skipped -> no LLM, no per-item call
+				{NoteId: 3, Answer: "hit the sack"},    // correct
+			},
+		}),
+	)
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetResponses(), 4)
+
+	// Grades map back to the original order, including the skipped item.
+	assert.True(t, resp.Msg.GetResponses()[0].GetCorrect())
+	assert.Equal(t, "break the ice", resp.Msg.GetResponses()[0].GetExpression())
+	assert.False(t, resp.Msg.GetResponses()[1].GetCorrect())
+	assert.False(t, resp.Msg.GetResponses()[2].GetCorrect(), "skipped answer is incorrect")
+	assert.Equal(t, "skipped by user", resp.Msg.GetResponses()[2].GetReason())
+	assert.True(t, resp.Msg.GetResponses()[3].GetCorrect())
+	assert.Equal(t, "hit the sack", resp.Msg.GetResponses()[3].GetExpression())
+}
+
+// TestQuizHandler_BatchSubmitReverseAnswers_FallsBackOnMalformedBatch proves the
+// robustness contract: when the single batched call returns an unusable result
+// (here a wrong-length array, which the service tags ErrMalformedResponse), the
+// handler falls back to grading each answer individually and still returns the
+// correct results, so batching can never make grading worse than before.
+func TestQuizHandler_BatchSubmitReverseAnswers_FallsBackOnMalformedBatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler := newTestHandler(t, mockClient)
+
+	handler.reverseStore[1] = quiz.ReverseCard{NotebookName: "n", Expression: "break the ice", Meaning: "to ease tension"}
+	handler.reverseStore[2] = quiz.ReverseCard{NotebookName: "n", Expression: "hit the sack", Meaning: "to go to bed"}
+
+	// One batched attempt returns a wrong-length array (1 result for 2 answers).
+	mockClient.EXPECT().
+		ValidateWordFormBatch(gomock.Any(), gomock.Any()).
+		Return([]inference.ValidateWordFormResponse{
+			{Classification: inference.ClassificationSameWord, Reason: "only one", Quality: 5},
+		}, nil).
+		Times(1)
+	// Fallback: exactly one per-item call per answer.
+	mockClient.EXPECT().
+		ValidateWordForm(gomock.Any(), gomock.Any()).
+		Return(inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "per-item match", Quality: 4}, nil).
+		Times(2)
+
+	resp, err := handler.BatchSubmitReverseAnswers(context.Background(),
+		connect.NewRequest(&apiv1.BatchSubmitReverseAnswersRequest{
+			Answers: []*apiv1.SubmitReverseAnswerRequest{
+				{NoteId: 1, Answer: "break the ice"},
+				{NoteId: 2, Answer: "hit the sack"},
+			},
+		}),
+	)
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetResponses(), 2)
+	assert.True(t, resp.Msg.GetResponses()[0].GetCorrect())
+	assert.True(t, resp.Msg.GetResponses()[1].GetCorrect())
+	assert.Equal(t, "per-item match", resp.Msg.GetResponses()[0].GetReason())
+}
+
+// TestQuizHandler_BatchSubmitAnswers_OneLLMCallForBatch proves the standard
+// (recognition) batch path also collapses to ONE AnswerMeanings call for all
+// non-skipped answers, mapping the array back by index.
+func TestQuizHandler_BatchSubmitAnswers_OneLLMCallForBatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler := newTestHandler(t, mockClient)
+
+	handler.noteStore[1] = quiz.Card{NotebookName: "n", Entry: "break the ice", Meaning: "to ease tension"}
+	handler.noteStore[2] = quiz.Card{NotebookName: "n", Entry: "hit the sack", Meaning: "to go to bed"}
+	handler.noteStore[3] = quiz.Card{NotebookName: "n", Entry: "spill the beans", Meaning: "to reveal a secret"}
+
+	mockClient.EXPECT().
+		AnswerMeanings(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req inference.AnswerMeaningsRequest) (inference.AnswerMeaningsResponse, error) {
+			require.Len(t, req.Expressions, 2, "skipped answers must not be sent to the LLM")
+			answers := make([]inference.AnswerMeaning, len(req.Expressions))
+			for i, e := range req.Expressions {
+				correct := !strings.HasPrefix(strings.ToLower(e.Meaning), "wrong")
+				answers[i] = inference.AnswerMeaning{
+					Expression:        e.Expression,
+					AnswersForContext: []inference.AnswersForContext{{Correct: correct, Reason: "r", Quality: 4}},
+				}
+			}
+			return inference.AnswerMeaningsResponse{Answers: answers}, nil
+		}).
+		Times(1)
+
+	resp, err := handler.BatchSubmitAnswers(context.Background(),
+		connect.NewRequest(&apiv1.BatchSubmitAnswersRequest{
+			Answers: []*apiv1.SubmitAnswerRequest{
+				{NoteId: 1, Answer: "to ease tension"}, // correct
+				{NoteId: 3, IsSkipped: true},           // skipped
+				{NoteId: 2, Answer: "wrong guess"},     // wrong
+			},
+		}),
+	)
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetResponses(), 3)
+	assert.True(t, resp.Msg.GetResponses()[0].GetCorrect())
+	assert.False(t, resp.Msg.GetResponses()[1].GetCorrect(), "skipped answer is incorrect")
+	assert.False(t, resp.Msg.GetResponses()[2].GetCorrect())
 }

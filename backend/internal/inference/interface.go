@@ -2,14 +2,32 @@ package inference
 
 import (
 	"context"
+	"errors"
 )
 
 //go:generate mockgen -source=interface.go -destination=../mocks/inference/mock_client.go -package=mock_inference
+
+// ErrMalformedResponse indicates the model returned a response that could not
+// be parsed or mapped back to the request — e.g. non-JSON output, or a batch
+// array whose length does not match the number of items sent. Batch graders
+// return it (wrapped) so callers can fall back to grading each item
+// individually. It is deliberately distinct from transport failures (network,
+// HTTP 429 / RESOURCE_EXHAUSTED): a rate-limited batch must NOT trigger an
+// N-call fallback that would re-burst the same quota.
+var ErrMalformedResponse = errors.New("malformed inference response")
 
 // Client interface defines the methods for AI inference operations
 type Client interface {
 	AnswerMeanings(ctx context.Context, params AnswerMeaningsRequest) (AnswerMeaningsResponse, error)
 	ValidateWordForm(ctx context.Context, params ValidateWordFormRequest) (ValidateWordFormResponse, error)
+	// ValidateWordFormBatch classifies several reverse-quiz answers in a SINGLE
+	// model request (one prompt listing all items), returning one result per
+	// input in the SAME order. This collapses a batch submit's N concurrent
+	// grading calls into one, which is what keeps a 10-answer submit from
+	// bursting past a provider's per-minute request quota. Implementations MUST
+	// return ErrMalformedResponse (wrapped) when the response cannot be parsed
+	// or its length does not match len(params).
+	ValidateWordFormBatch(ctx context.Context, params []ValidateWordFormRequest) ([]ValidateWordFormResponse, error)
 	LookupWord(ctx context.Context, params LookupWordRequest) (LookupWordResponse, error)
 	GradeCorrection(ctx context.Context, params GradeCorrectionRequest) (GradeCorrectionResponse, error)
 }

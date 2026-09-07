@@ -1141,6 +1141,185 @@ Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTi
 	return decoded, nil
 }
 
+// ValidateWordFormBatch classifies several reverse-quiz answers with ONE model
+// request instead of one call per answer. It reuses the exact classification
+// rules of the single-answer path, but instructs the model to return a JSON
+// ARRAY with one result per input item, in the same order. This is the fix for
+// the batch-submit 429 burst: a 10-answer submit now makes one request, not ten.
+func (client *Client) ValidateWordFormBatch(
+	ctx context.Context,
+	params []inference.ValidateWordFormRequest,
+) ([]inference.ValidateWordFormResponse, error) {
+	if len(params) == 0 {
+		return nil, nil
+	}
+	// Only the HTTP request is retried (transport errors: network / 5xx / 429).
+	// Parsing and the length check run AFTER retry so a malformed / wrong-length
+	// batch is reported as inference.ErrMalformedResponse directly — not buried
+	// inside the retry library's error wrapper, which does not preserve
+	// errors.Is — so the caller can reliably fall back to per-item grading.
+	// Re-asking the same big prompt would not fix a bad shape anyway; the smaller
+	// per-item prompts are the proven path.
+	var content string
+	if err := retry.Do(
+		func() error {
+			c, err := client.validateWordFormBatch(ctx, params)
+			if err != nil {
+				if !isRetryableError(err) {
+					return retry.Unrecoverable(err)
+				}
+				return err
+			}
+			content = c
+			return nil
+		},
+		retry.Context(ctx),
+		retry.Attempts(client.maxRetryAttempts+1),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			return retry.BackOffDelay(n, err, config)
+		}),
+	); err != nil {
+		return nil, err
+	}
+
+	var decoded []inference.ValidateWordFormResponse
+	if err := json.NewDecoder(strings.NewReader(extractJSON(content))).Decode(&decoded); err != nil {
+		return nil, fmt.Errorf("parse batch response %q: %w", content, inference.ErrMalformedResponse)
+	}
+	if len(decoded) != len(params) {
+		return nil, fmt.Errorf("batch response length %d != request %d: %w", len(decoded), len(params), inference.ErrMalformedResponse)
+	}
+	return decoded, nil
+}
+
+// validateWordFormBatchItem is one entry in the JSON array sent to the model.
+// It mirrors ValidateWordFormRequest but carries an explicit index so the model
+// is anchored to return results in the same order.
+type validateWordFormBatchItem struct {
+	Index          int    `json:"index"`
+	Expected       string `json:"expected"`
+	Meaning        string `json:"meaning"`
+	Context        string `json:"context,omitempty"`
+	ResponseTimeMs int64  `json:"response_time_ms,omitempty"`
+	UserAnswer     string `json:"user_answer"`
+}
+
+// validateWordFormBatch issues the single batched grading request and returns
+// the raw model content. Parsing and the length check are done by the caller
+// (ValidateWordFormBatch) so they are not retried.
+func (client *Client) validateWordFormBatch(
+	ctx context.Context,
+	params []inference.ValidateWordFormRequest,
+) (string, error) {
+	systemPrompt := `You are a vocabulary quiz validator for a reverse quiz (meaning → word production).
+
+You will receive a JSON ARRAY of items. Each item has an "index", the "expected"
+word/expression, the "meaning" shown to the user, an optional "context", an
+optional "response_time_ms", and the "user_answer". For EACH item, classify the
+user's answer into one of three categories.
+
+CLASSIFICATION RULES:
+
+1. "same_word" - The user's answer IS the expected word/expression, just in a different form:
+   - Different tense: "ran" for "run", "swimming" for "swim"
+   - Different number: "boxes" for "box", "children" for "child"
+   - Different case: "Hello" for "hello"
+   - With/without articles: "a book" for "book", missing "a" or "the" within expressions
+   - Spelling variants: "colour" for "color"
+   - Pronoun variants in expressions: "lost his way" for "lose one's way"
+   - Optional parenthetical parts omitted: if expected has "(word)" meaning optional, omitting it is OK
+   - Minor word omissions: missing small words (articles, prepositions) that don't change the core meaning
+   - Preposition variants in fixed expressions: "in" vs "on" when the core phrase is identical
+   - Minor typos: transposed letters, missing/extra letter, or small spelling errors that clearly show the user knows the word
+   - KEY: If the user's answer contains the essential words of the expected expression, classify as "same_word"
+
+2. "synonym" - A different word or expression with the same or very similar meaning:
+   - Single words: "joyful" when expected "happy", "big" when expected "large"
+   - Multi-word expressions: a different idiom/phrase with similar meaning (e.g., "give up" when expected "throw in the towel")
+   - The user clearly knows the meaning but produced a different word/expression
+   - Classify as "synonym" so the user gets a chance to retry with the specific expected word
+
+3. "wrong" - The user's answer is incorrect:
+   - Wrong definition entirely
+   - Antonym (opposite meaning)
+   - Unrelated word or expression
+   - Gibberish or empty
+
+NOTE ON MULTI-WORD EXPRESSIONS:
+- Minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should be classified as "same_word"
+- A completely different expression with similar meaning should be classified as "synonym", NOT "wrong"
+
+QUALITY ASSESSMENT:
+Also assess response speed quality (1-5) based on response time and expression complexity:
+- If wrong: quality = 1
+- If correct (same_word or synonym), evaluate response time relative to expression complexity:
+  - Fast (quick recall for this expression's length/complexity): quality = 5
+  - Normal (reasonable time for this expression): quality = 4
+  - Slow (took long relative to expression complexity): quality = 3
+- Consider that longer/more complex expressions (idioms, phrasal verbs) naturally take more time than single words.
+
+OUTPUT FORMAT (JSON only): a JSON ARRAY with exactly one object per input item,
+in the SAME ORDER as the input array (matching each item's "index"):
+[
+  {"classification": "same_word" | "synonym" | "wrong", "reason": "<brief explanation>", "quality": <1-5>}
+]
+
+Return exactly as many objects as there are input items. Do NOT include any text outside the JSON array.`
+
+	items := make([]validateWordFormBatchItem, len(params))
+	for i, p := range params {
+		items[i] = validateWordFormBatchItem{
+			Index:          i,
+			Expected:       p.Expected,
+			Meaning:        p.Meaning,
+			Context:        p.Context,
+			ResponseTimeMs: p.ResponseTimeMs,
+			UserAnswer:     p.UserAnswer,
+		}
+	}
+	userJSON, err := json.Marshal(items)
+	if err != nil {
+		return "", fmt.Errorf("marshal batch items: %w", err)
+	}
+
+	requestBody := ChatCompletionRequest{
+		Model:       client.model,
+		Temperature: 0.1,
+		Messages: []Message{
+			{Role: RoleSystem, Content: systemPrompt},
+			{Role: RoleUser, Content: string(userJSON)},
+		},
+	}
+
+	response, err := client.httpClient.R().
+		SetContext(ctx).
+		SetBody(requestBody).
+		SetResult(&ChatCompletionResponse{}).
+		Post("/chat/completions")
+	if err != nil {
+		return "", fmt.Errorf("httpClient.Post > %w", err)
+	}
+	if response.IsError() {
+		return "", fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+	}
+
+	responseBody := response.Result().(*ChatCompletionResponse)
+	if responseBody == nil || len(responseBody.Choices) == 0 {
+		return "", fmt.Errorf("empty response body or choices: %s", response.String())
+	}
+
+	content := responseBody.Choices[0].Message.Content
+	if content == "" {
+		return "", fmt.Errorf("empty response content: %s", response.String())
+	}
+
+	slog.Default().Debug("validateWordFormBatch response",
+		"count", len(params),
+		"response", content,
+	)
+	return content, nil
+}
+
 func (client *Client) GradeCorrection(
 	ctx context.Context,
 	params inference.GradeCorrectionRequest,
