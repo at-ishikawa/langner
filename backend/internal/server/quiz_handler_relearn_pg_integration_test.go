@@ -17,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -84,7 +85,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock.NewClient(), make(map[string]rapidapi.Response), multiRepo, config.QuizConfig{})
+	}, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response), multiRepo, config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	logCount := func() int {

@@ -41,7 +41,7 @@ func NewNotebookQuizCLI(
 	}
 
 	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
+	svc := quiz.NewService(notebooksConfig, inference.StaticResolver(openaiClient), baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	var cards []quiz.Card
 
@@ -107,7 +107,7 @@ func NewFlashcardQuizCLI(
 	}
 
 	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
+	svc := quiz.NewService(notebooksConfig, inference.StaticResolver(openaiClient), baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	cards, err := svc.LoadCards(0, []string{notebookName}, false, nil)
 	if err != nil {
@@ -173,7 +173,7 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 
 	responseTimeMs := time.Since(startTime).Milliseconds()
 
-	grade, err := r.svc.GradeNotebookAnswer(ctx, *currentCard, strings.TrimSpace(userAnswer), responseTimeMs)
+	grade, err := r.svc.GradeNotebookAnswer(ctx, 0, *currentCard, strings.TrimSpace(userAnswer), responseTimeMs)
 	if err != nil {
 		return fmt.Errorf("failed to grade answer: %w", err)
 	}

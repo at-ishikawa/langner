@@ -194,7 +194,8 @@ type OpenAIConfig struct {
 }
 
 // InferenceConfig selects which inference client backs quiz grading.
-// Mode "openai" (default) uses the live OpenAI client.
+// Mode "user" (default) resolves the LLM client per request from the signed-in
+// user's registered provider + API key (no system-wide server key).
 // Mode "mock" uses a deterministic substring-match grader, used by e2e tests.
 type InferenceConfig struct {
 	Mode string `mapstructure:"mode"`
@@ -251,6 +252,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("outputs.flashcard_directory", filepath.Join("outputs", "flashcard"))
 	v.SetDefault("outputs.etymology_directory", filepath.Join("outputs", "etymology"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
+	v.SetDefault("inference.mode", "user")
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
 	v.SetDefault("database.host", "localhost")

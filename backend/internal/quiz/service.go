@@ -19,8 +19,13 @@ import (
 
 // Service owns all quiz business logic shared between the CLI and RPC handler.
 type Service struct {
-	notebooksConfig    config.NotebooksConfig
-	openaiClient       inference.Client
+	notebooksConfig config.NotebooksConfig
+	// clientResolver resolves the inference client PER REQUEST from the
+	// signed-in user's credentials, replacing the old boot-time singleton: each
+	// grade call passes its userID and grades with that user's own provider +
+	// API key. In mock mode (e2e) and the single-user CLI it is a static
+	// resolver returning one fixed client.
+	clientResolver     inference.ClientResolver
 	dictionaryMap      map[string]rapidapi.Response
 	learningRepository learning.LearningRepository
 	// historyStore, when set, is the READ side for learning history: the
@@ -59,10 +64,12 @@ type Service struct {
 
 // NewService creates a new Service.
 // learningRepo is optional; pass nil when DB is not configured.
-func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository, quizCfg config.QuizConfig) *Service {
+// clientResolver resolves the per-user inference client for grading; pass an
+// inference.StaticResolver for the single-client CLI / mock-grader paths.
+func NewService(notebooksConfig config.NotebooksConfig, clientResolver inference.ClientResolver, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository, quizCfg config.QuizConfig) *Service {
 	return &Service{
 		notebooksConfig:    notebooksConfig,
-		openaiClient:       openaiClient,
+		clientResolver:     clientResolver,
 		dictionaryMap:      dictionaryMap,
 		learningRepository: learningRepo,
 		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals),
@@ -666,7 +673,8 @@ func (s *Service) loadFlashcardCards(
 }
 
 // GradeNotebookAnswer grades a meaning answer and returns the result.
-func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer string, responseTimeMs int64) (GradeResult, error) {
+// userID selects whose LLM credential backs the grade (resolved per call).
+func (s *Service) GradeNotebookAnswer(ctx context.Context, userID int64, card Card, answer string, responseTimeMs int64) (GradeResult, error) {
 	// An empty / whitespace-only answer is a miss — grade it wrong
 	// deterministically without the LLM (mirrors GradeGrammarBlank). This is the
 	// "unanswered → incorrect" path (quiz-ui-invariants U1): revealing answers in
@@ -675,7 +683,11 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer str
 	if strings.TrimSpace(answer) == "" {
 		return GradeResult{Correct: false, Reason: "No answer provided.", Quality: int(notebook.QualityWrong)}, nil
 	}
-	results, err := s.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+	client, err := s.clientResolver.ResolveClient(ctx, userID)
+	if err != nil {
+		return GradeResult{}, err
+	}
+	results, err := client.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
 		Expressions: []inference.Expression{
 			{
 				Expression:        card.Entry,
@@ -1630,7 +1642,8 @@ func needsReverseFlashcardReview(
 }
 
 // GradeReverseAnswer grades a reverse quiz answer (user guesses the word from meaning/context).
-func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answer string, responseTimeMs int64) (GradeResult, error) {
+// userID selects whose LLM credential backs the grade (resolved per call).
+func (s *Service) GradeReverseAnswer(ctx context.Context, userID int64, card ReverseCard, answer string, responseTimeMs int64) (GradeResult, error) {
 	// An empty / whitespace-only answer is a miss — grade it wrong
 	// deterministically without the LLM (mirrors GradeGrammarBlank), the
 	// "unanswered → incorrect" path (quiz-ui-invariants U1). Without this a blank
@@ -1643,7 +1656,11 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answ
 		contextStr = card.Contexts[0].Context
 	}
 
-	validation, err := s.openaiClient.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
+	client, err := s.clientResolver.ResolveClient(ctx, userID)
+	if err != nil {
+		return GradeResult{}, err
+	}
+	validation, err := client.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
 		Expected:       card.Expression,
 		UserAnswer:     answer,
 		Meaning:        card.Meaning,
@@ -2031,7 +2048,9 @@ func (s *Service) loadFlashcardWords(userID int64, reader *notebook.Reader, note
 }
 
 // GradeFreeformAnswer grades a freeform quiz answer (user provides word + meaning).
-func (s *Service) GradeFreeformAnswer(ctx context.Context, word, meaning string, responseTimeMs int64, cards []FreeformCard) (FreeformGradeResult, error) {
+// GradeFreeformAnswer grades a freeform answer.
+// userID selects whose LLM credential backs the grade (resolved per call).
+func (s *Service) GradeFreeformAnswer(ctx context.Context, userID int64, word, meaning string, responseTimeMs int64, cards []FreeformCard) (FreeformGradeResult, error) {
 	matchingCards := findMatchingCards(cards, word)
 
 	if len(matchingCards) == 0 {
@@ -2043,7 +2062,11 @@ func (s *Service) GradeFreeformAnswer(ctx context.Context, word, meaning string,
 		}, nil
 	}
 
-	results, err := s.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+	client, err := s.clientResolver.ResolveClient(ctx, userID)
+	if err != nil {
+		return FreeformGradeResult{}, err
+	}
+	results, err := client.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
 		Expressions: []inference.Expression{
 			{
 				Expression:        word,

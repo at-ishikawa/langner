@@ -162,7 +162,7 @@ notebooks:
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), multiRepo, config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), multiRepo, config.QuizConfig{})
 
 	// A runtime learning-log write must be attributed to a user (auth Phase 2);
 	// seed one so the handler's SaveResult can stamp its id via the request ctx.
@@ -220,8 +220,8 @@ func TestQuizHandler_Standard_LivePostgres_Integration(t *testing.T) {
 
 		mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
 			inference.AnswerMeaningsResponse{Answers: []inference.AnswerMeaning{{
-				Expression: "serendipity",
-				Meaning:    "a fortunate discovery by accident",
+				Expression:        "serendipity",
+				Meaning:           "a fortunate discovery by accident",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 4}},
 			}}}, nil)
 		_, err = handler.SubmitAnswer(pgUserCtx(userID),
@@ -298,8 +298,8 @@ func TestQuizHandler_Freeform_LivePostgres_Integration(t *testing.T) {
 	answer := func(t *testing.T) {
 		mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
 			inference.AnswerMeaningsResponse{Answers: []inference.AnswerMeaning{{
-				Expression: "preposterous",
-				Meaning:    "contrary to reason or common sense",
+				Expression:        "preposterous",
+				Meaning:           "contrary to reason or common sense",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 4}},
 			}}}, nil)
 		_, err := handler.SubmitFreeformAnswer(pgUserCtx(userID),
@@ -340,8 +340,8 @@ func TestQuizHandler_BatchSubmit_LivePostgres_Integration(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
 			inference.AnswerMeaningsResponse{Answers: []inference.AnswerMeaning{{
-				Expression: "serendipity",
-				Meaning:    "a fortunate discovery by accident",
+				Expression:        "serendipity",
+				Meaning:           "a fortunate discovery by accident",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: fmt.Sprintf("batch-%d", i), Quality: 4}},
 			}}}, nil)
 		_, err = handler.BatchSubmitAnswers(pgUserCtx(userID),
@@ -379,8 +379,8 @@ func TestQuizHandler_Standard_OverrideAnswer_LivePostgres_Integration(t *testing
 	// quality 1 on both stores.
 	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
 		inference.AnswerMeaningsResponse{Answers: []inference.AnswerMeaning{{
-			Expression: "serendipity",
-			Meaning:    "a fortunate discovery by accident",
+			Expression:        "serendipity",
+			Meaning:           "a fortunate discovery by accident",
 			AnswersForContext: []inference.AnswersForContext{{Correct: false, Reason: "wrong", Quality: 1}},
 		}}}, nil)
 	submitResp, err := handler.SubmitAnswer(pgUserCtx(userID),

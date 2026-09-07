@@ -366,14 +366,20 @@ func deterministicGrammarGrade(answer, correct, incorrect string) (GradeResult, 
 	return GradeResult{}, false
 }
 
-func (s *Service) GradeGrammarBlank(ctx context.Context, content string, blank GrammarBlank, answer string, responseTimeMs int64) (GradeResult, error) {
+// GradeGrammarBlank grades one grammar-correction blank.
+// userID selects whose LLM credential backs the grade (resolved per call).
+func (s *Service) GradeGrammarBlank(ctx context.Context, userID int64, content string, blank GrammarBlank, answer string, responseTimeMs int64) (GradeResult, error) {
 	// Fast path: most answers match the known reference correction, so grade
 	// them deterministically and skip the LLM entirely. Only answers that
 	// differ (a possible valid alternative) pay for a model call.
 	if result, ok := deterministicGrammarGrade(answer, blank.Correct, blank.Incorrect); ok {
 		return result, nil
 	}
-	response, err := s.openaiClient.GradeCorrection(ctx, inference.GradeCorrectionRequest{
+	client, err := s.clientResolver.ResolveClient(ctx, userID)
+	if err != nil {
+		return GradeResult{}, err
+	}
+	response, err := client.GradeCorrection(ctx, inference.GradeCorrectionRequest{
 		Sentence:       content,
 		Incorrect:      blank.Incorrect,
 		Correct:        blank.Correct,

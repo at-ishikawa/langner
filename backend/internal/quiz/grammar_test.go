@@ -13,6 +13,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	inferencemock "github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -61,7 +62,7 @@ func newGrammarService(t *testing.T, storiesDir, grammarsDir, learningDir string
 			GrammarsDirectories:    []string{grammarsDir},
 			LearningNotesDirectory: learningDir,
 		},
-		inferencemock.NewClient(),
+		inference.StaticResolver(inferencemock.NewClient()),
 		make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, calc),
 		quizCfg,
@@ -89,7 +90,7 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 
 	// 2. A correct fix grades correct and records an "understood" log keyed by
 	// the correction id under a flat "grammar" history.
-	result, err := svc.GradeGrammarBlank(ctx, post.Content, blank, "John", 1200)
+	result, err := svc.GradeGrammarBlank(ctx, 0, post.Content, blank, "John", 1200)
 	require.NoError(t, err)
 	assert.True(t, result.Correct)
 	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, post.NotebookID, blank.SenseID, result, 1200))
@@ -199,7 +200,7 @@ func TestService_GrammarQuiz_CollidingIDsStayIndependent(t *testing.T) {
 		"colliding corrections must be stored under distinct senseIDs (L1)")
 
 	// Answer "the John" correctly and persist it.
-	result, err := svc.GradeGrammarBlank(ctx, posts[0].Content, theJohn, "John", 1000)
+	result, err := svc.GradeGrammarBlank(ctx, 0, posts[0].Content, theJohn, "John", 1000)
 	require.NoError(t, err)
 	require.True(t, result.Correct)
 	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, "journal", theJohn.SenseID, result, 1000))
@@ -217,12 +218,12 @@ func TestService_GrammarQuiz_CollidingIDsStayIndependent(t *testing.T) {
 	}
 
 	// ...and in the Relearn pool once it has been missed (misunderstood).
-	wrong, err := svc.GradeGrammarBlank(ctx, "", still, "", 500)
+	wrong, err := svc.GradeGrammarBlank(ctx, 0, "", still, "", 500)
 	require.NoError(t, err)
 	require.False(t, wrong.Correct)
 	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, "journal", still.SenseID, wrong, 500))
 
-	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 	var found bool
 	for _, card := range pool {
@@ -304,7 +305,7 @@ func TestService_GrammarQuiz_WrongAnswerStaysDue(t *testing.T) {
 	blank := posts[0].Blanks[0]
 
 	// The deterministic mock marks answers starting with "wrong" incorrect.
-	result, err := svc.GradeGrammarBlank(ctx, posts[0].Content, blank, "wrong guess", 900)
+	result, err := svc.GradeGrammarBlank(ctx, 0, posts[0].Content, blank, "wrong guess", 900)
 	require.NoError(t, err)
 	assert.False(t, result.Correct)
 	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, posts[0].NotebookID, blank.SenseID, result, 900))
@@ -358,7 +359,7 @@ func TestLoadNotebookSummaries_JournalTaggedKind(t *testing.T) {
 			GrammarsDirectories:    []string{filepath.Join(base, "grammars")},
 			LearningNotesDirectory: learningDir,
 		},
-		inferencemock.NewClient(),
+		inference.StaticResolver(inferencemock.NewClient()),
 		make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)),
 		quizCfg,

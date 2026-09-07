@@ -27,8 +27,16 @@ auth:
   #   GOOGLE_CLIENT_SECRET        the OAuth client secret
   #   SESSION_SIGNING_KEY         HMAC key that signs the session cookie
   #   CREDENTIAL_ENCRYPTION_KEY   32-byte (hex/base64) AES-256 key that encrypts
-  #                               user email/name at rest — MUST differ from
-  #                               SESSION_SIGNING_KEY
+  #                               user email/name AND per-user LLM API keys at
+  #                               rest — MUST differ from SESSION_SIGNING_KEY
+
+# Quiz grading LLM. There is NO system-wide API key: in the default "user" mode
+# each signed-in user registers their OWN provider + API key in Settings, stored
+# encrypted at rest, and grading resolves the client per request from it. Set to
+# "mock" (the e2e config does) to grade with a deterministic substring matcher
+# and no key at all.
+inference:
+  mode: user
 
 # Notebook ownership + public/private visibility (auth Phase 3). Content stays a
 # shared global catalog; this overlay decides who may SEE each notebook. A

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/config"
-	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -290,7 +290,7 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 					Return(tt.mockResponse, tt.mockError)
 			}
 
-			svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository("", nil), config.QuizConfig{})
+			svc := quiz.NewService(config.NotebooksConfig{}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository("", nil), config.QuizConfig{})
 
 			cli := &ReverseQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{
@@ -417,7 +417,7 @@ func TestReverseQuizCLI_Session(t *testing.T) {
 			notebooksConfig := config.NotebooksConfig{
 				LearningNotesDirectory: learningNotesDir,
 			}
-			svc := quiz.NewService(notebooksConfig, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, nil), config.QuizConfig{})
+			svc := quiz.NewService(notebooksConfig, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, nil), config.QuizConfig{})
 
 			cli := &ReverseQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{
@@ -978,7 +978,6 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 	assert.Equal(t, 0, cli2.GetCardCount(), "Second quiz should have 0 cards - word was answered today")
 }
 
-
 func TestReverseQuizCLI_DisplayResult(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
@@ -1378,7 +1377,7 @@ func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
 	retryInput := "correct-word\n"
 	stdinReader := bufio.NewReader(strings.NewReader(retryInput))
 
-	svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository("", nil), config.QuizConfig{})
+	svc := quiz.NewService(config.NotebooksConfig{}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository("", nil), config.QuizConfig{})
 
 	cli := &ReverseQuizCLI{
 		InteractiveQuizCLI: &InteractiveQuizCLI{

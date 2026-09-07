@@ -1,8 +1,30 @@
 import { createClient } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { QuizService } from "@/gen-protos/api/v1/quiz_pb";
 import { NotebookService } from "@/gen-protos/api/v1/notebook_pb";
 import { AnalyticsService } from "@/gen-protos/api/v1/analytics_pb";
+
+// messageForRpcError turns a grading RPC failure into an actionable, user-facing
+// message. The backend maps provider failures to specific Connect codes (see
+// server.mapGradeError): quota/credits -> ResourceExhausted; invalid or missing
+// key -> Unauthenticated / FailedPrecondition. Everything else falls back to a
+// caller-supplied generic message so unrelated failures read sensibly.
+export function messageForRpcError(err: unknown, fallback: string): string {
+  if (err instanceof ConnectError) {
+    switch (err.code) {
+      case Code.ResourceExhausted:
+        return "Your LLM API key has no remaining credits. Update it in Settings.";
+      case Code.Unauthenticated:
+        return "Your LLM API key is invalid. Update it in Settings.";
+      case Code.FailedPrecondition:
+        return "No LLM API key configured. Add one in Settings to grade answers.";
+    }
+    // The backend's mapped messages are already user-facing; prefer them when present.
+    if (err.rawMessage) return err.rawMessage;
+  }
+  return fallback;
+}
 
 const transport = createConnectTransport({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080",

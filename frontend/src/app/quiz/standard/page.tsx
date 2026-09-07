@@ -11,7 +11,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient } from "@/lib/client";
+import { quizClient, messageForRpcError } from "@/lib/client";
 import { useQuizStore, type Flashcard } from "@/store/quizStore";
 import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
@@ -116,8 +116,8 @@ export default function QuizCardPage() {
       bufferRef.current = [];
       setPendingRetry(null);
       setPhase("batch-feedback");
-    } catch {
-      setError("Failed to submit answers");
+    } catch (err) {
+      setError(messageForRpcError(err, "Failed to submit answers"));
       setPendingRetry(toFlush);
       setPhase("answering");
     }

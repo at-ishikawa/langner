@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -13,6 +15,75 @@ import (
 	"github.com/stretchr/testify/require"
 	"resty.dev/v3"
 )
+
+// TestClient_ProviderError_QuotaNotRetried drives a real HTTP round-trip
+// against an httptest server that returns a 429 insufficient_quota body — the
+// reported production failure. It proves two things end to end:
+//   - the client returns a typed *inference.ProviderError carrying the HTTP
+//     status (429) and the provider error code ("insufficient_quota"), so grade
+//     handlers can map it to an actionable message instead of an opaque internal
+//     error; and
+//   - a permanent quota failure is NOT retried: with maxRetryAttempts=3 the
+//     server is hit exactly once (a quota error fails identically every attempt,
+//     so burning 4 calls only delays the actionable error).
+func TestClient_ProviderError_QuotaNotRetried(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"You exceeded your current quota","type":"insufficient_quota","code":"insufficient_quota"}}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient:       resty.New().SetBaseURL(server.URL),
+		model:            "gpt-4",
+		maxRetryAttempts: 3, // would allow up to 4 attempts if it were retryable
+	}
+
+	_, err := client.AnswerMeanings(context.Background(), inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{{Expression: "break the ice", Meaning: "to ease tension"}},
+	})
+	require.Error(t, err)
+
+	var pe *inference.ProviderError
+	require.True(t, errors.As(err, &pe), "error must unwrap to a typed *inference.ProviderError")
+	assert.Equal(t, "openai", pe.Provider)
+	assert.Equal(t, http.StatusTooManyRequests, pe.StatusCode)
+	assert.Equal(t, "insufficient_quota", pe.Code)
+	assert.True(t, pe.IsQuota(), "insufficient_quota must classify as a quota failure")
+	assert.Equal(t, int32(1), calls.Load(), "a permanent quota failure must NOT be retried")
+}
+
+// TestClient_ProviderError_InvalidKeyNotRetried proves a 401 invalid_api_key is
+// typed and not retried either.
+func TestClient_ProviderError_InvalidKeyNotRetried(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"Incorrect API key provided","type":"invalid_request_error","code":"invalid_api_key"}}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient:       resty.New().SetBaseURL(server.URL),
+		model:            "gpt-4",
+		maxRetryAttempts: 3,
+	}
+
+	_, err := client.ValidateWordForm(context.Background(), inference.ValidateWordFormRequest{
+		Expected: "run", UserAnswer: "ran", Meaning: "to move quickly",
+	})
+	require.Error(t, err)
+
+	var pe *inference.ProviderError
+	require.True(t, errors.As(err, &pe))
+	assert.Equal(t, http.StatusUnauthorized, pe.StatusCode)
+	assert.Equal(t, "invalid_api_key", pe.Code)
+	assert.True(t, pe.IsInvalidKey())
+	assert.Equal(t, int32(1), calls.Load(), "an invalid-key failure must NOT be retried")
+}
 
 func uintPtr(v uint) *uint { return &v }
 
@@ -48,23 +119,38 @@ func TestIsRetryableError(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "server error 500",
-			err:  errors.New("response error 500"),
+			name: "server error 500 (typed) - retryable",
+			err:  &inference.ProviderError{Provider: "openai", StatusCode: 500},
 			want: true,
 		},
 		{
-			name: "server error 503",
-			err:  errors.New("response error 503"),
+			name: "server error 503 (typed) - retryable",
+			err:  &inference.ProviderError{Provider: "openai", StatusCode: 503},
 			want: true,
 		},
 		{
-			name: "rate limiting 429",
-			err:  errors.New("response error 429"),
+			name: "rate limiting 429 (typed, transient) - retryable",
+			err:  &inference.ProviderError{Provider: "openai", StatusCode: 429, Code: "rate_limit_exceeded"},
 			want: true,
 		},
 		{
-			name: "client error 400 - not retryable",
-			err:  errors.New("response error 400: bad request"),
+			name: "quota 429 insufficient_quota (typed, permanent) - NOT retryable",
+			err:  &inference.ProviderError{Provider: "openai", StatusCode: 429, Code: "insufficient_quota"},
+			want: false,
+		},
+		{
+			name: "invalid api key 401 (typed, permanent) - NOT retryable",
+			err:  &inference.ProviderError{Provider: "openai", StatusCode: 401, Code: "invalid_api_key"},
+			want: false,
+		},
+		{
+			name: "wrapped quota provider error - NOT retryable",
+			err:  fmt.Errorf("failed to grade answer: %w", &inference.ProviderError{Provider: "openai", StatusCode: 429, Code: "insufficient_quota"}),
+			want: false,
+		},
+		{
+			name: "client error 400 (typed) - not retryable",
+			err:  &inference.ProviderError{Provider: "openai", StatusCode: 400},
 			want: false,
 		},
 		{
@@ -137,9 +223,9 @@ func TestClient_getRequestBody(t *testing.T) {
 			args: inference.AnswerMeaningsRequest{
 				Expressions: []inference.Expression{
 					{
-						Expression:    "runing",
-						Meaning:       "to move quickly on foot",
-						Contexts:      []inference.Context{{Context: "I was runing in the park."}},
+						Expression:        "runing",
+						Meaning:           "to move quickly on foot",
+						Contexts:          []inference.Context{{Context: "I was runing in the park."}},
 						IsExpressionInput: true,
 					},
 				},
@@ -432,7 +518,7 @@ func TestClient_AnswerMeanings(t *testing.T) {
 			},
 			maxRetryAttempts: uintPtr(2),
 			wantError:        true,
-			wantErrorString:  "response error 400",
+			wantErrorString:  "provider error 400",
 		},
 		{
 			name: "empty choices in response",
@@ -709,7 +795,7 @@ func TestClient_ValidateWordForm(t *testing.T) {
 			},
 			maxRetryAttempts: uintPtr(2),
 			wantError:        true,
-			wantErrorString:  "response error 400",
+			wantErrorString:  "provider error 400",
 		},
 	}
 

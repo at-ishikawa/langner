@@ -13,6 +13,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -40,7 +41,7 @@ func newExampleServiceWithShuffle(t *testing.T, learningDir string, disableShuff
 	ctrl := gomock.NewController(t)
 	return NewService(
 		exampleNotebooksConfig(t, learningDir),
-		mock_inference.NewMockClient(ctrl),
+		inference.StaticResolver(mock_inference.NewMockClient(ctrl)),
 		make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: disableShuffle},
@@ -171,7 +172,7 @@ func TestExampleData_RelearnReAskDedupsByExpression(t *testing.T) {
 			failed[w] = true
 		}
 
-		pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+		pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 		require.NoError(t, err)
 
 		require.Lenf(t, pool, K,

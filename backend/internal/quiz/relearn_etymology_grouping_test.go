@@ -13,6 +13,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -143,7 +144,7 @@ origins:
 		EtymologyDirectories:   []string{etymDir},
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
 }
@@ -173,7 +174,7 @@ func TestLoadRelearnPool_OriginBearingMissGroupsByOrigin(t *testing.T) {
 				}
 				require.Equal(t, 1, count, "the word must have exactly one canonical card (one log series)")
 
-				pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+				pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 				require.NoError(t, err)
 
 				var card *RelearnCard

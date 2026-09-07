@@ -57,10 +57,10 @@ func (h *QuizHandler) BatchSubmitAnswers(
 		if answers[i].GetIsSkipped() {
 			return skippedGradeResult(), nil
 		}
-		return h.svc.GradeNotebookAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
+		return h.svc.GradeNotebookAnswer(ctx, userID, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answers: %w", err))
+		return nil, mapGradeError(err)
 	}
 
 	responses := make([]*apiv1.SubmitAnswerResponse, len(answers))
@@ -117,10 +117,10 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		if answers[i].GetIsSkipped() {
 			return skippedGradeResult(), nil
 		}
-		return h.svc.GradeReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
+		return h.svc.GradeReverseAnswer(ctx, userID, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answers: %w", err))
+		return nil, mapGradeError(err)
 	}
 
 	responses := make([]*apiv1.SubmitReverseAnswerResponse, len(answers))
