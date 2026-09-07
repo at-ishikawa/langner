@@ -28,11 +28,15 @@ func TestIsRetryableError(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "json unmarshal error",
+			// A plain malformed-JSON parse error is NOT retried: re-asking the
+			// same prompt rarely helps and only burns provider quota (which
+			// amplifies 429s). extractJSON already strips markdown fences.
+			name: "json unmarshal error - not retryable",
 			err:  errors.New("json.Unmarshal failed"),
-			want: true,
+			want: false,
 		},
 		{
+			// A truncated/incomplete response can succeed on a re-request.
 			name: "unexpected end of JSON input",
 			err:  errors.New("unexpected end of JSON input"),
 			want: true,
@@ -80,6 +84,74 @@ func TestIsRetryableError(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestExtractJSON(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "already clean object",
+			in:   `{"classification":"synonym","reason":"close enough","quality":4}`,
+			want: `{"classification":"synonym","reason":"close enough","quality":4}`,
+		},
+		{
+			// The exact shape from the reported bug: a ```json fence that made
+			// a naive json.Unmarshal fail with "invalid character '`'".
+			name: "json fenced object",
+			in:   "```json\n{ \"classification\": \"synonym\", \"reason\": \"means the same as break the ice\", \"quality\": 4 }\n```",
+			want: `{ "classification": "synonym", "reason": "means the same as break the ice", "quality": 4 }`,
+		},
+		{
+			name: "bare fenced object",
+			in:   "```\n{ \"classification\": \"wrong\", \"reason\": \"unrelated\", \"quality\": 1 }\n```",
+			want: `{ "classification": "wrong", "reason": "unrelated", "quality": 1 }`,
+		},
+		{
+			name: "prose then object",
+			in:   "Here is the grade:\n{\"classification\":\"correct\",\"reason\":\"exact match\",\"quality\":5}\nHope that helps!",
+			want: `{"classification":"correct","reason":"exact match","quality":5}`,
+		},
+		{
+			name: "json fenced array",
+			in:   "```json\n[{\"expression\":\"lose one's temper\",\"is_expression_input\":true}]\n```",
+			want: `[{"expression":"lose one's temper","is_expression_input":true}]`,
+		},
+		{
+			name: "leading and trailing whitespace",
+			in:   "  \n  {\"quality\":3}  \n ",
+			want: `{"quality":3}`,
+		},
+		{
+			name: "no json returns input trimmed",
+			in:   "  sorry, I cannot help  ",
+			want: "sorry, I cannot help",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractJSON(tt.in)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestExtractJSON_UnmarshalsGrade proves the fence-stripping output actually
+// unmarshals into the grade struct — i.e. it directly reproduces the reported
+// "invalid character '`'" failure and shows the fix resolves it.
+func TestExtractJSON_UnmarshalsGrade(t *testing.T) {
+	fenced := "```json\n{ \"classification\": \"synonym\", \"reason\": \"means the same as break the ice\", \"quality\": 4 }\n```"
+
+	// Without extractJSON the fenced content fails to parse.
+	var bad inference.GradeCorrectionResponse
+	require.Error(t, json.Unmarshal([]byte(fenced), &bad))
+
+	// With extractJSON it parses cleanly.
+	var good inference.ValidateWordFormResponse
+	require.NoError(t, json.Unmarshal([]byte(extractJSON(fenced)), &good))
 }
 
 func TestClient_getRequestBody(t *testing.T) {

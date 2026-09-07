@@ -168,7 +168,7 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx context.Context, req *connect.Requ
 
 	grade, err := h.gradeRelearn(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs(), req.Msg.GetIsSkipped())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade relearn answer: %w", err))
+		return nil, gradeError("grade relearn answer", err)
 	}
 
 	return connect.NewResponse(h.buildRelearnResponse(ctx, card, grade)), nil
@@ -198,7 +198,7 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 		return h.gradeRelearn(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs(), answers[i].GetIsSkipped())
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade relearn answers: %w", err))
+		return nil, gradeError("grade relearn answers", err)
 	}
 
 	responses := make([]*apiv1.SubmitRelearnAnswerResponse, len(answers))

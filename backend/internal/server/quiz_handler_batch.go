@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -25,6 +27,20 @@ func skippedGradeResult() quiz.GradeResult {
 		Quality:        1,
 		Classification: string(inference.ClassificationWrong),
 	}
+}
+
+// gradeError converts a grader failure into a Connect error. A provider
+// rate-limit / quota exhaustion (HTTP 429 / RESOURCE_EXHAUSTED) is surfaced as
+// CodeResourceExhausted with a short, user-facing retry hint so the client can
+// show "please retry in a moment" instead of an opaque internal error. Every
+// other failure stays CodeInternal, wrapped with msg for context.
+func gradeError(msg string, err error) error {
+	s := err.Error()
+	if strings.Contains(s, "response error 429") || strings.Contains(s, "RESOURCE_EXHAUSTED") {
+		return connect.NewError(connect.CodeResourceExhausted,
+			errors.New("grading is temporarily rate-limited — please retry in a moment"))
+	}
+	return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", msg, err))
 }
 
 // BatchSubmitAnswers grades a batch of standard quiz answers.
@@ -58,7 +74,7 @@ func (h *QuizHandler) BatchSubmitAnswers(
 		return h.svc.GradeNotebookAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answers: %w", err))
+		return nil, gradeError("grade answers", err)
 	}
 
 	responses := make([]*apiv1.SubmitAnswerResponse, len(answers))
@@ -117,7 +133,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		return h.svc.GradeReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answers: %w", err))
+		return nil, gradeError("grade answers", err)
 	}
 
 	responses := make([]*apiv1.SubmitReverseAnswerResponse, len(answers))
