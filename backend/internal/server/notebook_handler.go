@@ -40,6 +40,38 @@ type NotebookHandler struct {
 	// which is frozen at runtime once a database is configured. Nil in
 	// YAML-only mode, in which case loadHistories reads the YAML files.
 	historyStore learning.HistoryStore
+	// aclRepo, when set (DB mode), resolves notebook public/private visibility
+	// (auth Phase 3). GetNotebookDetail / GetEtymologyNotebook / ExportNotebookPDF
+	// hard-reject a notebook the requesting user can't see with CodeNotFound (a
+	// 404 that doesn't disclose the notebook exists). Nil in YAML-only / no-DB
+	// dev, where every notebook is visible.
+	aclRepo notebook.NotebookVisibility
+}
+
+// SetNotebookACL installs the notebook visibility resolver (auth Phase 3).
+// Called from bootstrap once the database is connected; nil keeps every
+// notebook visible (YAML-only / no-DB dev).
+func (h *NotebookHandler) SetNotebookACL(aclRepo notebook.NotebookVisibility) {
+	h.aclRepo = aclRepo
+}
+
+// ensureNotebookVisible returns CodeNotFound when the notebook is hidden from
+// userID (a private notebook they don't own). A hidden notebook is treated
+// exactly like a non-existent one so the response never discloses its
+// existence. No ACL repo (YAML-only / no-DB dev) means every notebook is
+// visible.
+func (h *NotebookHandler) ensureNotebookVisible(ctx context.Context, userID int64, notebookID string) error {
+	if h.aclRepo == nil {
+		return nil
+	}
+	visible, err := h.aclRepo.VisibleNotebookIDs(ctx, userID)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("resolve notebook visibility: %w", err))
+	}
+	if !visible(notebookID) {
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
+	}
+	return nil
 }
 
 // SetHistoryStore installs the DB-backed learning-history read store so the
@@ -130,6 +162,10 @@ func (h *NotebookHandler) GetNotebookDetail(
 
 	notebookID := req.Msg.GetNotebookId()
 	userID, _ := auth.UserIDFromContext(ctx)
+
+	if err := h.ensureNotebookVisible(ctx, userID, notebookID); err != nil {
+		return nil, err
+	}
 
 	reader, err := h.newReader()
 	if err != nil {
@@ -556,6 +592,10 @@ func (h *NotebookHandler) ExportNotebookPDF(
 	notebookID := req.Msg.GetNotebookId()
 	userID, _ := auth.UserIDFromContext(ctx)
 
+	if err := h.ensureNotebookVisible(ctx, userID, notebookID); err != nil {
+		return nil, err
+	}
+
 	reader, err := h.newReader()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create notebook reader: %w", err))
@@ -702,6 +742,10 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 
 	notebookID := req.Msg.GetNotebookId()
 	userID, _ := auth.UserIDFromContext(ctx)
+
+	if err := h.ensureNotebookVisible(ctx, userID, notebookID); err != nil {
+		return nil, err
+	}
 
 	reader, err := h.newReader()
 	if err != nil {
@@ -1098,6 +1142,8 @@ func (h *NotebookHandler) RegisterDefinition(
 	req *connect.Request[apiv1.RegisterDefinitionRequest],
 ) (*connect.Response[apiv1.RegisterDefinitionResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	userID, _ := auth.UserIDFromContext(ctx)
+	if err := h.ensureNotebookVisible(ctx, userID, req.Msg.GetNotebookId()); err != nil { return nil, err }
 	defsDir := "notebooks/definitions"
 	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" { defsDir = h.notebooksConfig.DefinitionsDirectories[0] }
 	notebookIDRaw := req.Msg.GetNotebookId()
@@ -1123,6 +1169,8 @@ func (h *NotebookHandler) DeleteDefinition(
 	req *connect.Request[apiv1.DeleteDefinitionRequest],
 ) (*connect.Response[apiv1.DeleteDefinitionResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	userID, _ := auth.UserIDFromContext(ctx)
+	if err := h.ensureNotebookVisible(ctx, userID, req.Msg.GetNotebookId()); err != nil { return nil, err }
 	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err)) }
 	return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil
 }

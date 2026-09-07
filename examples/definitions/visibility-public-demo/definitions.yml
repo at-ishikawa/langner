@@ -1,0 +1,26 @@
+# Public demo book for auth Phase 3 notebook visibility. Wired in
+# config.example.yml under `notebook_ownership` as visibility: public, so it is
+# visible to EVERY logged-in user (owner and non-owner alike). Plain vocabulary
+# words (no origin_parts) — the point of this book is access control, not
+# etymology grouping. Invented, neutral content; no personal identifiers.
+- metadata:
+    title: "Public Words"
+  scenes:
+    - metadata:
+        index: 0
+        title: "spect / port"
+      expressions:
+        - expression: spectate
+          id: vis-pub-spectate
+          meaning: "to watch an event or activity as a spectator"
+          part_of_speech: verb
+          examples:
+            - text: "Thousands came to spectate at the harbor race."
+              highlight: spectate
+        - expression: circumspect
+          id: vis-pub-circumspect
+          meaning: "careful to consider all circumstances before acting"
+          part_of_speech: adjective
+          examples:
+            - text: "She was circumspect about sharing the unfinished plan."
+              highlight: circumspect

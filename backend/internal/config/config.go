@@ -32,6 +32,24 @@ type Config struct {
 	Database     DatabaseConfig     `mapstructure:"database"`
 	Quiz         QuizConfig         `mapstructure:"quiz"`
 	Auth         AuthConfig         `mapstructure:"auth"`
+	// NotebookOwnership assigns owner + public/private visibility to existing
+	// imported notebooks (auth Phase 3). Content stays a shared global catalog;
+	// this overlay decides who may SEE each notebook. A notebook_id not listed
+	// here has no ownership row and is therefore PUBLIC/unlisted. Provisioned
+	// into the notebooks table by `langner auth provision` (also run inside
+	// `migrate import-db`).
+	NotebookOwnership []NotebookOwnership `mapstructure:"notebook_ownership"`
+}
+
+// NotebookOwnership is one notebook_ownership entry: it grants OwnerEmail
+// ownership of NotebookID at the given Visibility ("public" or "private").
+// OwnerEmail must be one of auth.allowed_emails / initial_admin_email so it
+// resolves to a user id at provision time; leave it empty for a public,
+// unowned notebook.
+type NotebookOwnership struct {
+	NotebookID string `mapstructure:"notebook_id"`
+	OwnerEmail string `mapstructure:"owner_email"`
+	Visibility string `mapstructure:"visibility"`
 }
 
 // AuthConfig configures Google-OAuth sign-in. Non-secret settings come from the

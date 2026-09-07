@@ -30,6 +30,24 @@ auth:
   #                               user email/name at rest — MUST differ from
   #                               SESSION_SIGNING_KEY
 
+# Notebook ownership + public/private visibility (auth Phase 3). Content stays a
+# shared global catalog; this overlay decides who may SEE each notebook. A
+# notebook_id NOT listed here has no ownership row and is therefore PUBLIC (all
+# logged-in users see it). A private notebook is visible only to its owner.
+# owner_email must be an auth account (allowed_emails / initial_admin_email).
+# Provisioned into the `notebooks` table by `langner auth provision` (also run
+# inside `migrate import-db`); adjust ad hoc with `langner notebooks set-owner`.
+notebook_ownership:
+  # The example private book: only admin@example.com sees it.
+  - notebook_id: visibility-private-demo
+    owner_email: "admin@example.com"
+    visibility: private
+  # The example public book, stated explicitly (any unlisted notebook is public
+  # too — this row just documents the intent and pins the owner).
+  - notebook_id: visibility-public-demo
+    owner_email: "admin@example.com"
+    visibility: public
+
 database:
   host: localhost
   port: 5432

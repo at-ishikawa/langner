@@ -34,6 +34,11 @@ type StateRepositories struct {
 	// Origin is the DB etymology-origin repository, non-nil only in DB mode.
 	// SkipWord uses it to resolve an origin expression to its origin_id.
 	Origin notebook.EtymologyOriginRepository
+	// ACL is the DB-backed notebook visibility resolver (auth Phase 3), non-nil
+	// only in DB mode. Installed on the quiz service and notebook handler so
+	// every read path filters out notebooks the requesting user can't see. Nil
+	// (no DB) means every notebook is visible.
+	ACL notebook.NotebookVisibility
 }
 
 // BuildStateRepositories wires the user-state repositories the way
@@ -89,5 +94,6 @@ func BuildStateRepositories(notebooksCfg config.NotebooksConfig, quizCfg config.
 		HistoryStore: historyStore,
 		SkipFlags:    dbSkipFlagRepo,
 		Origin:       dbOriginRepo,
+		ACL:          notebook.NewNotebookACLRepository(db),
 	}
 }

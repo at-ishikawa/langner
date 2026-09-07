@@ -1,0 +1,27 @@
+# Private demo book for auth Phase 3 notebook visibility. Wired in
+# config.example.yml under `notebook_ownership` as visibility: private owned by
+# the example admin (admin@example.com), so ONLY the owner sees it: it appears
+# in the owner's quiz options / notebook detail / freeform pool and is 404 /
+# absent for every other user. Plain vocabulary words (no origin_parts).
+# Invented, neutral content; no personal identifiers.
+- metadata:
+    title: "Private Words"
+  scenes:
+    - metadata:
+        index: 0
+        title: "port / com"
+      expressions:
+        - expression: portage
+          id: vis-priv-portage
+          meaning: "the carrying of boats or goods overland between waterways"
+          part_of_speech: noun
+          examples:
+            - text: "The long portage around the falls took most of the morning."
+              highlight: portage
+        - expression: comport
+          id: vis-priv-comport
+          meaning: "to conduct oneself in a particular way"
+          part_of_speech: verb
+          examples:
+            - text: "He learned to comport himself calmly under pressure."
+              highlight: comport

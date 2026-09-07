@@ -10,6 +10,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 func newAuthCommand() *cobra.Command {
@@ -81,6 +82,42 @@ func provisionAuth(ctx context.Context, cfg *config.Config, db *sqlx.DB) error {
 		if _, err := db.ExecContext(ctx,
 			fmt.Sprintf("UPDATE %s SET user_id = $1 WHERE user_id IS NULL", table), adminID); err != nil {
 			return fmt.Errorf("backfill %s.user_id: %w", table, err)
+		}
+	}
+
+	// Assign notebook ownership/visibility from the notebook_ownership config
+	// block (auth Phase 3). A notebook not listed keeps no row and stays public.
+	if err := provisionNotebookOwnership(ctx, cfg, users, notebook.NewNotebookACLRepository(db)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// provisionNotebookOwnership upserts a notebooks overlay row for each
+// notebook_ownership config entry, resolving owner_email to a user id (an owner
+// must be an allowlist/admin account so it was ensured above; find-or-create is
+// used defensively). An empty owner_email leaves the notebook unowned (NULL
+// owner) — meaningful only for a public notebook. Idempotent: re-running just
+// re-upserts the same rows.
+func provisionNotebookOwnership(ctx context.Context, cfg *config.Config, users *auth.UserRepository, acl *notebook.NotebookACLRepository) error {
+	for _, entry := range cfg.NotebookOwnership {
+		if entry.NotebookID == "" {
+			return fmt.Errorf("notebook_ownership entry is missing notebook_id")
+		}
+		visibility := entry.Visibility
+		if visibility == "" {
+			visibility = notebook.VisibilityPublic
+		}
+		var ownerID *int64
+		if entry.OwnerEmail != "" {
+			id, err := ensureUser(ctx, users, entry.OwnerEmail, entry.OwnerEmail)
+			if err != nil {
+				return fmt.Errorf("resolve owner %q for notebook %q: %w", entry.OwnerEmail, entry.NotebookID, err)
+			}
+			ownerID = &id
+		}
+		if err := acl.UpsertOwnership(ctx, entry.NotebookID, ownerID, visibility); err != nil {
+			return fmt.Errorf("assign ownership for notebook %q: %w", entry.NotebookID, err)
 		}
 	}
 	return nil
