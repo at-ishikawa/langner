@@ -1,22 +1,34 @@
 package pdf
 
 import (
+	"bytes"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
-	"github.com/mandolyte/mdtopdf"
+	pdf "github.com/stephenafamo/goldmark-pdf"
+	"github.com/yuin/goldmark"
 )
 
-// boldPattern matches **bold** text in markdown
-var boldPattern = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+// Fonts for the exported PDF. Charis SIL is an SIL typeface with full IPA
+// coverage (ˈ ˌ ɛ ɪ ŋ ð ʃ …), so pronunciation fields and other Unicode render
+// as real glyphs instead of boxes — the point of moving off the old Latin-1
+// core-font renderer. goldmark-pdf fetches these from Google Fonts at render
+// time and embeds a subset in the PDF; no font files are vendored.
+const (
+	bodyFontFamily = "Charis SIL"
+	codeFontFamily = "Roboto Mono"
+)
 
-// ConvertMarkdownToPDF converts a markdown file to PDF using mdtopdf package
-// The PDF file will be created in the same directory as the markdown file
+// ConvertMarkdownToPDF renders a markdown file to a PDF next to it (same path,
+// .md -> .pdf) with goldmark + goldmark-pdf, returning the absolute PDF path.
+//
+// Unicode (IPA, smart punctuation, em-dashes) renders correctly because the
+// body font is a UTF-8 font with IPA coverage. Remote images in the markdown
+// are fetched by goldmark-pdf's built-in web filesystem, so no pre-download
+// step is needed.
 func ConvertMarkdownToPDF(markdownPath string) (string, error) {
 	if !strings.HasSuffix(markdownPath, ".md") {
 		return "", fmt.Errorf("input file must have .md extension: %s", markdownPath)
@@ -27,46 +39,28 @@ func ConvertMarkdownToPDF(markdownPath string) (string, error) {
 		return "", fmt.Errorf("os.ReadFile(%s) > %w", markdownPath, err)
 	}
 
-	// Preprocess: normalize smart punctuation to ASCII (default PDF fonts don't support Unicode)
-	content = normalizeSmartPunctuation(content)
-
-	// Preprocess: remove bold markers in blockquotes (mdtopdf doesn't handle them well)
-	content = convertBoldToItalicInBlockquotes(content)
-
-	// Preprocess: download images once and replace URLs with local paths
-	// mdtopdf re-downloads the same URL every time it appears
-	content, cleanupFn := preDownloadImages(content)
-	defer cleanupFn()
-
 	pdfPath := strings.TrimSuffix(markdownPath, ".md") + ".pdf"
 
-	// Render to an OS-temp PDF first, then copy bytes into the final
-	// destination with os.WriteFile. gofpdf (used by mdtopdf under the
-	// hood) opens the destination with O_WRONLY|O_CREATE|O_TRUNC, which
-	// fails with "permission denied" on Google Drive Stream's WSL
-	// mount even when os.WriteFile to the same path succeeds (the .md
-	// next to it writes fine). Generating locally first sidesteps
-	// Drive Stream's lock semantics; the second copy hop uses the same
-	// write path the markdown writer already proved works.
-	tmpFile, err := os.CreateTemp("", "langner-pdf-*.pdf")
-	if err != nil {
-		return "", fmt.Errorf("create temp pdf: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	_ = tmpFile.Close()
-	defer func() { _ = os.Remove(tmpPath) }()
+	renderer := pdf.New(
+		pdf.WithContext(context.Background()),
+		// This is a PDF, not HTML: never turn `"` `<` `>` `&` into HTML entities
+		// (goldmark-pdf otherwise renders a literal `&quot;` etc.).
+		pdf.WithEscapeHTML(false),
+		pdf.WithHeadingFont(pdf.GetTextFont(bodyFontFamily, pdf.FontCharisSIL)),
+		pdf.WithBodyFont(pdf.GetTextFont(bodyFontFamily, pdf.FontCharisSIL)),
+		pdf.WithCodeFont(pdf.GetCodeFont(codeFontFamily, pdf.FontRobotoMono)),
+	)
 
-	renderer := mdtopdf.NewPdfRenderer("P", "A4", tmpPath, "", nil, mdtopdf.LIGHT)
-	renderer.UpdateBlockquoteStyler()
-	if err := renderer.Process(content); err != nil {
-		return "", fmt.Errorf("renderer.Process() > %w", err)
+	var buf bytes.Buffer
+	md := goldmark.New(goldmark.WithRenderer(renderer))
+	if err := md.Convert(content, &buf); err != nil {
+		return "", fmt.Errorf("render markdown to pdf: %w", err)
 	}
 
-	pdfBytes, err := os.ReadFile(tmpPath)
-	if err != nil {
-		return "", fmt.Errorf("read temp pdf: %w", err)
-	}
-	if err := os.WriteFile(pdfPath, pdfBytes, 0o644); err != nil {
+	// goldmark-pdf renders into a buffer, so we own the final write. os.WriteFile
+	// is the write path that works on the Google Drive Stream / WSL mount (the
+	// previous renderer opened the destination file directly, which failed there).
+	if err := os.WriteFile(pdfPath, buf.Bytes(), 0o644); err != nil {
 		return "", fmt.Errorf("write pdf to %s: %w", pdfPath, err)
 	}
 
@@ -74,109 +68,5 @@ func ConvertMarkdownToPDF(markdownPath string) (string, error) {
 	if err != nil {
 		return pdfPath, nil
 	}
-
 	return absPath, nil
-}
-
-// normalizeSmartPunctuation replaces Unicode smart quotes/punctuation with ASCII equivalents.
-// The default PDF fonts (Latin-1) don't support these characters, causing garbled output.
-func normalizeSmartPunctuation(content []byte) []byte {
-	replacer := strings.NewReplacer(
-		"\u2018", "'", // LEFT SINGLE QUOTATION MARK
-		"\u2019", "'", // RIGHT SINGLE QUOTATION MARK
-		"\u201C", "\"", // LEFT DOUBLE QUOTATION MARK
-		"\u201D", "\"", // RIGHT DOUBLE QUOTATION MARK
-		"\u2013", "-", // EN DASH
-		"\u2014", "--", // EM DASH
-		"\u2026", "...", // HORIZONTAL ELLIPSIS
-	)
-	return []byte(replacer.Replace(string(content)))
-}
-
-// imageURLPattern matches markdown image URLs: ![alt](https://...)
-var imageURLPattern = regexp.MustCompile(`!\[([^\]]*)\]\((https?://[^)]+)\)`)
-
-// preDownloadImages finds all image URLs in the markdown, downloads each unique
-// URL once to a temp directory, and replaces the URLs with local file paths.
-// Returns the modified content and a cleanup function to remove the temp dir.
-func preDownloadImages(content []byte) ([]byte, func()) {
-	text := string(content)
-	matches := imageURLPattern.FindAllStringSubmatch(text, -1)
-	if len(matches) == 0 {
-		return content, func() {}
-	}
-
-	tmpDir, err := os.MkdirTemp("", "langner-images-*")
-	if err != nil {
-		return content, func() {}
-	}
-
-	// Download each unique URL once
-	downloaded := make(map[string]string) // URL -> local path
-	for _, match := range matches {
-		url := match[2]
-		if _, ok := downloaded[url]; ok {
-			continue
-		}
-
-		localPath := filepath.Join(tmpDir, filepath.Base(url))
-		// Deduplicate filenames that differ only by URL path
-		if _, exists := downloaded[url]; exists {
-			continue
-		}
-
-		if err := downloadImage(url, localPath); err != nil {
-			fmt.Printf("Warning: failed to download image %s: %v\n", url, err)
-			continue
-		}
-		downloaded[url] = localPath
-	}
-
-	// Replace URLs with local paths
-	for url, localPath := range downloaded {
-		text = strings.ReplaceAll(text, url, localPath)
-	}
-
-	cleanup := func() {
-		_ = os.RemoveAll(tmpDir)
-	}
-
-	return []byte(text), cleanup
-}
-
-// downloadImage downloads a URL to a local file path.
-func downloadImage(url, destPath string) error {
-	resp, err := http.Get(url) //nolint:gosec // URLs come from user's notebook data
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
-	}
-
-	f, err := os.Create(destPath)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-
-	_, err = io.Copy(f, resp.Body)
-	return err
-}
-
-// convertBoldToItalicInBlockquotes removes **bold** markers in blockquote lines
-// mdtopdf's blockquote multiCell doesn't handle inline bold properly
-// Blockquotes are already rendered in italic, so the text remains styled
-func convertBoldToItalicInBlockquotes(content []byte) []byte {
-	lines := strings.Split(string(content), "\n")
-
-	for i, line := range lines {
-		if strings.HasPrefix(line, "> ") {
-			// Remove **bold** markers - blockquote text is already italic
-			lines[i] = boldPattern.ReplaceAllString(line, "$1")
-		}
-	}
-	return []byte(strings.Join(lines, "\n"))
 }
