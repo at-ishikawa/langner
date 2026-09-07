@@ -164,7 +164,7 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	} else {
 		grade, err = h.svc.GradeNotebookAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+			return nil, gradeError("grade answer", err)
 		}
 	}
 	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
@@ -299,7 +299,7 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	} else {
 		grade, err = h.svc.GradeReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+			return nil, gradeError("grade answer", err)
 		}
 	}
 	if grade.Classification != string(inference.ClassificationSynonym) {
@@ -358,7 +358,7 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 	h.mu.Unlock()
 	grade, err := h.svc.GradeFreeformAnswer(ctx, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+		return nil, gradeError("grade answer", err)
 	}
 	if grade.MatchedCard != nil {
 		if err := h.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {

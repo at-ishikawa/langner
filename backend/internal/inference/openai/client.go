@@ -154,9 +154,13 @@ func isRetryableError(err error) bool {
 		return false
 	}
 
-	// Retry on JSON parsing errors as they might be due to incomplete responses
 	errStr := err.Error()
-	if strings.Contains(errStr, "json.Unmarshal") || strings.Contains(errStr, "unexpected end of JSON input") {
+	// A truncated/incomplete response ("unexpected end of JSON input") can
+	// succeed on a re-request, so it is worth retrying. Other JSON parse
+	// failures are NOT fixed by re-asking the same prompt and would only burn
+	// provider quota (amplifying 429s), so they are not retried — extractJSON
+	// already strips markdown code fences before unmarshalling.
+	if strings.Contains(errStr, "unexpected end of JSON input") {
 		return true
 	}
 
@@ -176,6 +180,47 @@ func isRetryableError(err error) bool {
 	}
 
 	return false
+}
+
+// extractJSON returns the JSON payload embedded in an LLM response. Models
+// (notably Gemini via its OpenAI-compatibility layer) often wrap JSON in a
+// markdown code fence (```json … ``` or a bare ``` … ```) and may add
+// leading/trailing prose, which makes a naive json.Unmarshal fail with
+// "invalid character '`'". This strips such wrapping so parsing succeeds on
+// the first try. It is defensive: if no better candidate is found the input
+// is returned unchanged (a clean JSON body passes through untouched).
+func extractJSON(s string) string {
+	out := strings.TrimSpace(s)
+
+	// Prefer the contents of a fenced code block if one is present.
+	if start := strings.Index(out, "```"); start != -1 {
+		rest := out[start+len("```"):]
+		// Drop an optional language tag on the opening fence line (e.g. "json").
+		if nl := strings.IndexByte(rest, '\n'); nl != -1 {
+			if firstLine := strings.TrimSpace(rest[:nl]); !strings.ContainsAny(firstLine, "{[") {
+				rest = rest[nl+1:]
+			}
+		}
+		if end := strings.Index(rest, "```"); end != -1 {
+			rest = rest[:end]
+		}
+		out = strings.TrimSpace(rest)
+	}
+
+	// Slice from the first opening bracket to the matching last closing one so
+	// any surrounding prose is dropped.
+	begin := strings.IndexAny(out, "{[")
+	if begin == -1 {
+		return out
+	}
+	closing := byte('}')
+	if out[begin] == '[' {
+		closing = ']'
+	}
+	if end := strings.LastIndexByte(out, closing); end > begin {
+		return out[begin : end+1]
+	}
+	return out
 }
 
 // AnswerMeanings implements the inference.Client interface
@@ -860,7 +905,7 @@ func (client *Client) answerMeanings(
 	)
 
 	var decoded []inference.AnswerMeaning
-	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
+	if err := json.NewDecoder(strings.NewReader(extractJSON(content))).Decode(&decoded); err != nil {
 		slog.Default().Error("Failed to parse OpenAI response as JSON",
 			"request", requestBody,
 			"expressionCount", len(args.Expressions),
@@ -943,7 +988,7 @@ func (client *Client) lookupWord(
 	slog.Default().Debug("lookupWord response", "word", params.Word, "response", content)
 
 	var defs []inference.LookupWordDefinition
-	if err := json.NewDecoder(strings.NewReader(content)).Decode(&defs); err != nil {
+	if err := json.NewDecoder(strings.NewReader(extractJSON(content))).Decode(&defs); err != nil {
 		return inference.LookupWordResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
 	}
 	return inference.LookupWordResponse{Definitions: defs}, nil
@@ -1089,7 +1134,7 @@ Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTi
 	)
 
 	var decoded inference.ValidateWordFormResponse
-	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
+	if err := json.NewDecoder(strings.NewReader(extractJSON(content))).Decode(&decoded); err != nil {
 		return inference.ValidateWordFormResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
 	}
 
@@ -1218,7 +1263,7 @@ Grade this correction.`, params.Sentence, params.Incorrect, params.Correct, note
 	)
 
 	var decoded inference.GradeCorrectionResponse
-	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
+	if err := json.NewDecoder(strings.NewReader(extractJSON(content))).Decode(&decoded); err != nil {
 		return inference.GradeCorrectionResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
 	}
 

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -14,6 +15,36 @@ import (
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
+
+func TestGradeError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{
+			name: "429 maps to resource exhausted",
+			err:  errors.New("response error 429: quota exceeded"),
+			want: connect.CodeResourceExhausted,
+		},
+		{
+			name: "RESOURCE_EXHAUSTED maps to resource exhausted",
+			err:  errors.New("some wrapper: RESOURCE_EXHAUSTED"),
+			want: connect.CodeResourceExhausted,
+		},
+		{
+			name: "other errors stay internal",
+			err:  errors.New("json.Unmarshal failed"),
+			want: connect.CodeInternal,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := gradeError("grade answers", tt.err)
+			assert.Equal(t, tt.want, connect.CodeOf(got))
+		})
+	}
+}
 
 func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 	tests := []struct {
