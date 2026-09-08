@@ -21,12 +21,15 @@ type Client interface {
 	AnswerMeanings(ctx context.Context, params AnswerMeaningsRequest) (AnswerMeaningsResponse, error)
 	ValidateWordForm(ctx context.Context, params ValidateWordFormRequest) (ValidateWordFormResponse, error)
 	// ValidateWordFormBatch classifies several reverse-quiz answers in a SINGLE
-	// model request (one prompt listing all items), returning one result per
-	// input in the SAME order. This collapses a batch submit's N concurrent
-	// grading calls into one, which is what keeps a 10-answer submit from
-	// bursting past a provider's per-minute request quota. Implementations MUST
-	// return ErrMalformedResponse (wrapped) when the response cannot be parsed
-	// or its length does not match len(params).
+	// model request (one prompt listing all items). It returns one result per
+	// input, each carrying the Index (0..len(params)-1) of the request item it
+	// grades. The results are NOT guaranteed to be in input order — some models
+	// (e.g. Gemini) reorder the array — so callers MUST map each result back to
+	// its request by Index, never by slice position. This collapses a batch
+	// submit's N concurrent grading calls into one, which is what keeps a
+	// 10-answer submit from bursting past a provider's per-minute request quota.
+	// Implementations MUST return ErrMalformedResponse (wrapped) when the
+	// response cannot be parsed or its length does not match len(params).
 	ValidateWordFormBatch(ctx context.Context, params []ValidateWordFormRequest) ([]ValidateWordFormResponse, error)
 	LookupWord(ctx context.Context, params LookupWordRequest) (LookupWordResponse, error)
 	GradeCorrection(ctx context.Context, params GradeCorrectionRequest) (GradeCorrectionResponse, error)
@@ -143,6 +146,10 @@ const (
 
 // ValidateWordFormResponse holds the result of word form validation
 type ValidateWordFormResponse struct {
+	// Index echoes the input item's index (0..len(params)-1) so a BATCH result
+	// can be mapped back to the exact answer it grades even when the model
+	// returns the array out of order. Unused by the single-item path.
+	Index          int                            `json:"index"`
 	Classification ValidateWordFormClassification `json:"classification"` // same_word, synonym, or wrong
 	Reason         string                         `json:"reason"`         // Explanation of the classification
 	Quality        int                            `json:"quality"`        // 1-5 quality assessment based on response time and expression complexity

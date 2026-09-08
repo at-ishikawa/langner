@@ -862,10 +862,11 @@ func TestClient_ValidateWordFormBatch(t *testing.T) {
 			assert.Equal(t, http.MethodPost, r.Method)
 			assert.Equal(t, "/chat/completions", r.URL.Path)
 			// Wrap in a markdown fence to prove extractJSON handles the array.
+			// Each object echoes its "index" (the caller maps back by Index).
 			content := "```json\n[" +
-				`{"classification":"same_word","reason":"ran is a form of run","quality":5},` +
-				`{"classification":"synonym","reason":"joyful ~ happy","quality":4},` +
-				`{"classification":"wrong","reason":"cold is the opposite","quality":1}` +
+				`{"index":0,"classification":"same_word","reason":"ran is a form of run","quality":5},` +
+				`{"index":1,"classification":"synonym","reason":"joyful ~ happy","quality":4},` +
+				`{"index":2,"classification":"wrong","reason":"cold is the opposite","quality":1}` +
 				"]\n```"
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(ChatCompletionResponse{
@@ -883,6 +884,10 @@ func TestClient_ValidateWordFormBatch(t *testing.T) {
 		assert.Equal(t, inference.ClassificationSynonym, got[1].Classification)
 		assert.Equal(t, inference.ClassificationWrong, got[2].Classification)
 		assert.Equal(t, 5, got[0].Quality)
+		// The echoed indices are parsed so the caller can map by identity.
+		assert.Equal(t, 0, got[0].Index)
+		assert.Equal(t, 1, got[1].Index)
+		assert.Equal(t, 2, got[2].Index)
 	})
 
 	t.Run("wrong-length array is a malformed response", func(t *testing.T) {

@@ -1143,8 +1143,10 @@ Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTi
 
 // ValidateWordFormBatch classifies several reverse-quiz answers with ONE model
 // request instead of one call per answer. It reuses the exact classification
-// rules of the single-answer path, but instructs the model to return a JSON
-// ARRAY with one result per input item, in the same order. This is the fix for
+// rules of the single-answer path, and instructs the model to return a JSON
+// ARRAY with one result per input item, each echoing that item's "index". The
+// caller maps results back by Index (NOT by position), so a model that reorders
+// the array still grades every answer against its own word. This is the fix for
 // the batch-submit 429 burst: a 10-answer submit now makes one request, not ten.
 func (client *Client) ValidateWordFormBatch(
 	ctx context.Context,
@@ -1258,13 +1260,15 @@ Also assess response speed quality (1-5) based on response time and expression c
   - Slow (took long relative to expression complexity): quality = 3
 - Consider that longer/more complex expressions (idioms, phrasal verbs) naturally take more time than single words.
 
-OUTPUT FORMAT (JSON only): a JSON ARRAY with exactly one object per input item,
-in the SAME ORDER as the input array (matching each item's "index"):
+OUTPUT FORMAT (JSON only): a JSON ARRAY with exactly one object per input item.
+Each object MUST echo the SAME "index" as the input item it grades, so results
+can be matched back even if the array order changes:
 [
-  {"classification": "same_word" | "synonym" | "wrong", "reason": "<brief explanation>", "quality": <1-5>}
+  {"index": <the item's index>, "classification": "same_word" | "synonym" | "wrong", "reason": "<brief explanation>", "quality": <1-5>}
 ]
 
-Return exactly as many objects as there are input items. Do NOT include any text outside the JSON array.`
+Return exactly one object per input item, each with the correct "index" (every
+input "index" appears exactly once). Do NOT include any text outside the JSON array.`
 
 	items := make([]validateWordFormBatchItem, len(params))
 	for i, p := range params {
