@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
+	"github.com/at-ishikawa/langner/internal/datasync"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -173,6 +175,28 @@ func run(ctx context.Context) error {
 	// skip-flag tables in DB mode instead of the on-disk learning_notes YAML;
 	// nil skip-flag repo keeps the YAML skip path.
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
+	// DB mode: install the ensure-on-serve hook so a notebook whose YAML gained
+	// units without a fresh `migrate import-db` still gets its notes rows
+	// created additively when its cards are served — self-healing exclude/
+	// SkipWord and every other note-keyed DB write. Reuses the same YAML note
+	// source + DB note repo the CLI importer uses, but never runs the
+	// destructive reconcile pass. YAML-only mode leaves the hook nil.
+	if db != nil {
+		if ensureReader, rerr := notebook.NewReader(
+			cfg.Notebooks.StoriesDirectories,
+			cfg.Notebooks.FlashcardsDirectories,
+			cfg.Notebooks.BooksDirectories,
+			cfg.Notebooks.DefinitionsDirectories,
+			cfg.Notebooks.EtymologyDirectories,
+			dictionaryMap,
+		); rerr != nil {
+			slog.Warn("ensure-on-serve disabled — notebook reader init failed", "error", rerr)
+		} else {
+			noteSource := notebook.NewYAMLNoteRepository(ensureReader)
+			ensurer := datasync.NewImporter(noteRepo, nil, noteSource, nil, nil, nil, io.Discard)
+			svc.SetNoteEnsurer(ensurer)
+		}
+	}
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,

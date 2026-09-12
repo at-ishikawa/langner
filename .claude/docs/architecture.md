@@ -48,6 +48,38 @@ Templates → Markdown → PDF/HTML
    - Learning history merging
    - Template data preparation
 
+### DB mode: card CONTENT vs learning STATE, and ensure-on-serve
+
+When a database is configured, the two data layers live in different stores:
+
+- **Card content** (the words shown in a quiz — definitions, examples, origins)
+  is read from the **YAML notebooks** at serve time. Adding a unit to a
+  notebook's YAML makes its words quizzable immediately, with no import step.
+- **Learning state** (SRS logs, per-quiz-type `skipped_at` exclude flags,
+  overrides) lives in **Postgres**, keyed to real `notes` rows (and
+  `notebook_notes` links / `etymology_origins`).
+
+These can drift: if the operator adds YAML units without re-running
+`migrate import-db`, the words are quizzed from YAML but have **no `notes`
+row**, so any note-keyed DB write — the deliberate Exclude (`SkipWord`), SRS log
+writes, Mark-as-Correct overrides — fails ("no matching note or origin in
+notebook …"). Re-running the importer is not a safe fix: its reconcile pass can
+delete DB-only history the YAML mirror can't reproduce.
+
+**Ensure-on-serve** closes the gap. When a quiz session loads cards in DB mode
+(`quiz.Service.LoadCards` / `LoadReverseCards`), the service calls
+`datasync.Importer.EnsureNotesForNotebook`, which **additively** creates only
+the `notes` (+ `notebook_notes`) a notebook's YAML declares but the DB is
+missing — no updates, no deletes, no reconcile. It is idempotent (a cheap
+per-notebook count check short-circuits an already-synced notebook) and
+concurrency-safe (inserts are `ON CONFLICT DO NOTHING`). Net effect: **new YAML
+notebook content no longer requires a manual `import-db`** for exclude/SRS/
+override to work. The hook is DB-mode only; YAML-only deployments are untouched.
+It is pinned by a real-Postgres integration test that loads the example
+notebooks through `config.example.yml` and reproduces the exclude failure, then
+the fix (`internal/quiz/ensure_on_serve_pg_integration_test.go`) — per
+`.claude/rules/verify-data-features-with-example-notebooks.md`.
+
 ### Key Domain Models
 
 ```go

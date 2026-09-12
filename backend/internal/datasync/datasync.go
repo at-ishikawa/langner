@@ -459,6 +459,134 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 	return state.result, nil
 }
 
+// EnsureNotesForNotebook additively creates any notes (and their notebook_notes
+// links) that the notebook YAML for notebookID declares but the DB is missing.
+// It NEVER updates note bodies and NEVER deletes — it does NOT run the ImportAll
+// reconcile pass — so DB-only learning state (logs, skip flags, overrides) is
+// untouched. It is idempotent: on an already-synced notebook it does no writes
+// and returns 0.
+//
+// Why this exists: in DB mode card CONTENT is read from the YAML notebooks while
+// learning STATE lives in Postgres keyed to real notes rows. When the operator
+// adds units to a notebook's YAML without re-running `migrate import-db`, the
+// words are quizzed straight from YAML but have no notes row, so every
+// note-keyed DB write — exclude/SkipWord, SRS log writes, Mark-as-Correct
+// overrides — fails ("no matching note or origin in notebook ..."). Ensuring on
+// serve creates the missing rows additively and self-heals all of those paths
+// uniformly. Re-running the full importer is not an option: its reconcile phase
+// can delete DB-only history the YAML mirror can't safely reproduce.
+//
+// Concurrency: two sessions loading the same new notebook cannot double-insert —
+// BatchCreate inserts notes ON CONFLICT DO NOTHING (resolving to the existing
+// id) and notebook_notes ON CONFLICT DO NOTHING (see note_repository
+// insertNoteReturningID), and BatchUpdate's notebook_notes insert is the same.
+// Returns the number of NEW notes created.
+func (imp *Importer) EnsureNotesForNotebook(ctx context.Context, notebookID string) (int, error) {
+	if notebookID == "" || imp.noteSource == nil || imp.noteRepo == nil {
+		return 0, nil
+	}
+	sourceNotes, err := imp.noteSource.FindAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("read source notes: %w", err)
+	}
+
+	// Scope to this notebook: keep each YAML record that links to notebookID,
+	// carrying only that notebook's notebook_notes — we never touch other
+	// notebooks here (a shared sense_id may link to several).
+	type wantedNote struct {
+		rec notebook.NoteRecord
+		nns []notebook.NotebookNote
+	}
+	var wanted []wantedNote
+	yamlNNCount := 0
+	for i := range sourceNotes {
+		var nns []notebook.NotebookNote
+		for _, nn := range sourceNotes[i].NotebookNotes {
+			if nn.NotebookID == notebookID {
+				nns = append(nns, nn)
+			}
+		}
+		if len(nns) == 0 {
+			continue
+		}
+		yamlNNCount += len(nns)
+		rec := sourceNotes[i]
+		rec.NotebookNotes = nns
+		wanted = append(wanted, wantedNote{rec: rec, nns: nns})
+	}
+	if len(wanted) == 0 {
+		return 0, nil
+	}
+
+	// Cheap hot path: if the DB already holds at least as many notebook_notes
+	// for this notebook as the YAML declares, it is synced — skip the full note
+	// load and diff entirely. CountNotebookNotes is a capability of the DB repo
+	// (type-asserted so the YAML repo, used only outside DB mode, needn't add
+	// it); when absent we fall through to the exact diff, which is still correct.
+	if counter, ok := imp.noteRepo.(interface {
+		CountNotebookNotes(context.Context, string) (int, error)
+	}); ok {
+		if dbCount, cerr := counter.CountNotebookNotes(ctx, notebookID); cerr == nil && dbCount >= yamlNNCount {
+			return 0, nil
+		}
+	}
+
+	existing, err := imp.noteRepo.FindAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("load existing notes: %w", err)
+	}
+	haveNote := make(map[noteKey]*notebook.NoteRecord, len(existing))
+	haveNN := make(map[nnKey]bool)
+	for i := range existing {
+		haveNote[newNoteKey(existing[i].SenseID, existing[i].Usage, existing[i].Entry)] = &existing[i]
+		for _, nn := range existing[i].NotebookNotes {
+			haveNN[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
+		}
+	}
+
+	var newNotes []*notebook.NoteRecord
+	var newNNs []notebook.NotebookNote
+	seen := make(map[noteKey]bool, len(wanted))
+	for i := range wanted {
+		key := newNoteKey(wanted[i].rec.SenseID, wanted[i].rec.Usage, wanted[i].rec.Entry)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if ex := haveNote[key]; ex != nil {
+			// Note already exists (possibly from another notebook sharing the
+			// sense_id): just add its notebook_notes link for this notebook.
+			for _, nn := range wanted[i].nns {
+				k := nnKey{ex.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+				if !haveNN[k] {
+					newNNs = append(newNNs, notebook.NotebookNote{
+						NoteID: ex.ID, NotebookType: nn.NotebookType, NotebookID: nn.NotebookID, Group: nn.Group, Subgroup: nn.Subgroup,
+					})
+					haveNN[k] = true
+				}
+			}
+			continue
+		}
+		rec := wanted[i].rec
+		newNotes = append(newNotes, &rec)
+	}
+
+	if len(newNotes) == 0 && len(newNNs) == 0 {
+		return 0, nil
+	}
+	if len(newNotes) > 0 {
+		if err := imp.noteRepo.BatchCreate(ctx, newNotes); err != nil {
+			return 0, fmt.Errorf("batch create missing notes for %q: %w", notebookID, err)
+		}
+	}
+	if len(newNNs) > 0 {
+		if err := imp.noteRepo.BatchUpdate(ctx, nil, newNNs); err != nil {
+			return 0, fmt.Errorf("link existing notes to %q: %w", notebookID, err)
+		}
+	}
+	return len(newNotes), nil
+}
+
 func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions, state *classifyState) {
 	key := newNoteKey(src.SenseID, src.Usage, src.Entry)
 	existing := state.noteCache[key]
