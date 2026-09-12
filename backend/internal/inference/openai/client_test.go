@@ -154,6 +154,30 @@ func TestExtractJSON_UnmarshalsGrade(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(extractJSON(fenced)), &good))
 }
 
+// TestExtractJSON_UnmarshalsGradeArray proves a fenced JSON ARRAY (the shape the
+// batched reverse grader asks the model to return) parses into a
+// []ValidateWordFormResponse after extractJSON — the batch path's parse step.
+func TestExtractJSON_UnmarshalsGradeArray(t *testing.T) {
+	fenced := "```json\n[" +
+		"{ \"classification\": \"same_word\", \"reason\": \"exact match\", \"quality\": 5 }," +
+		"{ \"classification\": \"synonym\", \"reason\": \"means the same as break the ice\", \"quality\": 4 }," +
+		"{ \"classification\": \"wrong\", \"reason\": \"unrelated\", \"quality\": 1 }" +
+		"]\n```"
+
+	// Without extractJSON the fenced array fails to parse.
+	var bad []inference.ValidateWordFormResponse
+	require.Error(t, json.Unmarshal([]byte(fenced), &bad))
+
+	// With extractJSON it parses into the slice, in order.
+	var good []inference.ValidateWordFormResponse
+	require.NoError(t, json.Unmarshal([]byte(extractJSON(fenced)), &good))
+	require.Len(t, good, 3)
+	assert.Equal(t, inference.ClassificationSameWord, good[0].Classification)
+	assert.Equal(t, inference.ClassificationSynonym, good[1].Classification)
+	assert.Equal(t, inference.ClassificationWrong, good[2].Classification)
+	assert.Equal(t, 5, good[0].Quality)
+}
+
 func TestClient_getRequestBody(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -818,6 +842,76 @@ func TestClient_ValidateWordForm(t *testing.T) {
 			assert.Equal(t, tt.wantResponse, got)
 		})
 	}
+}
+
+// TestClient_ValidateWordFormBatch proves the batched reverse grader makes ONE
+// HTTP request for N items, parses a (fenced) JSON array back into
+// []ValidateWordFormResponse in order, and reports a length mismatch as
+// inference.ErrMalformedResponse (the signal the service uses to fall back).
+func TestClient_ValidateWordFormBatch(t *testing.T) {
+	params := []inference.ValidateWordFormRequest{
+		{Expected: "run", UserAnswer: "ran", Meaning: "to move quickly on foot"},
+		{Expected: "happy", UserAnswer: "joyful", Meaning: "feeling pleasure"},
+		{Expected: "hot", UserAnswer: "cold", Meaning: "having a high temperature"},
+	}
+
+	t.Run("one request returns an ordered array", func(t *testing.T) {
+		var callCount int
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			callCount++
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Equal(t, "/chat/completions", r.URL.Path)
+			// Wrap in a markdown fence to prove extractJSON handles the array.
+			// Each object echoes its "index" (the caller maps back by Index).
+			content := "```json\n[" +
+				`{"index":0,"classification":"same_word","reason":"ran is a form of run","quality":5},` +
+				`{"index":1,"classification":"synonym","reason":"joyful ~ happy","quality":4},` +
+				`{"index":2,"classification":"wrong","reason":"cold is the opposite","quality":1}` +
+				"]\n```"
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(ChatCompletionResponse{
+				Choices: []Choice{{Message: ChoiceMessage{Role: RoleAssistant, Content: content}}},
+			})
+		}))
+		defer server.Close()
+
+		client := &Client{httpClient: resty.New().SetBaseURL(server.URL), model: "gpt-4"}
+		got, err := client.ValidateWordFormBatch(context.Background(), params)
+		require.NoError(t, err)
+		assert.Equal(t, 1, callCount, "the whole batch must be graded in ONE request")
+		require.Len(t, got, 3)
+		assert.Equal(t, inference.ClassificationSameWord, got[0].Classification)
+		assert.Equal(t, inference.ClassificationSynonym, got[1].Classification)
+		assert.Equal(t, inference.ClassificationWrong, got[2].Classification)
+		assert.Equal(t, 5, got[0].Quality)
+		// The echoed indices are parsed so the caller can map by identity.
+		assert.Equal(t, 0, got[0].Index)
+		assert.Equal(t, 1, got[1].Index)
+		assert.Equal(t, 2, got[2].Index)
+	})
+
+	t.Run("wrong-length array is a malformed response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Only two objects for three items.
+			content := `[{"classification":"same_word","reason":"a","quality":5},{"classification":"wrong","reason":"b","quality":1}]`
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(ChatCompletionResponse{
+				Choices: []Choice{{Message: ChoiceMessage{Role: RoleAssistant, Content: content}}},
+			})
+		}))
+		defer server.Close()
+
+		client := &Client{httpClient: resty.New().SetBaseURL(server.URL), model: "gpt-4"}
+		_, err := client.ValidateWordFormBatch(context.Background(), params)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, inference.ErrMalformedResponse)
+	})
+
+	t.Run("empty input makes no request", func(t *testing.T) {
+		got, err := (&Client{model: "gpt-4"}).ValidateWordFormBatch(context.Background(), nil)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
 }
 
 func TestNewClient(t *testing.T) {

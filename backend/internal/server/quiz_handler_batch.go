@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -67,12 +68,23 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	}
 	h.mu.Unlock()
 
-	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
-		if answers[i].GetIsSkipped() {
-			return skippedGradeResult(), nil
-		}
-		return h.svc.GradeNotebookAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
-	})
+	grades, err := gradeBatch(ctx, answers,
+		func(i int) bool { return answers[i].GetIsSkipped() },
+		func(ctx context.Context, idx []int) ([]quiz.GradeResult, error) {
+			subCards := make([]quiz.Card, len(idx))
+			subAns := make([]string, len(idx))
+			subRT := make([]int64, len(idx))
+			for k, i := range idx {
+				subCards[k] = cards[i]
+				subAns[k] = answers[i].GetAnswer()
+				subRT[k] = answers[i].GetResponseTimeMs()
+			}
+			return h.svc.GradeNotebookAnswerBatch(ctx, subCards, subAns, subRT)
+		},
+		func(i int) (quiz.GradeResult, error) {
+			return h.svc.GradeNotebookAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
+		},
+	)
 	if err != nil {
 		return nil, gradeError("grade answers", err)
 	}
@@ -126,12 +138,23 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	}
 	h.mu.Unlock()
 
-	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
-		if answers[i].GetIsSkipped() {
-			return skippedGradeResult(), nil
-		}
-		return h.svc.GradeReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
-	})
+	grades, err := gradeBatch(ctx, answers,
+		func(i int) bool { return answers[i].GetIsSkipped() },
+		func(ctx context.Context, idx []int) ([]quiz.GradeResult, error) {
+			subCards := make([]quiz.ReverseCard, len(idx))
+			subAns := make([]string, len(idx))
+			subRT := make([]int64, len(idx))
+			for k, i := range idx {
+				subCards[k] = cards[i]
+				subAns[k] = answers[i].GetAnswer()
+				subRT[k] = answers[i].GetResponseTimeMs()
+			}
+			return h.svc.GradeReverseAnswerBatch(ctx, subCards, subAns, subRT)
+		},
+		func(i int) (quiz.GradeResult, error) {
+			return h.svc.GradeReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
+		},
+	)
 	if err != nil {
 		return nil, gradeError("grade answers", err)
 	}
@@ -178,6 +201,62 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 // regular correct answer (3-5) so repeated synonym-only answers don't advance
 // the word as fast as exact-match answers.
 const synonymAcceptedQuality = 2
+
+// gradeBatch grades every answer in items and returns the results in original
+// order. Skipped answers get skippedGradeResult with NO LLM call. The remaining
+// answers are graded with ONE batched LLM call (batchFn) — this is the fix for
+// the batch-submit 429 burst, where the old parallelGrade fanned out one call
+// per answer.
+//
+// batchFn receives the indices of the non-skipped answers and must return one
+// GradeResult per index, in that order. If the batched response is unusable
+// (malformed / wrong-length — inference.ErrMalformedResponse), gradeBatch logs
+// and falls back to grading exactly those answers individually (perItemFn, the
+// previous N-parallel-calls path) so batching can never grade worse than before.
+// A transport failure (network / 429) is returned as-is and does NOT trigger the
+// N-call fallback, so a rate-limited batch does not re-burst the same quota.
+func gradeBatch[T any](
+	ctx context.Context,
+	items []T,
+	skipped func(i int) bool,
+	batchFn func(ctx context.Context, indices []int) ([]quiz.GradeResult, error),
+	perItemFn func(i int) (quiz.GradeResult, error),
+) ([]quiz.GradeResult, error) {
+	results := make([]quiz.GradeResult, len(items))
+	toGrade := make([]int, 0, len(items))
+	for i := range items {
+		if skipped(i) {
+			results[i] = skippedGradeResult()
+			continue
+		}
+		toGrade = append(toGrade, i)
+	}
+	if len(toGrade) == 0 {
+		return results, nil
+	}
+
+	graded, err := batchFn(ctx, toGrade)
+	if err != nil {
+		if !errors.Is(err, inference.ErrMalformedResponse) {
+			return nil, err
+		}
+		slog.Warn("batched grading unusable; falling back to per-item grading",
+			"error", err, "count", len(toGrade))
+		graded, err = parallelGrade(ctx, toGrade, func(k int) (quiz.GradeResult, error) {
+			return perItemFn(toGrade[k])
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(graded) != len(toGrade) {
+		return nil, fmt.Errorf("graded %d of %d answers", len(graded), len(toGrade))
+	}
+	for k, idx := range toGrade {
+		results[idx] = graded[k]
+	}
+	return results, nil
+}
 
 // parallelGrade runs gradeFn(i) for i in [0, len(items)) concurrently and
 // returns results in original order. If any call returns an error, the first
