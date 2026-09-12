@@ -66,4 +66,17 @@ if [ ! -s "${COOKIE_FILE}" ]; then
 fi
 
 echo "[seed] ok: ${count} user row(s); starting langner-server"
+
+# TEMP DIAGNOSTIC (e2e auth debug) — remove once root-caused. Dump exactly what
+# the seed's psql session sees (host/port it is connected to, backend PID, the
+# users rows), plus the same probe via the URL-style DSN the Go server builds,
+# so we can compare against the server's STARTUP DB PROBE.
+echo "[seed][diag] psql (-h ${DB_HOST}) view:"
+psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -v ON_ERROR_STOP=1 \
+  -c "SELECT current_database() AS db, current_schema() AS schema, current_setting('search_path') AS path, pg_backend_pid() AS backend, COALESCE(inet_server_addr()::text,'<socket>') AS host, COALESCE(inet_server_port(),0) AS port;" \
+  -c "SELECT id, google_sub FROM users;" || true
+echo "[seed][diag] psql via URL DSN (what the Go server uses) view:"
+psql "postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable" \
+  -c "SELECT current_database() AS db, pg_backend_pid() AS backend, COALESCE(inet_server_addr()::text,'<socket>') AS host, COALESCE(inet_server_port(),0) AS port, (SELECT count(*) FROM users) AS user_cnt;" || true
+
 exec ./langner-server --config "${TEST_CONFIG_PATH}"
