@@ -167,10 +167,10 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 			return nil, gradeError("grade answer", err)
 		}
 	}
-	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+	learnedAt, nextReviewDate, err := h.svc.SaveResultInfo(ctx, card, grade, req.Msg.GetResponseTimeMs())
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Entry, notebook.QuizTypeNotebook)
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
 		Correct: grade.Correct, Meaning: card.Meaning, Reason: grade.Reason,
 		WordDetail: toProtoWordDetail(card.WordDetail), NextReviewDate: nextReviewDate,
@@ -302,16 +302,19 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 			return nil, gradeError("grade answer", err)
 		}
 	}
+	var learnedAt, nextReviewDate string
 	if grade.Classification != string(inference.ClassificationSynonym) {
-		if err := h.svc.SaveReverseResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+		var err error
+		if learnedAt, nextReviewDate, err = h.svc.SaveReverseResultInfo(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
+	} else {
+		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Expression, notebook.QuizTypeReverse)
 	}
 	var contexts []string
 	for _, c := range card.Contexts {
 		contexts = append(contexts, c.Context)
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Expression, notebook.QuizTypeReverse)
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
 		Correct: grade.Correct, Expression: card.Expression, Meaning: card.Meaning, Reason: grade.Reason,
 		Contexts: contexts, WordDetail: toProtoWordDetail(card.WordDetail), Classification: grade.Classification,
@@ -360,15 +363,13 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, gradeError("grade answer", err)
 	}
-	if grade.MatchedCard != nil {
-		if err := h.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
-		}
-	}
 	var learnedAt, nextReviewDate, senseID string
 	var noteID int64
 	if grade.MatchedCard != nil {
-		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.ID, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
+		var err error
+		if learnedAt, nextReviewDate, err = h.svc.SaveFreeformResultInfo(ctx, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
+		}
 		senseID = grade.MatchedCard.ID
 		h.mu.Lock()
 		noteID = h.nextID

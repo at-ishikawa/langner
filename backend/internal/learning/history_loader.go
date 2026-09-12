@@ -33,6 +33,32 @@ type HistoryStore interface {
 	// Mirrors notebook.NewLearningHistories return shape so the swap is
 	// drop-in.
 	LoadAll(ctx context.Context) (map[string][]notebook.LearningHistory, error)
+	// LoadForNotebooks returns histories for ONLY the given notebooks, keyed
+	// by notebook ID. It reconstructs each notebook identically to LoadAll but
+	// fetches only that subset of rows from the DB — the read that keeps a
+	// per-notebook quiz load (and a per-card submit) from shipping the entire
+	// dataset over the wire on every request. An empty/nil id list returns an
+	// empty map. The reconstruction is shared with LoadAll (see reconstruct),
+	// so read/write symmetry (learning-history invariants L2/L4) is preserved.
+	LoadForNotebooks(ctx context.Context, notebookIDs []string) (map[string][]notebook.LearningHistory, error)
+}
+
+// Optional capability interfaces: only the DB-backed repositories implement the
+// notebook/target-scoped queries LoadForNotebooks needs. When a repo doesn't
+// (YAML, mocks), LoadForNotebooks falls back to the whole-table FindAll — still
+// correct, just without the egress win. This mirrors the CountNotebookNotes
+// capability pattern and avoids forcing every implementation to add methods.
+type notebookScopedNotes interface {
+	FindByNotebooks(ctx context.Context, notebookIDs []string) ([]notebook.NoteRecord, error)
+}
+type targetScopedLogs interface {
+	FindByTargets(ctx context.Context, noteIDs, originIDs, correctionIDs []int64) ([]LearningLog, error)
+}
+type notebookScopedOrigins interface {
+	FindByNotebooks(ctx context.Context, notebookIDs []string) ([]notebook.EtymologyOriginRecord, error)
+}
+type notebookScopedCorrections interface {
+	FindByNotebooks(ctx context.Context, notebookIDs []string) ([]notebook.GrammarCorrectionRecord, error)
 }
 
 // DBHistoryStore composes the DB repositories needed to reconstruct the
@@ -72,12 +98,124 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 	if err != nil {
 		return nil, fmt.Errorf("load notes: %w", err)
 	}
-
 	logs, err := s.learningRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load learning logs: %w", err)
 	}
+	var origins []notebook.EtymologyOriginRecord
+	if s.originRepo != nil {
+		if origins, err = s.originRepo.FindAll(ctx); err != nil {
+			return nil, fmt.Errorf("load etymology origins: %w", err)
+		}
+	}
+	var corrections []notebook.GrammarCorrectionRecord
+	if s.grammarRepo != nil {
+		if corrections, err = s.grammarRepo.FindAll(ctx); err != nil {
+			return nil, fmt.Errorf("load grammar corrections: %w", err)
+		}
+	}
+	return s.reconstruct(ctx, notes, logs, origins, corrections)
+}
 
+// LoadForNotebooks reconstructs histories for only notebookIDs. It fetches the
+// scoped rows (notes linked to those notebooks — plus id-less orphan notes for
+// the legacy origin fallback — their logs, and those notebooks' origins /
+// grammar corrections) then runs the SAME reconstruct as LoadAll, so the result
+// is identical to filtering LoadAll's output to these notebooks, but without
+// pulling the whole dataset over the wire. Repos that don't implement the
+// scoped queries fall back to FindAll (correct, no egress win).
+func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []string) (map[string][]notebook.LearningHistory, error) {
+	if len(notebookIDs) == 0 {
+		return map[string][]notebook.LearningHistory{}, nil
+	}
+
+	var notes []notebook.NoteRecord
+	var err error
+	if sr, ok := s.noteRepo.(notebookScopedNotes); ok {
+		notes, err = sr.FindByNotebooks(ctx, notebookIDs)
+	} else {
+		notes, err = s.noteRepo.FindAll(ctx)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load scoped notes: %w", err)
+	}
+
+	var origins []notebook.EtymologyOriginRecord
+	if s.originRepo != nil {
+		if sr, ok := s.originRepo.(notebookScopedOrigins); ok {
+			origins, err = sr.FindByNotebooks(ctx, notebookIDs)
+		} else {
+			origins, err = s.originRepo.FindAll(ctx)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load scoped etymology origins: %w", err)
+		}
+	}
+
+	var corrections []notebook.GrammarCorrectionRecord
+	if s.grammarRepo != nil {
+		if sr, ok := s.grammarRepo.(notebookScopedCorrections); ok {
+			corrections, err = sr.FindByNotebooks(ctx, notebookIDs)
+		} else {
+			corrections, err = s.grammarRepo.FindAll(ctx)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load scoped grammar corrections: %w", err)
+		}
+	}
+
+	var logs []LearningLog
+	if lr, ok := s.learningRepo.(targetScopedLogs); ok {
+		noteIDs := make([]int64, 0, len(notes))
+		for _, n := range notes {
+			noteIDs = append(noteIDs, n.ID)
+		}
+		originIDs := make([]int64, 0, len(origins))
+		for _, o := range origins {
+			originIDs = append(originIDs, o.ID)
+		}
+		correctionIDs := make([]int64, 0, len(corrections))
+		for _, c := range corrections {
+			correctionIDs = append(correctionIDs, c.ID)
+		}
+		logs, err = lr.FindByTargets(ctx, noteIDs, originIDs, correctionIDs)
+	} else {
+		logs, err = s.learningRepo.FindAll(ctx)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load scoped learning logs: %w", err)
+	}
+
+	histories, err := s.reconstruct(ctx, notes, logs, origins, corrections)
+	if err != nil {
+		return nil, err
+	}
+	// A note shared with a notebook we didn't ask for carries that notebook's
+	// link too, so reconstruct may emit a partial entry for it. Drop anything
+	// outside the requested set so the result equals filtering LoadAll to
+	// notebookIDs.
+	want := make(map[string]bool, len(notebookIDs))
+	for _, id := range notebookIDs {
+		want[id] = true
+	}
+	for k := range histories {
+		if !want[k] {
+			delete(histories, k)
+		}
+	}
+	return histories, nil
+}
+
+// reconstruct builds the per-notebook LearningHistory map from already-fetched
+// rows. Shared by LoadAll (whole dataset) and LoadForNotebooks (a scoped
+// subset) so both produce identical histories for any notebook they cover.
+func (s *DBHistoryStore) reconstruct(
+	ctx context.Context,
+	notes []notebook.NoteRecord,
+	logs []LearningLog,
+	origins []notebook.EtymologyOriginRecord,
+	corrections []notebook.GrammarCorrectionRecord,
+) (map[string][]notebook.LearningHistory, error) {
 	noteByID := make(map[int64]*notebook.NoteRecord, len(notes))
 	for i := range notes {
 		noteByID[notes[i].ID] = &notes[i]
@@ -153,10 +291,6 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 	buildVocabHistories(notes, logsByNoteNotebook, skipFlagsByNote, histories)
 
 	if s.originRepo != nil {
-		origins, oerr := s.originRepo.FindAll(ctx)
-		if oerr != nil {
-			return nil, fmt.Errorf("load etymology origins: %w", oerr)
-		}
 		originIDs := make([]int64, 0, len(origins))
 		for _, o := range origins {
 			originIDs = append(originIDs, o.ID)
@@ -178,10 +312,6 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 	}
 
 	if s.grammarRepo != nil {
-		corrections, gerr := s.grammarRepo.FindAll(ctx)
-		if gerr != nil {
-			return nil, fmt.Errorf("load grammar corrections: %w", gerr)
-		}
 		buildGrammarHistories(corrections, logsByCorrection, histories)
 	}
 
