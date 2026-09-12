@@ -77,6 +77,11 @@ type CardInfo struct {
 // preserves the Note.Expression form when the card was loaded with a
 // separate Definition entry — see CardInfo for why this fallback is
 // required.
+//
+// ID carries the card's stable sense id (Note.ID) so a deliberate Exclude on a
+// standard/reverse quiz card resolves to its note by sense_id — homograph-safe —
+// instead of falling back to a fragile entry-string match (resolveSkipTarget).
+// Empty for legacy id-less source entries, which still resolve by expression.
 func CardInfoFromCard(card Card) CardInfo {
 	return CardInfo{
 		NotebookName:       card.NotebookName,
@@ -84,6 +89,7 @@ func CardInfoFromCard(card Card) CardInfo {
 		SceneTitle:         card.SceneTitle,
 		Expression:         card.Entry,
 		OriginalExpression: card.OriginalEntry,
+		ID:                 card.ID,
 	}
 }
 

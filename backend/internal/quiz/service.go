@@ -3,6 +3,7 @@ package quiz
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -46,6 +47,20 @@ type Service struct {
 	skipFlagRepo notebook.SkipFlagRepository
 	noteRepo     notebook.NoteRepository
 	originRepo   notebook.EtymologyOriginRepository
+	// noteEnsurer, when set (DB mode), additively creates any DB notes a
+	// notebook's YAML declares but the database is missing, right before its
+	// cards are served — so a notebook whose YAML gained units without a fresh
+	// `migrate import-db` still has the notes rows every DB-state write
+	// (exclude/SkipWord, SRS logs, overrides) needs. Nil in YAML-only mode.
+	noteEnsurer NoteEnsurer
+}
+
+// NoteEnsurer additively creates any notes a notebook's YAML declares but the
+// database is missing (implemented by datasync.Importer.EnsureNotesForNotebook).
+// It is an interface so the quiz package need not import datasync; main injects
+// the concrete importer via SetNoteEnsurer only when a database is configured.
+type NoteEnsurer interface {
+	EnsureNotesForNotebook(ctx context.Context, notebookID string) (int, error)
 }
 
 // NewService creates a new Service.
@@ -77,6 +92,29 @@ func (s *Service) SetSkipStores(skipFlagRepo notebook.SkipFlagRepository, noteRe
 	s.skipFlagRepo = skipFlagRepo
 	s.noteRepo = noteRepo
 	s.originRepo = originRepo
+}
+
+// SetNoteEnsurer installs the DB-mode ensure-on-serve hook. Called from
+// bootstrap once the database is connected; nil in YAML-only mode (where notes
+// aren't a DB concern and SkipWord stubs its own YAML entry).
+func (s *Service) SetNoteEnsurer(e NoteEnsurer) {
+	s.noteEnsurer = e
+}
+
+// ensureNotes additively self-heals the DB notes for the notebooks about to be
+// served (DB mode only). Best-effort: a failure is logged but never blocks the
+// quiz — the worst case is the pre-existing "note missing" behavior for a
+// brand-new unit, not a broken session. The ensurer's own cheap fast path makes
+// this a no-op on already-synced notebooks.
+func (s *Service) ensureNotes(notebookIDs []string) {
+	if s.noteEnsurer == nil {
+		return
+	}
+	for _, id := range notebookIDs {
+		if _, err := s.noteEnsurer.EnsureNotesForNotebook(context.Background(), id); err != nil {
+			slog.Warn("ensure notes on serve failed", "notebook", id, "error", err)
+		}
+	}
 }
 
 // loadHistories returns every notebook's learning history keyed by notebook
@@ -371,6 +409,11 @@ func buildWordDetail(note *notebook.Note, originMap map[string]notebook.Etymolog
 // matching the listed titles are returned. A nil or empty list for a
 // notebook means "all sections".
 func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]Card, error) {
+	// DB mode: additively create any notes these notebooks' YAML declares but
+	// the DB is missing, so a later exclude/SkipWord (or SRS write) on a word
+	// from a freshly-added unit lands on a real note instead of erroring.
+	s.ensureNotes(notebookIDs)
+
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
@@ -1066,6 +1109,9 @@ type ReverseContext struct {
 // sectionTitlesByID narrows results to the listed sections per notebook (see
 // LoadCards). A nil/empty list for a notebook means "all sections".
 func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
+	// DB mode: self-heal missing notes before serving (see LoadCards).
+	s.ensureNotes(notebookIDs)
+
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
