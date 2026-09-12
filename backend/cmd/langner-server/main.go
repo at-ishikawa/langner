@@ -116,6 +116,32 @@ func run(ctx context.Context) error {
 			app.AddShutdownHook(func(ctx context.Context) error {
 				return db.Close()
 			})
+			// TEMP DIAGNOSTIC (e2e auth debug) — remove once root-caused.
+			// Probe the server's OWN pool at startup to see exactly which
+			// database/schema it lands on and whether the seeded users row is
+			// visible to it, printing the connection backend PID so we can tell
+			// if the server and the seed talk to the same postmaster.
+			func() {
+				type probe struct {
+					DB      string `db:"db"`
+					Schema  string `db:"schema"`
+					Path    string `db:"path"`
+					Backend int    `db:"backend"`
+					Host    string `db:"host"`
+					Port    int    `db:"port"`
+					UserCnt int    `db:"user_cnt"`
+				}
+				var p probe
+				if err := db.Get(&p, `SELECT current_database() AS db, current_schema() AS schema, current_setting('search_path') AS path, pg_backend_pid() AS backend, COALESCE(inet_server_addr()::text,'<socket>') AS host, COALESCE(inet_server_port(),0) AS port, (SELECT count(*) FROM users) AS user_cnt`); err != nil {
+					slog.Error("STARTUP DB PROBE failed", "error", err)
+					return
+				}
+				slog.Info("STARTUP DB PROBE",
+					"current_database", p.DB, "current_schema", p.Schema,
+					"search_path", p.Path, "backend_pid", p.Backend,
+					"server_addr", p.Host, "server_port", p.Port,
+					"users_count", p.UserCnt)
+			}()
 		}
 	}
 
