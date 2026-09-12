@@ -97,7 +97,10 @@ jobs:
         run: ./langner --config config.example.yml notebooks stories friends --pdf
 
       - name: Install migrate tool
-        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+        # Pin to the same migrate version the module depends on (see backend/go.mod).
+        # `@latest` drifts: v4.20.1+ requires go >= 1.25.11, which fails against the
+        # go version pinned in go.mod under GOTOOLCHAIN=local.
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
 
       - name: Run database migrations
         run: migrate -source file://backend/schemas/migrations -database "postgres://user:password@localhost:5432/local?sslmode=disable" up

@@ -7,6 +7,10 @@ import { AnalyticsService } from "@/gen-protos/api/v1/analytics_pb";
 const transport = createConnectTransport({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080",
   useBinaryFormat: process.env.NEXT_PUBLIC_CONNECT_JSON !== "true",
+  // Send the HTTP-only session cookie with every RPC so the backend's auth
+  // interceptor can authenticate the request cross-origin (frontend 3100 ↔
+  // backend 8080). Requires credentialed CORS on the server.
+  fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
 });
 
 export const quizClient = createClient(QuizService, transport);
