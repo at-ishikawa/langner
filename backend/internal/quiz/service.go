@@ -130,6 +130,30 @@ func (s *Service) loadHistories() (map[string][]notebook.LearningHistory, error)
 	return notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 }
 
+// loadHistoriesForNotebooks returns histories for ONLY the given notebooks. It
+// is the scoped read the quiz load / submit paths use so a single-notebook quiz
+// (or a per-card grade) doesn't ship the entire learning history over the wire
+// every request — the fix for the DB egress blowout. The result is identical to
+// loadHistories() filtered to notebookIDs. In DB mode it pushes the scope into
+// SQL (HistoryStore.LoadForNotebooks); in YAML mode it loads then filters (the
+// YAML reader is local, so there's no egress there to save).
+func (s *Service) loadHistoriesForNotebooks(notebookIDs ...string) (map[string][]notebook.LearningHistory, error) {
+	if s.historyStore != nil {
+		return s.historyStore.LoadForNotebooks(context.Background(), notebookIDs)
+	}
+	all, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]notebook.LearningHistory, len(notebookIDs))
+	for _, id := range notebookIDs {
+		if h, ok := all[id]; ok {
+			out[id] = h
+		}
+	}
+	return out, nil
+}
+
 func (s *Service) newReader() (*notebook.Reader, error) {
 	reader, err := notebook.NewReader(
 		s.notebooksConfig.StoriesDirectories,
@@ -419,7 +443,8 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, section
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := s.loadHistories()
+	// Scoped to the notebooks being quizzed — not the whole learning history.
+	learningHistories, err := s.loadHistoriesForNotebooks(notebookIDs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -733,7 +758,7 @@ func (s *Service) nextIntervalDays(
 		QuizType:       string(quizType),
 	}
 
-	histories, err := s.loadHistories()
+	histories, err := s.loadHistoriesForNotebooks(notebookName)
 	if err != nil {
 		return 0
 	}
@@ -754,6 +779,28 @@ func (s *Service) nextIntervalDays(
 // be saved as a fresh per-member row — silently undoing the migration
 // every time a member-named concept card is graded.
 func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult, responseTimeMs int64) error {
+	_, _, err := s.SaveResultInfo(ctx, card, result, responseTimeMs)
+	return err
+}
+
+// formatLearnedInfo renders the (learnedAt, nextReviewDate) response fields
+// from a just-written attempt's timestamp and interval — the SAME formatting
+// GetLatestLearnedInfo applies to the latest stored log. The Save*Info methods
+// return these directly so a batch submit doesn't re-read the whole (or even
+// the scoped) history once per card just to echo back the date it just wrote.
+func formatLearnedInfo(learnedAt time.Time, intervalDays int) (string, string) {
+	la := learnedAt.Format("2006-01-02")
+	if intervalDays > 0 {
+		return la, learnedAt.AddDate(0, 0, intervalDays).Format("2006-01-02")
+	}
+	return la, ""
+}
+
+// SaveResultInfo is SaveResult that also returns the learnedAt/nextReviewDate it
+// persisted, so callers can populate the response without a follow-up
+// GetLatestLearnedInfo read (the just-written log IS the latest attempt, so the
+// values are identical). See SaveResult for the concept-head redirection notes.
+func (s *Service) SaveResultInfo(ctx context.Context, card Card, result GradeResult, responseTimeMs int64) (learnedAt, nextReviewDate string, err error) {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
@@ -778,9 +825,10 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 	}
 	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeNotebook, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
-		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
+		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
-	return nil
+	la, nr := formatLearnedInfo(log.LearnedAt, log.IntervalDays)
+	return la, nr, nil
 }
 
 // storyHasContent reports whether any scene carries prose or dialogue worth
@@ -1117,7 +1165,8 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext, inc
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := s.loadHistories()
+	// Scoped to the notebooks being quizzed — not the whole learning history.
+	learningHistories, err := s.loadHistoriesForNotebooks(notebookIDs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1790,6 +1839,13 @@ func normalizeExpression(s string) string {
 // SaveReverseResult updates learning history via the repository.
 // Same head-redirection as SaveResult; see SaveResult for details.
 func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, result GradeResult, responseTimeMs int64) error {
+	_, _, err := s.SaveReverseResultInfo(ctx, card, result, responseTimeMs)
+	return err
+}
+
+// SaveReverseResultInfo is SaveReverseResult that also returns the learnedAt/
+// nextReviewDate it persisted (see SaveResultInfo).
+func (s *Service) SaveReverseResultInfo(ctx context.Context, card ReverseCard, result GradeResult, responseTimeMs int64) (learnedAt, nextReviewDate string, err error) {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
@@ -1811,9 +1867,10 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 	}
 	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeReverse, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
-		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
+		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
-	return nil
+	la, nr := formatLearnedInfo(log.LearnedAt, log.IntervalDays)
+	return la, nr, nil
 }
 
 // FreeformCard represents a freeform quiz card (user inputs word + meaning).
@@ -2022,7 +2079,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 		return nil, err
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistoriesForNotebooks(notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -2069,7 +2126,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 		return nil, err
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistoriesForNotebooks(notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -2207,6 +2264,13 @@ type FreeformGradeResult struct {
 // SaveFreeformResult updates learning history via the repository.
 // Same head-redirection as SaveResult; see SaveResult for details.
 func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
+	_, _, err := s.SaveFreeformResultInfo(ctx, card, result, responseTimeMs)
+	return err
+}
+
+// SaveFreeformResultInfo is SaveFreeformResult that also returns the learnedAt/
+// nextReviewDate it persisted (see SaveResultInfo).
+func (s *Service) SaveFreeformResultInfo(ctx context.Context, card FreeformCard, result FreeformGradeResult, responseTimeMs int64) (learnedAt, nextReviewDate string, err error) {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
@@ -2228,9 +2292,10 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 	}
 	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeFreeform, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
-		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
+		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
-	return nil
+	la, nr := formatLearnedInfo(log.LearnedAt, log.IntervalDays)
+	return la, nr, nil
 }
 
 // kindFromIndex returns the kind string for a notebook index.
@@ -2254,7 +2319,16 @@ func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]s
 	if s.disableShuffle {
 		return map[string]string{}, nil
 	}
-	learningHistories, err := s.loadHistories()
+	// Scope to only the notebooks these cards belong to.
+	nbSet := make(map[string]struct{}, len(cards))
+	for _, card := range cards {
+		nbSet[card.NotebookName] = struct{}{}
+	}
+	notebookIDs := make([]string, 0, len(nbSet))
+	for id := range nbSet {
+		notebookIDs = append(notebookIDs, id)
+	}
+	learningHistories, err := s.loadHistoriesForNotebooks(notebookIDs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -2346,7 +2420,7 @@ func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 // GetLatestLearnedInfo returns the learned_at and next_review_date for the latest log
 // of a given expression in a specific notebook.
 func (s *Service) GetLatestLearnedInfo(notebookName, id, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistoriesForNotebooks(notebookName)
 	if err != nil {
 		return "", ""
 	}

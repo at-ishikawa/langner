@@ -61,6 +61,27 @@ func (h *NotebookHandler) loadHistories() (map[string][]notebook.LearningHistory
 	return notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
 }
 
+// loadHistoriesForNotebooks returns histories for ONLY the given notebooks —
+// the scoped read the per-notebook Learn page uses so viewing one notebook
+// doesn't pull the whole learning history over the wire (mirrors
+// quiz.Service.loadHistoriesForNotebooks).
+func (h *NotebookHandler) loadHistoriesForNotebooks(notebookIDs ...string) (map[string][]notebook.LearningHistory, error) {
+	if h.historyStore != nil {
+		return h.historyStore.LoadForNotebooks(context.Background(), notebookIDs)
+	}
+	all, err := notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]notebook.LearningHistory, len(notebookIDs))
+	for _, id := range notebookIDs {
+		if hh, ok := all[id]; ok {
+			out[id] = hh
+		}
+	}
+	return out, nil
+}
+
 // NewNotebookHandler creates a new NotebookHandler.
 // noteRepo is optional; pass nil when DB is not configured.
 func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, openaiClient inference.Client, noteRepo notebook.NoteRepository) *NotebookHandler {
@@ -96,7 +117,7 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 
 
 func (h *NotebookHandler) loadLearningHistory(notebookID string) ([]notebook.LearningHistory, error) {
-	histories, err := h.loadHistories()
+	histories, err := h.loadHistoriesForNotebooks(notebookID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load learning histories: %w", err))
 	}
