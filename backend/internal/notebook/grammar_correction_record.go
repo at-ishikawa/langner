@@ -72,6 +72,26 @@ func (r *DBGrammarCorrectionRepository) FindByNotebooks(ctx context.Context, not
 	return rows, nil
 }
 
+// FindByIDs returns the corrections with the given ids — the scoped counterpart
+// to FindAll for HistoryStore.LoadForDateRange. Empty ids returns nil.
+func (r *DBGrammarCorrectionRepository) FindByIDs(ctx context.Context, ids []int64) ([]GrammarCorrectionRecord, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(
+		`SELECT id, notebook_id, sense_id, created_at, updated_at FROM grammar_corrections WHERE id IN (?)`,
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build grammar_corrections-by-ids query: %w", err)
+	}
+	var rows []GrammarCorrectionRecord
+	if err := r.db.SelectContext(ctx, &rows, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("select grammar_corrections by ids: %w", err)
+	}
+	return rows, nil
+}
+
 // FindOrCreate upserts by the (notebook_id, sense_id) unique key and returns
 // the row. The no-op SET (assigning a column to its own EXCLUDED value) is the
 // standard Postgres idiom for "RETURNING the row whether it was inserted or

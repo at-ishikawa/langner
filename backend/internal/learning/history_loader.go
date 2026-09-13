@@ -41,6 +41,12 @@ type HistoryStore interface {
 	// empty map. The reconstruction is shared with LoadAll (see reconstruct),
 	// so read/write symmetry (learning-history invariants L2/L4) is preserved.
 	LoadForNotebooks(ctx context.Context, notebookIDs []string) (map[string][]notebook.LearningHistory, error)
+	// LoadForDateRange returns histories built from ONLY the logs whose
+	// learned_at falls in [from, to) (plus the notes/origins/corrections those
+	// logs reference), keyed by notebook ID. Used by the Analytics daily view so
+	// a 30-day window doesn't pull the whole log table. A zero `from`/`to` means
+	// unbounded on that end. Same shared reconstruct() as LoadAll.
+	LoadForDateRange(ctx context.Context, from, to time.Time) (map[string][]notebook.LearningHistory, error)
 }
 
 // Optional capability interfaces: only the DB-backed repositories implement the
@@ -59,6 +65,18 @@ type notebookScopedOrigins interface {
 }
 type notebookScopedCorrections interface {
 	FindByNotebooks(ctx context.Context, notebookIDs []string) ([]notebook.GrammarCorrectionRecord, error)
+}
+type dateScopedLogs interface {
+	FindByDateRange(ctx context.Context, from, to time.Time) ([]LearningLog, error)
+}
+type idScopedNotes interface {
+	FindByIDs(ctx context.Context, ids []int64) ([]notebook.NoteRecord, error)
+}
+type idScopedOrigins interface {
+	FindByIDs(ctx context.Context, ids []int64) ([]notebook.EtymologyOriginRecord, error)
+}
+type idScopedCorrections interface {
+	FindByIDs(ctx context.Context, ids []int64) ([]notebook.GrammarCorrectionRecord, error)
 }
 
 // DBHistoryStore composes the DB repositories needed to reconstruct the
@@ -204,6 +222,77 @@ func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []str
 		}
 	}
 	return histories, nil
+}
+
+// LoadForDateRange reconstructs histories from only the logs in [from, to) and
+// the notes/origins/corrections those logs reference. Falls back to LoadAll if
+// the repos don't implement the scoped queries. See LoadForDateRange on the
+// interface for why this exists (Analytics daily view egress).
+func (s *DBHistoryStore) LoadForDateRange(ctx context.Context, from, to time.Time) (map[string][]notebook.LearningHistory, error) {
+	lr, okLogs := s.learningRepo.(dateScopedLogs)
+	nr, okNotes := s.noteRepo.(idScopedNotes)
+	if !okLogs || !okNotes {
+		return s.LoadAll(ctx)
+	}
+
+	logs, err := lr.FindByDateRange(ctx, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("load logs by date range: %w", err)
+	}
+
+	noteIDSet := make(map[int64]struct{})
+	originIDSet := make(map[int64]struct{})
+	corrIDSet := make(map[int64]struct{})
+	for _, l := range logs {
+		switch {
+		case l.NoteID != 0:
+			noteIDSet[l.NoteID] = struct{}{}
+		case l.OriginID != 0:
+			originIDSet[l.OriginID] = struct{}{}
+		case l.CorrectionID != 0:
+			corrIDSet[l.CorrectionID] = struct{}{}
+		}
+	}
+
+	notes, err := nr.FindByIDs(ctx, keysOf(noteIDSet))
+	if err != nil {
+		return nil, fmt.Errorf("load notes for date range: %w", err)
+	}
+
+	var origins []notebook.EtymologyOriginRecord
+	if s.originRepo != nil && len(originIDSet) > 0 {
+		if or, ok := s.originRepo.(idScopedOrigins); ok {
+			origins, err = or.FindByIDs(ctx, keysOf(originIDSet))
+		} else {
+			origins, err = s.originRepo.FindAll(ctx)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load origins for date range: %w", err)
+		}
+	}
+
+	var corrections []notebook.GrammarCorrectionRecord
+	if s.grammarRepo != nil && len(corrIDSet) > 0 {
+		if cr, ok := s.grammarRepo.(idScopedCorrections); ok {
+			corrections, err = cr.FindByIDs(ctx, keysOf(corrIDSet))
+		} else {
+			corrections, err = s.grammarRepo.FindAll(ctx)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load corrections for date range: %w", err)
+		}
+	}
+
+	return s.reconstruct(ctx, notes, logs, origins, corrections)
+}
+
+// keysOf returns the map's int64 keys as a slice.
+func keysOf(m map[int64]struct{}) []int64 {
+	out := make([]int64, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // reconstruct builds the per-notebook LearningHistory map from already-fetched

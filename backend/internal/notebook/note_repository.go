@@ -105,6 +105,28 @@ func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []st
 	return notes, nil
 }
 
+// FindByIDs returns the notes with the given ids, each with its full relations
+// (images, references, notebook_notes). The scoped counterpart to FindAll used
+// by HistoryStore.LoadForDateRange to fetch just the notes referenced by an
+// in-range set of logs. Empty ids returns nil.
+func (r *DBNoteRepository) FindByIDs(ctx context.Context, ids []int64) ([]NoteRecord, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(`SELECT `+noteColumns+` FROM notes WHERE id IN (?) ORDER BY id`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("build notes-by-ids query: %w", err)
+	}
+	var notes []NoteRecord
+	if err := r.db.SelectContext(ctx, &notes, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("load notes by ids: %w", err)
+	}
+	if err := r.loadRelations(ctx, notes); err != nil {
+		return nil, err
+	}
+	return notes, nil
+}
+
 // FindByID returns a single note by ID with its notebook notes.
 func (r *DBNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord, error) {
 	var note NoteRecord

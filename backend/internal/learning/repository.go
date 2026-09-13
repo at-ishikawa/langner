@@ -145,6 +145,33 @@ func (r *DBLearningRepository) FindByTargets(ctx context.Context, noteIDs, origi
 	return logs, nil
 }
 
+// FindByDateRange returns the logs with learned_at in [from, to). It is the
+// date-scoped read the Analytics daily view uses so a 30-day window doesn't
+// pull years of logs. A zero `from` means unbounded-start; a zero `to` means
+// unbounded-end.
+func (r *DBLearningRepository) FindByDateRange(ctx context.Context, from, to time.Time) ([]LearningLog, error) {
+	clauses := make([]string, 0, 2)
+	args := make([]interface{}, 0, 2)
+	if !from.IsZero() {
+		clauses = append(clauses, "learned_at >= ?")
+		args = append(args, from)
+	}
+	if !to.IsZero() {
+		clauses = append(clauses, "learned_at < ?")
+		args = append(args, to)
+	}
+	q := selectLearningLogColumns
+	if len(clauses) > 0 {
+		q += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	q += " ORDER BY id"
+	var logs []LearningLog
+	if err := r.db.SelectContext(ctx, &logs, r.db.Rebind(q), args...); err != nil {
+		return nil, fmt.Errorf("load logs by date range: %w", err)
+	}
+	return logs, nil
+}
+
 // Create inserts a single learning log. It resolves the row's target
 // (note / origin / grammar correction) before inserting:
 //   - CorrectionID already set (the StateSeeder path) → insert as-is.
