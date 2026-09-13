@@ -4,6 +4,7 @@ package learning
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -103,6 +104,43 @@ func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, erro
 	var logs []LearningLog
 	if err := r.db.SelectContext(ctx, &logs, selectLearningLogColumns+" ORDER BY id"); err != nil {
 		return nil, fmt.Errorf("load all learning logs: %w", err)
+	}
+	return logs, nil
+}
+
+// FindByTargets returns the logs whose target is in any of the given id sets
+// (note_id, origin_id, or correction_id). It is the scoped counterpart to
+// FindAll used by HistoryStore.LoadForNotebooks: only the logs for the notes /
+// origins / corrections of the requested notebooks are read, not every log.
+// Empty sets are skipped; if all are empty it returns nil.
+func (r *DBLearningRepository) FindByTargets(ctx context.Context, noteIDs, originIDs, correctionIDs []int64) ([]LearningLog, error) {
+	var clauses []string
+	var inArgs []interface{}
+	if len(noteIDs) > 0 {
+		clauses = append(clauses, "note_id IN (?)")
+		inArgs = append(inArgs, noteIDs)
+	}
+	if len(originIDs) > 0 {
+		clauses = append(clauses, "origin_id IN (?)")
+		inArgs = append(inArgs, originIDs)
+	}
+	if len(correctionIDs) > 0 {
+		clauses = append(clauses, "correction_id IN (?)")
+		inArgs = append(inArgs, correctionIDs)
+	}
+	if len(clauses) == 0 {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(
+		selectLearningLogColumns+" WHERE "+strings.Join(clauses, " OR ")+" ORDER BY id",
+		inArgs...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build logs-by-targets query: %w", err)
+	}
+	var logs []LearningLog
+	if err := r.db.SelectContext(ctx, &logs, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("load logs by targets: %w", err)
 	}
 	return logs, nil
 }

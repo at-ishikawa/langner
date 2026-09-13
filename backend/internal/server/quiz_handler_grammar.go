@@ -140,10 +140,10 @@ func (h *QuizHandler) SubmitGrammarPost(
 	results := make([]*apiv1.GrammarBlankResult, len(answers))
 	for i, a := range answers {
 		bc := ctxs[i]
-		if err := h.svc.SaveGrammarBlank(ctx, bc.notebookID, bc.blank.SenseID, grades[i], a.GetResponseTimeMs()); err != nil {
+		learnedAt, nextReviewDate, err := h.svc.SaveGrammarBlankInfo(ctx, bc.notebookID, bc.blank.SenseID, grades[i], a.GetResponseTimeMs())
+		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save grammar result: %w", err))
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(bc.notebookID, bc.blank.SenseID, bc.blank.SenseID, notebook.QuizTypeGrammar)
 		// For a wrong answer, surface the grader's critique of THIS answer as the
 		// assessment; the authored note stays in reason. Correct/skipped answers
 		// carry no assessment.

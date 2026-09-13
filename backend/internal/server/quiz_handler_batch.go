@@ -91,10 +91,13 @@ func (h *QuizHandler) BatchSubmitAnswers(
 
 	responses := make([]*apiv1.SubmitAnswerResponse, len(answers))
 	for i := range answers {
-		if err := h.svc.SaveResult(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
+		// SaveResultInfo returns the learnedAt/nextReviewDate it just wrote, so
+		// we don't re-read the learning history once per card (the batch's
+		// dominant DB egress before this change).
+		learnedAt, nextReviewDate, err := h.svc.SaveResultInfo(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs())
+		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save result: %w", err))
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].ID, cards[i].Entry, notebook.QuizTypeNotebook)
 		responses[i] = &apiv1.SubmitAnswerResponse{
 			Correct:        grades[i].Correct,
 			Meaning:        cards[i].Meaning,
@@ -168,16 +171,22 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 			grades[i].Quality = synonymAcceptedQuality
 		}
 		shouldSave := !isSynonym || answers[i].GetAcceptSynonymAsCorrect()
+		var learnedAt, nextReviewDate string
 		if shouldSave {
-			if err := h.svc.SaveReverseResult(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
+			// The write returns the learnedAt/nextReviewDate directly (no re-read).
+			var err error
+			if learnedAt, nextReviewDate, err = h.svc.SaveReverseResultInfo(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save result: %w", err))
 			}
+		} else {
+			// Nothing written (a synonym awaiting the user's retry decision) — read
+			// the existing latest, scoped to this one notebook.
+			learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].ID, cards[i].Expression, notebook.QuizTypeReverse)
 		}
 		var contexts []string
 		for _, c := range cards[i].Contexts {
 			contexts = append(contexts, c.Context)
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].ID, cards[i].Expression, notebook.QuizTypeReverse)
 		responses[i] = &apiv1.SubmitReverseAnswerResponse{
 			Correct:        grades[i].Correct,
 			Expression:     cards[i].Expression,

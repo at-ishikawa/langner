@@ -62,7 +62,7 @@ func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]G
 		name = index.Name
 	}
 
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistoriesForNotebooks(notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
@@ -161,7 +161,7 @@ func (s *Service) LoadGrammarMistakes(notebookID string, entryTitles []string) (
 	if err != nil {
 		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookID, err)
 	}
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistoriesForNotebooks(notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
@@ -369,6 +369,13 @@ func (s *Service) GradeGrammarBlank(ctx context.Context, content string, blank G
 // SaveGrammarBlank records the grade for one blank in the notebook's learning
 // history, keyed by the correction id under the flat "journal" bucket.
 func (s *Service) SaveGrammarBlank(ctx context.Context, notebookID, senseID string, result GradeResult, responseTimeMs int64) error {
+	_, _, err := s.SaveGrammarBlankInfo(ctx, notebookID, senseID, result, responseTimeMs)
+	return err
+}
+
+// SaveGrammarBlankInfo is SaveGrammarBlank that also returns the learnedAt/
+// nextReviewDate it persisted (see SaveResultInfo).
+func (s *Service) SaveGrammarBlankInfo(ctx context.Context, notebookID, senseID string, result GradeResult, responseTimeMs int64) (learnedAt, nextReviewDate string, err error) {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
@@ -389,7 +396,8 @@ func (s *Service) SaveGrammarBlank(ctx context.Context, notebookID, senseID stri
 	}
 	log.IntervalDays = s.nextIntervalDays(notebookID, senseID, notebook.QuizTypeGrammar, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, senseID)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
-		return fmt.Errorf("save grammar learning log for %q: %w", notebookID, err)
+		return "", "", fmt.Errorf("save grammar learning log for %q: %w", notebookID, err)
 	}
-	return nil
+	la, nr := formatLearnedInfo(log.LearnedAt, log.IntervalDays)
+	return la, nr, nil
 }

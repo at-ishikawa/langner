@@ -74,6 +74,37 @@ func (r *DBNoteRepository) CountNotebookNotes(ctx context.Context, notebookID st
 	return n, nil
 }
 
+// FindByNotebooks returns the notes linked to ANY of notebookIDs, plus id-less
+// orphan notes (no notebook_notes links) — the legacy synthetic notes the
+// origin-history fallback keys by name — each with its FULL relations (images,
+// references, and ALL notebook_notes, so a note shared across notebooks still
+// attributes its logs correctly). It is the scoped counterpart to FindAll used
+// by HistoryStore.LoadForNotebooks so a per-notebook read doesn't pull every
+// note. Empty notebookIDs returns nil.
+func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []string) ([]NoteRecord, error) {
+	if len(notebookIDs) == 0 {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(
+		`SELECT `+noteColumns+` FROM notes
+		 WHERE id IN (SELECT note_id FROM notebook_notes WHERE notebook_id IN (?))
+		    OR id NOT IN (SELECT note_id FROM notebook_notes)
+		 ORDER BY id`,
+		notebookIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build notes-by-notebooks query: %w", err)
+	}
+	var notes []NoteRecord
+	if err := r.db.SelectContext(ctx, &notes, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("load notes by notebooks: %w", err)
+	}
+	if err := r.loadRelations(ctx, notes); err != nil {
+		return nil, err
+	}
+	return notes, nil
+}
+
 // FindByID returns a single note by ID with its notebook notes.
 func (r *DBNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord, error) {
 	var note NoteRecord
