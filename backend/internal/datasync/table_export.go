@@ -19,7 +19,7 @@ import (
 
 // binaryValuePrefix tags a base64-encoded BINARY (non-UTF-8) bytea value in the
 // YAML dump. Only []byte values that are NOT valid UTF-8 (e.g. AES-GCM
-// ciphertext in users.email_encrypted / user_llm_credentials.api_key_encrypted)
+// ciphertext in user_llm_credentials.api_key_encrypted)
 // are wrapped; text/JSONB byteas stay plain strings. Because the wrap triggers
 // only on non-UTF-8 input, the prefix guards data that could never be valid
 // UTF-8 text — so a plain string carrying this prefix is unambiguously our own

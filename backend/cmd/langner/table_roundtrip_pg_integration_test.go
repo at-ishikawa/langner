@@ -111,11 +111,11 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	_, err = db.ExecContext(ctx, `UPDATE notes SET skipped_at = CURRENT_TIMESTAMP WHERE id = (SELECT MIN(id) FROM notes)`)
 	require.NoError(t, err)
 	// users: no rows exist on the example config (auth accounts are created on
-	// first sign-in, which never happens in a data-only import). PII columns are
-	// AES-GCM ciphertext at rest; the round trip dumps/restores raw bytes with no
-	// decryption, so seeding placeholder bytes is sufficient.
+	// first sign-in, which never happens in a data-only import). The row stores
+	// no PII — just the opaque google_sub and an auto-generated username — so a
+	// placeholder pair exercises the dump/restore round trip.
 	seedIfEmpty(ctx, t, db, "users",
-		`INSERT INTO users (google_sub, email_encrypted, email_hash, name_encrypted) VALUES ('roundtrip-seed-sub', '\x00', 'roundtrip-seed-hash', '\x00')`)
+		`INSERT INTO users (google_sub, username) VALUES ('roundtrip-seed-sub', 'user_roundtrip')`)
 	seedIfEmpty(ctx, t, db, "note_images",
 		`INSERT INTO note_images (note_id, url, sort_order) SELECT MIN(id), 'https://example.com/ice.png', 0 FROM notes`)
 	seedIfEmpty(ctx, t, db, "note_references",
