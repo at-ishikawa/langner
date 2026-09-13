@@ -5,6 +5,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
@@ -130,3 +131,67 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 	// Sanity: the shared word's book-b log is NOT in the scoped set for book-a.
 	_ = b1
 }
+
+// TestDBHistoryStore_LoadForDateRange_ScopesByDate pins the Analytics daily-view
+// egress fix: LoadForDateRange returns only attempts whose learned_at is in the
+// window, and FindByDateRange fetches only those log rows.
+func TestDBHistoryStore_LoadForDateRange_ScopesByDate(t *testing.T) {
+	dsn := os.Getenv("LANGNER_INTEGRATION_DB_URL")
+	if dsn == "" {
+		t.Skip("LANGNER_INTEGRATION_DB_URL not set")
+	}
+	db, err := sqlx.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.Ping())
+	_, err = db.Exec(`DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public`)
+	require.NoError(t, err)
+	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
+	ctx := context.Background()
+
+	var noteID int64
+	require.NoError(t, db.QueryRowContext(ctx,
+		`INSERT INTO notes (sense_id,"usage",entry,meaning) VALUES ('s1','word','word','meaning') RETURNING id`).Scan(&noteID))
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, "group", subgroup) VALUES ($1,'story','book','UNIT ONE','scene 1')`, noteID)
+	require.NoError(t, err)
+	// Two attempts: one recent (in a 30-day window), one old (outside it).
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO learning_logs (note_id,status,learned_at,quality,response_time_ms,quiz_type,interval_days,source_notebook_id)
+		 VALUES ($1,'understood', now() - interval '5 days', 4, 1000, 'notebook', 7, 'book'),
+		        ($1,'misunderstood', now() - interval '60 days', 1, 1000, 'notebook', 1, 'book')`, noteID)
+	require.NoError(t, err)
+
+	store := NewDBHistoryStore(notebook.NewDBNoteRepository(db), NewDBLearningRepository(db),
+		notebook.NewDBEtymologyOriginRepository(db), notebook.NewDBSkipFlagRepository(db), nil)
+
+	countAttempts := func(m map[string][]notebook.LearningHistory) int {
+		n := 0
+		for _, hs := range m {
+			for _, h := range hs {
+				for _, sc := range h.Scenes {
+					for _, e := range sc.Expressions {
+						n += len(e.LearnedLogs) + len(e.ReverseLogs) + len(e.EtymologyOriginLogs)
+					}
+				}
+			}
+		}
+		return n
+	}
+
+	all, err := store.LoadAll(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, countAttempts(all), "both attempts present in the full load")
+
+	// Window: last 30 days → only the recent attempt.
+	scoped, err := store.LoadForDateRange(ctx, timeDaysAgo(30), time.Time{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, countAttempts(scoped), "only the in-window attempt is reconstructed")
+
+	// FindByDateRange fetches only the in-window row.
+	inWindow, err := NewDBLearningRepository(db).FindByDateRange(ctx, timeDaysAgo(30), time.Time{})
+	require.NoError(t, err)
+	assert.Len(t, inWindow, 1, "date-scoped log read fetches only the in-window row")
+}
+
+func timeDaysAgo(d int) time.Time { return time.Now().AddDate(0, 0, -d) }

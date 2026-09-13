@@ -97,6 +97,27 @@ func (r *DBEtymologyOriginRepository) FindByNotebooks(ctx context.Context, noteb
 	return rows, nil
 }
 
+// FindByIDs returns the origins with the given ids — the scoped counterpart to
+// FindAll for HistoryStore.LoadForDateRange. Empty ids returns nil.
+func (r *DBEtymologyOriginRepository) FindByIDs(ctx context.Context, ids []int64) ([]EtymologyOriginRecord, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(
+		`SELECT id, notebook_id, session_title, sense, origin, type, language, meaning, created_at, updated_at
+		 FROM etymology_origins WHERE id IN (?)`,
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build etymology_origins-by-ids query: %w", err)
+	}
+	var rows []EtymologyOriginRecord
+	if err := r.db.SelectContext(ctx, &rows, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("select etymology_origins by ids: %w", err)
+	}
+	return rows, nil
+}
+
 // BatchCreate inserts new origin rows in one statement and writes back the
 // auto-generated IDs by re-reading the unique key tuple. The inserts go in
 // a transaction so partial failure can't leave the DB half-populated.

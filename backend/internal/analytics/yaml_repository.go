@@ -97,7 +97,18 @@ type yamlAttempt struct {
 // the DB store when one is installed, otherwise the on-disk YAML files; both
 // yield the same map shape so the flattening below is source-agnostic.
 func (r *YAMLRepository) allAttempts(ctx context.Context, filters Filters) ([]yamlAttempt, error) {
-	histories, err := r.loadHistories(ctx)
+	return r.attemptsInRange(ctx, filters, time.Time{}, time.Time{})
+}
+
+// attemptsInRange is allAttempts scoped to [from, to). The load is narrowed to
+// what the caller needs so a view doesn't pull the whole log table: a notebook
+// filter reads only that notebook (LoadForNotebooks — used by WordHistory), and
+// a date window reads only that window's logs (LoadForDateRange — used by the
+// daily view). With neither it falls back to the whole history (Trends and the
+// unfiltered Day Detail need each series' pre-window state, so they can't be
+// date-scoped). A zero from/to means unbounded on that end.
+func (r *YAMLRepository) attemptsInRange(ctx context.Context, filters Filters, from, to time.Time) ([]yamlAttempt, error) {
+	histories, err := r.scopedHistories(ctx, filters, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}
@@ -139,6 +150,30 @@ func (r *YAMLRepository) loadHistories(ctx context.Context) (map[string][]notebo
 		return r.store.LoadAll(ctx)
 	}
 	return notebook.NewLearningHistories(r.directory)
+}
+
+// scopedHistories chooses the narrowest DB read that still serves the request:
+// notebook-scoped when a notebook filter is set, else date-scoped when a window
+// is given, else the whole history. In YAML mode the reader is local so there's
+// no egress to save — it loads all and (for the notebook case) filters.
+func (r *YAMLRepository) scopedHistories(ctx context.Context, filters Filters, from, to time.Time) (map[string][]notebook.LearningHistory, error) {
+	if filters.NotebookID != "" {
+		if r.store != nil {
+			return r.store.LoadForNotebooks(ctx, []string{filters.NotebookID})
+		}
+		all, err := notebook.NewLearningHistories(r.directory)
+		if err != nil {
+			return nil, err
+		}
+		if h, ok := all[filters.NotebookID]; ok {
+			return map[string][]notebook.LearningHistory{filters.NotebookID: h}, nil
+		}
+		return map[string][]notebook.LearningHistory{}, nil
+	}
+	if r.store != nil && (!from.IsZero() || !to.IsZero()) {
+		return r.store.LoadForDateRange(ctx, from, to)
+	}
+	return r.loadHistories(ctx)
 }
 
 func collectExpressions(
@@ -270,11 +305,13 @@ func seriesDiscriminator(id, expression string) string {
 // DailySummaries aggregates per-day rollups. rangeDays == 0 means
 // "all time"; otherwise records older than now-rangeDays are dropped.
 func (r *YAMLRepository) DailySummaries(ctx context.Context, rangeDays int, filters Filters) ([]DailySummary, error) {
-	attempts, err := r.allAttempts(ctx, filters)
+	cutoff := rangeCutoff(rangeDays)
+	// Scope the DB read to the window (the daily view's dominant egress). The
+	// loop below still applies cutoff, so YAML mode (unscoped) stays correct.
+	attempts, err := r.attemptsInRange(ctx, filters, cutoff, time.Time{})
 	if err != nil {
 		return nil, err
 	}
-	cutoff := rangeCutoff(rangeDays)
 
 	type bucket struct {
 		total     int

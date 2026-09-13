@@ -25,10 +25,11 @@ import {
   type GetTrendsResponse,
 } from "@/lib/client";
 
-type RangeKey = "month" | "3m" | "year" | "all";
+type RangeKey = "30d" | "month" | "3m" | "year" | "all";
 type SplitKey = "none" | "quiz" | "notebook";
 
 const RANGES: { key: RangeKey; label: string }[] = [
+  { key: "30d", label: "30 days" },
   { key: "month", label: "Month" },
   { key: "3m", label: "3 mo" },
   { key: "year", label: "Year" },
@@ -67,6 +68,8 @@ function rangeDates(range: RangeKey): { start: string; end: string } {
   const now = new Date();
   const end = ymd(now);
   switch (range) {
+    case "30d":
+      return { start: ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30)), end };
     case "month":
       return { start: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), end };
     case "3m":
@@ -140,8 +143,8 @@ function Segmented<T extends string | number>({
 
 export default function AnalyticsOverviewPage() {
   const router = useRouter();
-  const [range, setRange] = useState<RangeKey>("year");
-  const [granularity, setGranularity] = useState<Granularity>(Granularity.MONTH);
+  const [range, setRange] = useState<RangeKey>("30d");
+  const [granularity, setGranularity] = useState<Granularity>(Granularity.DAY);
   const [split, setSplit] = useState<SplitKey>("quiz");
   const [metric, setMetric] = useState<TrendMetric>("wordsTested");
   const [notebookId, setNotebookId] = useState("");
