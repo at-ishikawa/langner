@@ -39,10 +39,9 @@ check-api-key:
 	esac
 
 # `make dev` runs with Google auth ENABLED by default. Auth turns on when
-# SESSION_SIGNING_KEY is set, so we generate DEV-ONLY keys into a GITIGNORED
-# file (this repo is public — never commit keys) and source them for the server.
-# CREDENTIAL_ENCRYPTION_KEY must decode to 32 bytes (AES-256); `openssl rand
-# -hex 32` yields 64 hex chars = 32 bytes. Set AUTH=0 to run ungated.
+# SESSION_SIGNING_KEY is set, so we generate a DEV-ONLY key into a GITIGNORED
+# file (this repo is public — never commit keys) and source it for the server.
+# Set AUTH=0 to run ungated.
 #
 # To actually SIGN IN you must also supply your own Google OAuth credentials:
 # google_client_id, redirect_url, frontend_url, and allowed_emails in your
@@ -56,8 +55,8 @@ dev-backend: check-api-key
 	$(MAKE) -C backend build
 	@if [ "$(AUTH)" = "1" ]; then \
 		if [ ! -f $(AUTH_DEV_ENV) ]; then \
-			printf 'SESSION_SIGNING_KEY=%s\nCREDENTIAL_ENCRYPTION_KEY=%s\n' "$$(openssl rand -hex 32)" "$$(openssl rand -hex 32)" > $(AUTH_DEV_ENV); \
-			echo "Generated DEV-ONLY auth keys -> $(AUTH_DEV_ENV) (gitignored). Google sign-in also needs google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET in the env."; \
+			printf 'SESSION_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)" > $(AUTH_DEV_ENV); \
+			echo "Generated DEV-ONLY SESSION_SIGNING_KEY -> $(AUTH_DEV_ENV) (gitignored). Google sign-in also needs google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET in the env."; \
 		fi; \
 		set -a; . ./$(AUTH_DEV_ENV); set +a; ./langner-server; \
 	else \

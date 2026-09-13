@@ -23,7 +23,7 @@ export function AppHeader() {
         {user && (
           <>
             <Text fontSize="sm" color="fg.muted" truncate maxW="12rem">
-              {user.email}
+              {user.username}
             </Text>
             <Button size="xs" variant="outline" onClick={() => logout()}>
               Log out

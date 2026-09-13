@@ -123,7 +123,7 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.users.Upsert(ctx, info.Sub, info.Email, info.Name)
+	user, err := h.users.Upsert(ctx, info.Sub)
 	if err != nil {
 		slog.Error("auth: upsert user failed", "error", err)
 		http.Redirect(w, r, h.frontendURL+"/login?error=server_error", http.StatusFound)
@@ -155,14 +155,14 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// meResponse is the JSON shape of /auth/me.
+// meResponse is the JSON shape of /auth/me. Only the non-PII username is
+// exposed — no email/name is stored or returned.
 type meResponse struct {
 	Authenticated bool   `json:"authenticated"`
-	Email         string `json:"email,omitempty"`
-	Name          string `json:"name,omitempty"`
+	Username      string `json:"username,omitempty"`
 }
 
-// Me returns the signed-in user's email and name from the verified session
+// Me returns the signed-in user's username from the verified session
 // (populated in the request context by the auth cookie middleware). It responds
 // 401 when there is no valid session.
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +182,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(meResponse{Authenticated: true, Email: user.Email, Name: user.Name})
+	_ = json.NewEncoder(w).Encode(meResponse{Authenticated: true, Username: user.Username})
 }
 
 func (h *AuthHandler) clearCookie(w http.ResponseWriter, name string) {

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jmoiron/sqlx"
@@ -14,9 +15,10 @@ import (
 )
 
 // TestUserRepository_LivePostgres_Integration exercises the account upsert /
-// lookup path against a real Postgres — including that PII is encrypted at rest
-// (the persisted email/name bytes never contain the plaintext) and that the
-// blind index enforces one-account-per-email.
+// lookup path against a real Postgres: an unseen google_sub registers a row
+// with an auto-generated username, a returning google_sub is idempotent (no
+// duplicate row) and PRESERVES the username, and distinct accounts get distinct
+// usernames. No email/name is stored.
 //
 // Requires LANGNER_INTEGRATION_DB_URL pointing at a writable throwaway
 // Postgres. Skipped otherwise so local runs stay fast; CI wires it to the
@@ -36,48 +38,37 @@ func TestUserRepository_LivePostgres_Integration(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
 
-	enc, err := NewEncryptor([]byte("0123456789abcdef0123456789abcdef"))
-	require.NoError(t, err)
-	repo := NewUserRepository(db, enc)
+	repo := NewUserRepository(db)
 	ctx := context.Background()
 
-	// First sign-in registers the account.
-	user, err := repo.Upsert(ctx, "google-sub-abc", "Alice@Example.com", "Alice")
+	// First sign-in registers the account with an auto-generated username.
+	user, err := repo.Upsert(ctx, "google-sub-abc")
 	require.NoError(t, err)
 	assert.NotZero(t, user.ID)
+	assert.True(t, strings.HasPrefix(user.Username, "user_"), "username auto-generated: %q", user.Username)
+	require.NotEmpty(t, user.Username)
 
-	// The persisted PII columns must NOT contain the plaintext (encryption at
-	// rest). Read the raw bytes straight from the row.
-	var row userRow
-	require.NoError(t, db.Get(&row,
-		`SELECT id, google_sub, email_encrypted, name_encrypted FROM users WHERE id = $1`, user.ID))
-	assert.NotContains(t, string(row.EmailEncrypted), "Alice@Example.com",
-		"email must be encrypted at rest, not stored as plaintext")
-	assert.NotContains(t, string(row.NameEncrypted), "Alice",
-		"name must be encrypted at rest, not stored as plaintext")
-
-	// FindByID decrypts for display.
+	// FindByID returns the same account (no PII columns exist).
 	byID, err := repo.FindByID(ctx, user.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "Alice@Example.com", byID.Email)
-	assert.Equal(t, "Alice", byID.Name)
+	assert.Equal(t, user.ID, byID.ID)
+	assert.Equal(t, "google-sub-abc", byID.GoogleSub)
+	assert.Equal(t, user.Username, byID.Username)
 
-	// FindByEmail resolves via the blind index and is case/space-insensitive.
-	byEmail, err := repo.FindByEmail(ctx, "  alice@example.com ")
+	// Second sign-in for the same google_sub is idempotent: same row, and the
+	// username is PRESERVED (only a future "update username" changes it).
+	again, err := repo.Upsert(ctx, "google-sub-abc")
 	require.NoError(t, err)
-	assert.Equal(t, user.ID, byEmail.ID)
-
-	// Second sign-in for the same google_sub updates in place (no duplicate
-	// row) and reflects a changed display name.
-	updated, err := repo.Upsert(ctx, "google-sub-abc", "Alice@Example.com", "Alice Smith")
-	require.NoError(t, err)
-	assert.Equal(t, user.ID, updated.ID)
+	assert.Equal(t, user.ID, again.ID)
+	assert.Equal(t, user.Username, again.Username, "re-sign-in must not regenerate the username")
 
 	var count int
 	require.NoError(t, db.Get(&count, `SELECT COUNT(*) FROM users`))
 	assert.Equal(t, 1, count, "re-sign-in must not create a second row")
 
-	reloaded, err := repo.FindByID(ctx, user.ID)
+	// A different google_sub is a distinct account with a distinct username.
+	other, err := repo.Upsert(ctx, "google-sub-xyz")
 	require.NoError(t, err)
-	assert.Equal(t, "Alice Smith", reloaded.Name)
+	assert.NotEqual(t, user.ID, other.ID)
+	assert.NotEqual(t, user.Username, other.Username, "distinct accounts get distinct usernames")
 }

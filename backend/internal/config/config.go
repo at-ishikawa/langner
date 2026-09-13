@@ -36,10 +36,10 @@ type Config struct {
 }
 
 // AuthConfig configures Google-OAuth sign-in. Non-secret settings come from the
-// config file; the three secret fields (GoogleClientSecret, SessionSigningKey,
-// CredentialEncryptionKey) are bound to environment variables ONLY and must
-// never be written to YAML or source. Auth is enabled when SessionSigningKey is
-// set; otherwise the server runs ungated (YAML-only dev).
+// config file; the two secret fields (GoogleClientSecret, SessionSigningKey)
+// are usually provided via environment variables and must never be committed.
+// Auth is enabled when SessionSigningKey is set; otherwise the server runs
+// ungated (YAML-only dev). No user PII is stored, so there is no encryption key.
 type AuthConfig struct {
 	GoogleClientID    string   `mapstructure:"google_client_id"`
 	RedirectURL       string   `mapstructure:"redirect_url"`
@@ -49,12 +49,11 @@ type AuthConfig struct {
 	CookieSecure      bool     `mapstructure:"cookie_secure"`
 	CookieSameSite    string   `mapstructure:"cookie_samesite"`
 
-	// Secrets — env-bound only (GOOGLE_CLIENT_SECRET, SESSION_SIGNING_KEY,
-	// CREDENTIAL_ENCRYPTION_KEY). SessionSigningKey signs the session cookie;
-	// CredentialEncryptionKey (a DISTINCT key) encrypts user PII at rest.
-	GoogleClientSecret      string `mapstructure:"google_client_secret"`
-	SessionSigningKey       string `mapstructure:"session_signing_key"`
-	CredentialEncryptionKey string `mapstructure:"credential_encryption_key"`
+	// Secrets — SessionSigningKey signs the session cookie + OAuth CSRF state;
+	// GoogleClientSecret is the OAuth client secret. Provide privately (env or
+	// an uncommitted config); never commit real values.
+	GoogleClientSecret string `mapstructure:"google_client_secret"`
+	SessionSigningKey  string `mapstructure:"session_signing_key"`
 }
 
 // Enabled reports whether Google-OAuth sign-in is active. Auth turns on as soon
@@ -302,9 +301,6 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	}
 	if err := v.BindEnv("auth.session_signing_key", "SESSION_SIGNING_KEY"); err != nil {
 		return nil, fmt.Errorf("failed to bind SESSION_SIGNING_KEY environment variable: %w", err)
-	}
-	if err := v.BindEnv("auth.credential_encryption_key", "CREDENTIAL_ENCRYPTION_KEY"); err != nil {
-		return nil, fmt.Errorf("failed to bind CREDENTIAL_ENCRYPTION_KEY environment variable: %w", err)
 	}
 
 	if err := v.ReadInConfig(); err != nil {

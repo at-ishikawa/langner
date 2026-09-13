@@ -303,8 +303,8 @@ type authComponents struct {
 }
 
 // buildAuth constructs the OAuth handler and session signer. It fails fast when
-// a required secret is missing or the credential key is the wrong length, so a
-// misconfigured auth deployment never starts silently ungated.
+// a required secret is missing, so a misconfigured auth deployment never starts
+// silently ungated.
 func buildAuth(cfg config.AuthConfig, db *sqlx.DB) (*authComponents, error) {
 	if db == nil {
 		return nil, errors.New("auth is enabled but no database is configured (users are stored in Postgres)")
@@ -317,14 +317,7 @@ func buildAuth(cfg config.AuthConfig, db *sqlx.DB) (*authComponents, error) {
 	if err != nil {
 		return nil, fmt.Errorf("state signing key: %w", err)
 	}
-	if cfg.CredentialEncryptionKey == "" {
-		return nil, errors.New("auth is enabled but CREDENTIAL_ENCRYPTION_KEY is not set")
-	}
-	enc, err := auth.NewEncryptor(auth.DecodeKey(cfg.CredentialEncryptionKey))
-	if err != nil {
-		return nil, fmt.Errorf("credential encryption key: %w", err)
-	}
-	users := auth.NewUserRepository(db, enc)
+	users := auth.NewUserRepository(db)
 	authenticator := auth.NewOAuthClient(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.RedirectURL, nil)
 	handler := server.NewAuthHandler(server.AuthHandlerConfig{
 		Authenticator:  authenticator,

@@ -6,17 +6,16 @@ export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 export interface AuthUser {
-  email: string;
-  name: string;
+  username: string;
 }
 
 interface MeResponse {
   authenticated: boolean;
-  email?: string;
-  name?: string;
+  username?: string;
 }
 
-// getMe returns the signed-in user, or null when unauthenticated (401).
+// getMe returns the signed-in user, or null when unauthenticated (401). No
+// email/name is exposed — only the auto-generated username.
 export async function getMe(): Promise<AuthUser | null> {
   let res: Response;
   try {
@@ -28,10 +27,10 @@ export async function getMe(): Promise<AuthUser | null> {
     return null;
   }
   const data = (await res.json()) as MeResponse;
-  if (!data.authenticated || !data.email) {
+  if (!data.authenticated || !data.username) {
     return null;
   }
-  return { email: data.email, name: data.name ?? "" };
+  return { username: data.username };
 }
 
 // login starts the Google OAuth flow by navigating to the backend, which

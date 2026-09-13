@@ -42,12 +42,10 @@ func newAuthIssueTestCookieCommand() *cobra.Command {
 			if !cfg.Auth.Enabled() {
 				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
 			}
-			enc, err := auth.NewEncryptor(auth.DecodeKey(cfg.Auth.CredentialEncryptionKey))
-			if err != nil {
-				return fmt.Errorf("credential encryption key: %w", err)
-			}
-			users := auth.NewUserRepository(db, enc)
-			user, err := users.Upsert(cmd.Context(), "e2e-test|"+auth.NormalizeEmail(email), email, "E2E Test User")
+			users := auth.NewUserRepository(db)
+			// Stable synthetic google_sub per allowlisted email so re-running is
+			// idempotent (same user row, same username preserved).
+			user, err := users.Upsert(cmd.Context(), "e2e-test|"+auth.NormalizeEmail(email))
 			if err != nil {
 				return fmt.Errorf("upsert test user: %w", err)
 			}
