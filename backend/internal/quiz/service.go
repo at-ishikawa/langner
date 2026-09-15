@@ -159,6 +159,38 @@ func (s *Service) loadHistoriesForDateRange(from, to time.Time) (map[string][]no
 	return notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 }
 
+// preloadHistoriesKey types the context value carrying a batch's pre-loaded
+// histories. Unexported so only WithPreloadedHistories can set it.
+type preloadHistoriesKey struct{}
+
+// WithPreloadedHistories returns a context carrying histories keyed by notebook
+// ID for nextIntervalDays to reuse, so a batch submit reads each notebook's
+// history ONCE (before the loop) instead of once per graded card. It is
+// request-scoped — the map lives on this one call's context, never on the
+// shared Service — so it is safe when the process serves multiple users.
+func WithPreloadedHistories(ctx context.Context, histories map[string][]notebook.LearningHistory) context.Context {
+	return context.WithValue(ctx, preloadHistoriesKey{}, histories)
+}
+
+// preloadedHistories returns the batch preload installed by
+// WithPreloadedHistories, or nil when none is present.
+func preloadedHistories(ctx context.Context) map[string][]notebook.LearningHistory {
+	m, _ := ctx.Value(preloadHistoriesKey{}).(map[string][]notebook.LearningHistory)
+	return m
+}
+
+// PreloadHistoriesForNotebooks loads the given notebooks' histories in one
+// scoped read, for a batch handler to install via WithPreloadedHistories before
+// grading a batch. Best-effort: an error yields an empty map so callers just
+// fall back to the per-card scoped read.
+func (s *Service) PreloadHistoriesForNotebooks(notebookIDs ...string) map[string][]notebook.LearningHistory {
+	m, err := s.loadHistoriesForNotebooks(notebookIDs...)
+	if err != nil {
+		return map[string][]notebook.LearningHistory{}
+	}
+	return m
+}
+
 func (s *Service) newReader() (*notebook.Reader, error) {
 	reader, err := notebook.NewReader(
 		s.notebooksConfig.StoriesDirectories,
@@ -763,6 +795,7 @@ func canonicalNoteSurface(displaySurface, word string) (usage, entry string) {
 // Returns 0 only when histories cannot be loaded; a first-ever attempt (no
 // priors) legitimately yields the ladder's first step (>=1 for a success).
 func (s *Service) nextIntervalDays(
+	ctx context.Context,
 	notebookName, id string,
 	quizType notebook.QuizType,
 	isCorrect bool,
@@ -783,9 +816,17 @@ func (s *Service) nextIntervalDays(
 		QuizType:       string(quizType),
 	}
 
-	histories, err := s.loadHistoriesForNotebooks(notebookName)
-	if err != nil {
-		return 0
+	// Reuse a per-request preload when the batch submit path installed one, so a
+	// batch of N answers issues ONE scoped history read per distinct notebook
+	// instead of one per card. Falls back to a scoped read when this notebook
+	// wasn't preloaded (single-answer submits, or a notebook outside the batch).
+	histories := preloadedHistories(ctx)
+	if _, ok := histories[notebookName]; !ok {
+		loaded, err := s.loadHistoriesForNotebooks(notebookName)
+		if err != nil {
+			return 0
+		}
+		histories = loaded
 	}
 	var priorLogs []notebook.LearningRecord
 	if expr := notebook.FindExpressionInHistories(histories[notebookName], id, names...); expr != nil {
@@ -848,7 +889,7 @@ func (s *Service) SaveResultInfo(ctx context.Context, card Card, result GradeRes
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeNotebook, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	log.IntervalDays = s.nextIntervalDays(ctx, card.NotebookName, senseID, notebook.QuizTypeNotebook, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -1890,7 +1931,7 @@ func (s *Service) SaveReverseResultInfo(ctx context.Context, card ReverseCard, r
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeReverse, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	log.IntervalDays = s.nextIntervalDays(ctx, card.NotebookName, senseID, notebook.QuizTypeReverse, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -2318,7 +2359,7 @@ func (s *Service) SaveFreeformResultInfo(ctx context.Context, card FreeformCard,
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeFreeform, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	log.IntervalDays = s.nextIntervalDays(ctx, card.NotebookName, senseID, notebook.QuizTypeFreeform, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}

@@ -44,6 +44,22 @@ func gradeError(msg string, err error) error {
 	return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", msg, err))
 }
 
+// preloadHistories loads the distinct notebooks' histories once and returns a
+// context carrying them, so the per-card SaveResultInfo calls in a batch reuse
+// one scoped read per notebook instead of issuing one per graded card.
+func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []string) context.Context {
+	seen := make(map[string]struct{}, len(notebookNames))
+	ids := make([]string, 0, len(notebookNames))
+	for _, n := range notebookNames {
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		ids = append(ids, n)
+	}
+	return quiz.WithPreloadedHistories(ctx, h.svc.PreloadHistoriesForNotebooks(ids...))
+}
+
 // BatchSubmitAnswers grades a batch of standard quiz answers.
 // Grading runs in parallel (N OpenAI calls concurrently); learning history
 // writes are serialized to preserve deterministic save order.
@@ -88,6 +104,14 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	if err != nil {
 		return nil, gradeError("grade answers", err)
 	}
+
+	// Read each notebook's history once for the whole batch (interval computation
+	// reuses it) instead of once per card.
+	nbNames := make([]string, len(cards))
+	for i := range cards {
+		nbNames[i] = cards[i].NotebookName
+	}
+	ctx = h.preloadHistories(ctx, nbNames)
 
 	responses := make([]*apiv1.SubmitAnswerResponse, len(answers))
 	for i := range answers {
@@ -161,6 +185,13 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	if err != nil {
 		return nil, gradeError("grade answers", err)
 	}
+
+	// Read each notebook's history once for the whole batch instead of per card.
+	nbNames := make([]string, len(cards))
+	for i := range cards {
+		nbNames[i] = cards[i].NotebookName
+	}
+	ctx = h.preloadHistories(ctx, nbNames)
 
 	responses := make([]*apiv1.SubmitReverseAnswerResponse, len(answers))
 	for i := range answers {
