@@ -156,11 +156,6 @@ func (h *AnalyticsHandler) GetTrends(
 			LevelUps:     int32(res.Summary.LevelUps),
 			Lapses:       int32(res.Summary.Lapses),
 		},
-		Backlog: &apiv1.BacklogSnapshot{
-			NeverCorrect: int32(res.Backlog.NeverCorrect),
-			InProgress:   int32(res.Backlog.InProgress),
-			Mastered:     int32(res.Backlog.Mastered),
-		},
 	}), nil
 }
 

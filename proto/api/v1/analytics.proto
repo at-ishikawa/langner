@@ -70,9 +70,11 @@ message GetTrendsResponse {
   // equal the sum of the per-bucket values — a word tested in two months
   // is two bucket entries but one word in the range total.
   TrendsSummary summary = 2;
-  // backlog is a point-in-time snapshot at the end of the range, not a
-  // flow over it.
-  BacklogSnapshot backlog = 3;
+  // 3 was BacklogSnapshot backlog — the end-of-range Mastered / In-progress /
+  // Never-correct snapshot. Removed: it forced a whole-history scan to render a
+  // windowed chart, and was unused.
+  reserved 3;
+  reserved "backlog";
 }
 
 // TrendBucket is one period (day / week / month) of activity.
@@ -112,17 +114,6 @@ message TrendsSummary {
   int32 words_learned = 3;
   int32 level_ups = 4;
   int32 lapses = 5;
-}
-
-// BacklogSnapshot is the state of the user's words at the end of the
-// range — where things stand today, not what flowed over the period.
-message BacklogSnapshot {
-  // never_correct is words with attempts but no correct answer yet.
-  int32 never_correct = 1;
-  // in_progress is words being learned but not yet mastered.
-  int32 in_progress = 2;
-  // mastered is words whose latest status is usable or intuitive.
-  int32 mastered = 3;
 }
 
 // AnalyticsFilters carries the optional notebook + quiz-type filters used

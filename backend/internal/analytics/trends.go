@@ -92,19 +92,10 @@ type TrendsSummary struct {
 	Lapses       int
 }
 
-// Backlog is the end-of-range state snapshot: where the user's words stand
-// today, not what flowed over the period. Counts are distinct words.
-type Backlog struct {
-	NeverCorrect int
-	InProgress   int
-	Mastered     int
-}
-
 // TrendsResult bundles Repository.Trends output.
 type TrendsResult struct {
 	Buckets []TrendBucket
 	Summary TrendsSummary
-	Backlog Backlog
 }
 
 // Status values a learning record can carry. The understood/usable/
@@ -121,18 +112,6 @@ const (
 // been recalled at least once, so it sits in the understood-or-better zone.
 func isRetained(status string) bool {
 	return status == statusUnderstood || status == statusUsable || status == statusIntuitive
-}
-
-// isMastered reports whether a status is at the top of the ladder.
-func isMastered(status string) bool {
-	return status == statusUsable || status == statusIntuitive
-}
-
-// isCorrect reports whether an attempt was answered correctly. Anything
-// other than misunderstood (or the empty learning status) is correct,
-// matching Attempt.IsWrong elsewhere in the package.
-func isCorrect(status string) bool {
-	return status != statusMisunderstood && status != ""
 }
 
 // levelBox returns the spaced-repetition box index for a stored interval:
@@ -179,11 +158,12 @@ type flaggedAttempt struct {
 	lapse    bool
 }
 
-// ComputeTrends aggregates a flat list of attempts into per-bucket series,
-// range totals, and the end-of-range backlog. attempts must contain every
-// attempt of every series in scope (already notebook/quiz filtered but NOT
-// date filtered) — transition metrics need each series' history before the
-// range start to know its prior state.
+// ComputeTrends aggregates a flat list of attempts into per-bucket series and
+// range totals. attempts only need to cover the query's date window: transition
+// metrics (level-ups / lapses / crossings) are computed relative to the previous
+// attempt of the SAME series within the given set, so an attempt with no earlier
+// attempt in the window simply starts fresh (no flag). This lets the read window
+// the query instead of loading every attempt of all time.
 func ComputeTrends(attempts []TrendAttempt, q TrendsQuery) TrendsResult {
 	series := map[seriesKey][]TrendAttempt{}
 	for _, a := range attempts {
@@ -197,26 +177,17 @@ func ComputeTrends(attempts []TrendAttempt, q TrendsQuery) TrendsResult {
 	}
 
 	var flags []flaggedAttempt
-	backlog := computeBacklog(series, endExcl, &flags, q)
+	computeFlags(series, &flags)
 
-	result := TrendsResult{Backlog: backlog}
+	var result TrendsResult
 	result.Buckets, result.Summary = aggregateBuckets(flags, q, endExcl)
 	return result
 }
 
-// computeBacklog walks each series oldest-first to (a) fill the flags slice
-// with per-attempt events and (b) determine each series' state as of the
-// end of the range, then rolls series state up per word into the backlog.
-func computeBacklog(series map[seriesKey][]TrendAttempt, endExcl time.Time, flags *[]flaggedAttempt, _ TrendsQuery) Backlog {
-	// Per-word roll-up of series state. A word is mastered if any of its
-	// series is mastered; never-correct if it has attempts but none correct.
-	type wordState struct {
-		hasAttempt  bool
-		everCorrect bool
-		mastered    bool
-	}
-	words := map[string]*wordState{}
-
+// computeFlags walks each series oldest-first and fills the flags slice with the
+// per-attempt transition events (crossing into a retained status, box level-up,
+// box lapse) that aggregateBuckets rolls up per bucket.
+func computeFlags(series map[seriesKey][]TrendAttempt, flags *[]flaggedAttempt) {
 	for _, list := range series {
 		sort.Slice(list, func(i, j int) bool {
 			if !list[i].LearnedAt.Equal(list[j].LearnedAt) {
@@ -225,54 +196,26 @@ func computeBacklog(series map[seriesKey][]TrendAttempt, endExcl time.Time, flag
 			return list[i].Quality < list[j].Quality
 		})
 
-		var lastStatus string
-		var sawInRange bool
 		for i, a := range list {
-			retNow := isRetained(a.Status)
-			retPrev := i > 0 && isRetained(list[i-1].Status)
-			f := flaggedAttempt{attempt: a, crossing: retNow && !retPrev}
+			f := flaggedAttempt{attempt: a}
+			// A transition (crossing into retained / box level-up / lapse) is
+			// only counted when we actually observe the previous attempt of the
+			// same series. The first attempt in the loaded window has no observed
+			// predecessor, so it flags nothing — this keeps a windowed read from
+			// inventing "learned"/"level-up" events for words whose real prior
+			// attempt happened before the window.
 			if i > 0 {
+				retNow := isRetained(a.Status)
+				retPrev := isRetained(list[i-1].Status)
+				f.crossing = retNow && !retPrev
 				box := levelBox(a.IntervalDays)
 				prevBox := levelBox(list[i-1].IntervalDays)
 				f.levelUp = box > prevBox
 				f.lapse = box < prevBox
 			}
 			*flags = append(*flags, f)
-
-			if endExcl.IsZero() || a.LearnedAt.Before(endExcl) {
-				sawInRange = true
-				lastStatus = a.Status
-				wid := seriesDiscriminator(a.ID, a.Expression)
-				ws := words[wid]
-				if ws == nil {
-					ws = &wordState{}
-					words[wid] = ws
-				}
-				ws.hasAttempt = true
-				if isCorrect(a.Status) {
-					ws.everCorrect = true
-				}
-			}
-		}
-		if sawInRange && isMastered(lastStatus) {
-			// list's last in-range status maps to the series' latest word.
-			last := list[len(list)-1]
-			words[seriesDiscriminator(last.ID, last.Expression)].mastered = true
 		}
 	}
-
-	var b Backlog
-	for _, ws := range words {
-		switch {
-		case ws.mastered:
-			b.Mastered++
-		case !ws.everCorrect:
-			b.NeverCorrect++
-		default:
-			b.InProgress++
-		}
-	}
-	return b
 }
 
 // seriesAgg accumulates one bucket+group's metrics. tested/learned are sets

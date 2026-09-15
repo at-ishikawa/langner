@@ -200,7 +200,6 @@ func TestAnalyticsHandler_GetTrends(t *testing.T) {
 				},
 			}},
 			Summary: analytics.TrendsSummary{Attempts: 12, WordsTested: 8, WordsLearned: 3, LevelUps: 2},
-			Backlog: analytics.Backlog{NeverCorrect: 4, InProgress: 10, Mastered: 20},
 		},
 	}
 	h := NewAnalyticsHandler(repo)
@@ -218,15 +217,13 @@ func TestAnalyticsHandler_GetTrends(t *testing.T) {
 	assert.Equal(t, "flashcards", repo.gotTrends.Filters.NotebookID)
 	assert.Equal(t, "2026-01-01", repo.gotTrends.Start.Format("2006-01-02"))
 	assert.Equal(t, "2026-06-30", repo.gotTrends.End.Format("2006-01-02"))
-	// Response carries buckets, summary and backlog.
+	// Response carries buckets and summary.
 	require.Len(t, resp.Msg.Buckets, 1)
 	assert.Equal(t, "2026-06-01", resp.Msg.Buckets[0].Period)
 	require.Len(t, resp.Msg.Buckets[0].Series, 1)
 	assert.Equal(t, "Notebook", resp.Msg.Buckets[0].Series[0].GroupLabel)
 	assert.EqualValues(t, 8, resp.Msg.Buckets[0].Series[0].WordsTested)
 	assert.EqualValues(t, 3, resp.Msg.Summary.WordsLearned)
-	assert.EqualValues(t, 20, resp.Msg.Backlog.Mastered)
-	assert.EqualValues(t, 4, resp.Msg.Backlog.NeverCorrect)
 }
 
 func TestAnalyticsHandler_GetWordHistory(t *testing.T) {

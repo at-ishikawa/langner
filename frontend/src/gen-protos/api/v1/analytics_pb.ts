@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/analytics.proto.
  */
 export const file_api_v1_analytics: GenFile = /*@__PURE__*/
-  fileDesc("ChZhcGkvdjEvYW5hbHl0aWNzLnByb3RvEgZhcGkudjEitQEKEEdldFRyZW5kc1JlcXVlc3QSKAoLZ3JhbnVsYXJpdHkYASABKA4yEy5hcGkudjEuR3JhbnVsYXJpdHkSEgoKc3RhcnRfZGF0ZRgCIAEoCRIQCghlbmRfZGF0ZRgDIAEoCRImCghncm91cF9ieRgEIAEoDjIULmFwaS52MS5UcmVuZEdyb3VwQnkSKQoHZmlsdGVycxgFIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIosBChFHZXRUcmVuZHNSZXNwb25zZRIkCgdidWNrZXRzGAEgAygLMhMuYXBpLnYxLlRyZW5kQnVja2V0EiYKB3N1bW1hcnkYAiABKAsyFS5hcGkudjEuVHJlbmRzU3VtbWFyeRIoCgdiYWNrbG9nGAMgASgLMhcuYXBpLnYxLkJhY2tsb2dTbmFwc2hvdCJCCgtUcmVuZEJ1Y2tldBIOCgZwZXJpb2QYASABKAkSIwoGc2VyaWVzGAIgAygLMhMuYXBpLnYxLlRyZW5kU2VyaWVzIpcBCgtUcmVuZFNlcmllcxIRCglncm91cF9rZXkYASABKAkSEwoLZ3JvdXBfbGFiZWwYAiABKAkSEAoIYXR0ZW1wdHMYAyABKAUSFAoMd29yZHNfdGVzdGVkGAQgASgFEhUKDXdvcmRzX2xlYXJuZWQYBSABKAUSEQoJbGV2ZWxfdXBzGAYgASgFEg4KBmxhcHNlcxgHIAEoBSJxCg1UcmVuZHNTdW1tYXJ5EhAKCGF0dGVtcHRzGAEgASgFEhQKDHdvcmRzX3Rlc3RlZBgCIAEoBRIVCg13b3Jkc19sZWFybmVkGAMgASgFEhEKCWxldmVsX3VwcxgEIAEoBRIOCgZsYXBzZXMYBSABKAUiTwoPQmFja2xvZ1NuYXBzaG90EhUKDW5ldmVyX2NvcnJlY3QYASABKAUSEwoLaW5fcHJvZ3Jlc3MYAiABKAUSEAoIbWFzdGVyZWQYAyABKAUiOgoQQW5hbHl0aWNzRmlsdGVycxITCgtub3RlYm9va19pZBgBIAEoCRIRCglxdWl6X3R5cGUYAiABKAkiYgoYR2V0RGFpbHlTdW1tYXJpZXNSZXF1ZXN0EhsKCnJhbmdlX2RheXMYASABKAVCB7pIBBoCKAASKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIj8KGUdldERhaWx5U3VtbWFyaWVzUmVzcG9uc2USIgoEZGF5cxgBIAMoCzIULmFwaS52MS5EYWlseVN1bW1hcnkicgoMRGFpbHlTdW1tYXJ5EgwKBGRhdGUYASABKAkSEwoLd3JvbmdfY291bnQYAiABKAUSEwoLdG90YWxfY291bnQYAyABKAUSFgoObm90ZWJvb2tfY291bnQYBCABKAUSEgoKcXVpel90eXBlcxgFIAMoCSJXChNHZXREYXlEZXRhaWxSZXF1ZXN0EhUKBGRhdGUYASABKAlCB7pIBHICEAESKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIo8BChRHZXREYXlEZXRhaWxSZXNwb25zZRIlCgdzdW1tYXJ5GAEgASgLMhQuYXBpLnYxLkRhaWx5U3VtbWFyeRImCgt3cm9uZ193b3JkcxgCIAMoCzIRLmFwaS52MS5Xcm9uZ1dvcmQSFQoNcHJldmlvdXNfZGF0ZRgDIAEoCRIRCgluZXh0X2RhdGUYBCABKAkiowMKCVdyb25nV29yZBIPCgdub3RlX2lkGAEgASgDEhIKCmV4cHJlc3Npb24YAiABKAkSEwoLbm90ZWJvb2tfaWQYAyABKAkSFgoObm90ZWJvb2tfdGl0bGUYBCABKAkSEwoLc2NlbmVfdGl0bGUYBSABKAkSEQoJcXVpel90eXBlGAYgASgJEhYKDnJlY2VudF9wYXR0ZXJuGAcgAygJEhwKFGN1cnJlbnRfd3Jvbmdfc3RyZWFrGAggASgFEh8KF3ByZXZpb3VzX2NvcnJlY3Rfc3RyZWFrGAkgASgFEhYKDmN1cnJlbnRfc3RhdHVzGAogASgJEg8KB21lYW5pbmcYCyABKAkSGAoQZXhhbXBsZV9zZW50ZW5jZRgMIAEoCRIVCg1ub3RlYm9va19raW5kGA0gASgJEg8KB3NraXBwZWQYDiABKAgSLAoOcmVsYXRlZF9ncm91cHMYDyADKAsyFC5hcGkudjEuUmVsYXRlZEdyb3VwEhAKCHNlbnNlX2lkGBAgASgJEhoKEmRpc3BsYXlfZXhwcmVzc2lvbhgRIAEoCSI8CgxSZWxhdGVkR3JvdXASDAoEa2luZBgBIAEoCRINCgVsYWJlbBgCIAEoCRIPCgdtZW1iZXJzGAMgAygJIogBChVHZXRXb3JkSGlzdG9yeVJlcXVlc3QSDwoHbm90ZV9pZBgBIAEoAxITCgtub3RlYm9va19pZBgCIAEoCRIbCgpleHByZXNzaW9uGAMgASgJQge6SARyAhABEhoKCXF1aXpfdHlwZRgEIAEoCUIHukgEcgIQARIQCghzZW5zZV9pZBgFIAEoCSLJAQoWR2V0V29yZEhpc3RvcnlSZXNwb25zZRISCgpleHByZXNzaW9uGAEgASgJEhMKC25vdGVib29rX2lkGAIgASgJEhYKDm5vdGVib29rX3RpdGxlGAMgASgJEhYKDmN1cnJlbnRfc3RhdHVzGAQgASgJEhwKFGN1cnJlbnRfd3Jvbmdfc3RyZWFrGAUgASgFEiYKCGF0dGVtcHRzGAYgAygLMhQuYXBpLnYxLkF0dGVtcHRFbnRyeRIQCghzZW5zZV9pZBgHIAEoCSKMAQoMQXR0ZW1wdEVudHJ5EgwKBGRhdGUYASABKAkSEQoJcXVpel90eXBlGAIgASgJEg4KBnJlc3VsdBgDIAEoCRIPCgdxdWFsaXR5GAQgASgFEhsKE3N0cmVha19iZWZvcmVfd3JvbmcYBSABKAUSHQoVc3RyZWFrX2JlZm9yZV9jb3JyZWN0GAYgASgFKoIBCgtHcmFudWxhcml0eRIbChdHUkFOVUxBUklUWV9VTlNQRUNJRklFRBAAEhMKD0dSQU5VTEFSSVRZX0RBWRABEhQKEEdSQU5VTEFSSVRZX1dFRUsQAhIVChFHUkFOVUxBUklUWV9NT05USBADEhQKEEdSQU5VTEFSSVRZX1lFQVIQBCqeAQoMVHJlbmRHcm91cEJ5Eh4KGlRSRU5EX0dST1VQX0JZX1VOU1BFQ0lGSUVEEAASHAoYVFJFTkRfR1JPVVBfQllfUVVJWl9UWVBFEAESGwoXVFJFTkRfR1JPVVBfQllfTk9URUJPT0sQAhIZChVUUkVORF9HUk9VUF9CWV9TVEFUVVMQAxIYChRUUkVORF9HUk9VUF9CWV9MRVZFTBAEMsoCChBBbmFseXRpY3NTZXJ2aWNlElgKEUdldERhaWx5U3VtbWFyaWVzEiAuYXBpLnYxLkdldERhaWx5U3VtbWFyaWVzUmVxdWVzdBohLmFwaS52MS5HZXREYWlseVN1bW1hcmllc1Jlc3BvbnNlEkkKDEdldERheURldGFpbBIbLmFwaS52MS5HZXREYXlEZXRhaWxSZXF1ZXN0GhwuYXBpLnYxLkdldERheURldGFpbFJlc3BvbnNlEk8KDkdldFdvcmRIaXN0b3J5Eh0uYXBpLnYxLkdldFdvcmRIaXN0b3J5UmVxdWVzdBoeLmFwaS52MS5HZXRXb3JkSGlzdG9yeVJlc3BvbnNlEkAKCUdldFRyZW5kcxIYLmFwaS52MS5HZXRUcmVuZHNSZXF1ZXN0GhkuYXBpLnYxLkdldFRyZW5kc1Jlc3BvbnNlQjhaNmdpdGh1Yi5jb20vYXQtaXNoaWthd2EvbGFuZ25lci9nZW4tcHJvdG9zL2FwaS92MTthcGl2MWIGcHJvdG8z", [file_buf_validate_validate]);
+  fileDesc("ChZhcGkvdjEvYW5hbHl0aWNzLnByb3RvEgZhcGkudjEitQEKEEdldFRyZW5kc1JlcXVlc3QSKAoLZ3JhbnVsYXJpdHkYASABKA4yEy5hcGkudjEuR3JhbnVsYXJpdHkSEgoKc3RhcnRfZGF0ZRgCIAEoCRIQCghlbmRfZGF0ZRgDIAEoCRImCghncm91cF9ieRgEIAEoDjIULmFwaS52MS5UcmVuZEdyb3VwQnkSKQoHZmlsdGVycxgFIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzInAKEUdldFRyZW5kc1Jlc3BvbnNlEiQKB2J1Y2tldHMYASADKAsyEy5hcGkudjEuVHJlbmRCdWNrZXQSJgoHc3VtbWFyeRgCIAEoCzIVLmFwaS52MS5UcmVuZHNTdW1tYXJ5SgQIAxAEUgdiYWNrbG9nIkIKC1RyZW5kQnVja2V0Eg4KBnBlcmlvZBgBIAEoCRIjCgZzZXJpZXMYAiADKAsyEy5hcGkudjEuVHJlbmRTZXJpZXMilwEKC1RyZW5kU2VyaWVzEhEKCWdyb3VwX2tleRgBIAEoCRITCgtncm91cF9sYWJlbBgCIAEoCRIQCghhdHRlbXB0cxgDIAEoBRIUCgx3b3Jkc190ZXN0ZWQYBCABKAUSFQoNd29yZHNfbGVhcm5lZBgFIAEoBRIRCglsZXZlbF91cHMYBiABKAUSDgoGbGFwc2VzGAcgASgFInEKDVRyZW5kc1N1bW1hcnkSEAoIYXR0ZW1wdHMYASABKAUSFAoMd29yZHNfdGVzdGVkGAIgASgFEhUKDXdvcmRzX2xlYXJuZWQYAyABKAUSEQoJbGV2ZWxfdXBzGAQgASgFEg4KBmxhcHNlcxgFIAEoBSI6ChBBbmFseXRpY3NGaWx0ZXJzEhMKC25vdGVib29rX2lkGAEgASgJEhEKCXF1aXpfdHlwZRgCIAEoCSJiChhHZXREYWlseVN1bW1hcmllc1JlcXVlc3QSGwoKcmFuZ2VfZGF5cxgBIAEoBUIHukgEGgIoABIpCgdmaWx0ZXJzGAIgASgLMhguYXBpLnYxLkFuYWx5dGljc0ZpbHRlcnMiPwoZR2V0RGFpbHlTdW1tYXJpZXNSZXNwb25zZRIiCgRkYXlzGAEgAygLMhQuYXBpLnYxLkRhaWx5U3VtbWFyeSJyCgxEYWlseVN1bW1hcnkSDAoEZGF0ZRgBIAEoCRITCgt3cm9uZ19jb3VudBgCIAEoBRITCgt0b3RhbF9jb3VudBgDIAEoBRIWCg5ub3RlYm9va19jb3VudBgEIAEoBRISCgpxdWl6X3R5cGVzGAUgAygJIlcKE0dldERheURldGFpbFJlcXVlc3QSFQoEZGF0ZRgBIAEoCUIHukgEcgIQARIpCgdmaWx0ZXJzGAIgASgLMhguYXBpLnYxLkFuYWx5dGljc0ZpbHRlcnMijwEKFEdldERheURldGFpbFJlc3BvbnNlEiUKB3N1bW1hcnkYASABKAsyFC5hcGkudjEuRGFpbHlTdW1tYXJ5EiYKC3dyb25nX3dvcmRzGAIgAygLMhEuYXBpLnYxLldyb25nV29yZBIVCg1wcmV2aW91c19kYXRlGAMgASgJEhEKCW5leHRfZGF0ZRgEIAEoCSKjAwoJV3JvbmdXb3JkEg8KB25vdGVfaWQYASABKAMSEgoKZXhwcmVzc2lvbhgCIAEoCRITCgtub3RlYm9va19pZBgDIAEoCRIWCg5ub3RlYm9va190aXRsZRgEIAEoCRITCgtzY2VuZV90aXRsZRgFIAEoCRIRCglxdWl6X3R5cGUYBiABKAkSFgoOcmVjZW50X3BhdHRlcm4YByADKAkSHAoUY3VycmVudF93cm9uZ19zdHJlYWsYCCABKAUSHwoXcHJldmlvdXNfY29ycmVjdF9zdHJlYWsYCSABKAUSFgoOY3VycmVudF9zdGF0dXMYCiABKAkSDwoHbWVhbmluZxgLIAEoCRIYChBleGFtcGxlX3NlbnRlbmNlGAwgASgJEhUKDW5vdGVib29rX2tpbmQYDSABKAkSDwoHc2tpcHBlZBgOIAEoCBIsCg5yZWxhdGVkX2dyb3VwcxgPIAMoCzIULmFwaS52MS5SZWxhdGVkR3JvdXASEAoIc2Vuc2VfaWQYECABKAkSGgoSZGlzcGxheV9leHByZXNzaW9uGBEgASgJIjwKDFJlbGF0ZWRHcm91cBIMCgRraW5kGAEgASgJEg0KBWxhYmVsGAIgASgJEg8KB21lbWJlcnMYAyADKAkiiAEKFUdldFdvcmRIaXN0b3J5UmVxdWVzdBIPCgdub3RlX2lkGAEgASgDEhMKC25vdGVib29rX2lkGAIgASgJEhsKCmV4cHJlc3Npb24YAyABKAlCB7pIBHICEAESGgoJcXVpel90eXBlGAQgASgJQge6SARyAhABEhAKCHNlbnNlX2lkGAUgASgJIskBChZHZXRXb3JkSGlzdG9yeVJlc3BvbnNlEhIKCmV4cHJlc3Npb24YASABKAkSEwoLbm90ZWJvb2tfaWQYAiABKAkSFgoObm90ZWJvb2tfdGl0bGUYAyABKAkSFgoOY3VycmVudF9zdGF0dXMYBCABKAkSHAoUY3VycmVudF93cm9uZ19zdHJlYWsYBSABKAUSJgoIYXR0ZW1wdHMYBiADKAsyFC5hcGkudjEuQXR0ZW1wdEVudHJ5EhAKCHNlbnNlX2lkGAcgASgJIowBCgxBdHRlbXB0RW50cnkSDAoEZGF0ZRgBIAEoCRIRCglxdWl6X3R5cGUYAiABKAkSDgoGcmVzdWx0GAMgASgJEg8KB3F1YWxpdHkYBCABKAUSGwoTc3RyZWFrX2JlZm9yZV93cm9uZxgFIAEoBRIdChVzdHJlYWtfYmVmb3JlX2NvcnJlY3QYBiABKAUqggEKC0dyYW51bGFyaXR5EhsKF0dSQU5VTEFSSVRZX1VOU1BFQ0lGSUVEEAASEwoPR1JBTlVMQVJJVFlfREFZEAESFAoQR1JBTlVMQVJJVFlfV0VFSxACEhUKEUdSQU5VTEFSSVRZX01PTlRIEAMSFAoQR1JBTlVMQVJJVFlfWUVBUhAEKp4BCgxUcmVuZEdyb3VwQnkSHgoaVFJFTkRfR1JPVVBfQllfVU5TUEVDSUZJRUQQABIcChhUUkVORF9HUk9VUF9CWV9RVUlaX1RZUEUQARIbChdUUkVORF9HUk9VUF9CWV9OT1RFQk9PSxACEhkKFVRSRU5EX0dST1VQX0JZX1NUQVRVUxADEhgKFFRSRU5EX0dST1VQX0JZX0xFVkVMEAQyygIKEEFuYWx5dGljc1NlcnZpY2USWAoRR2V0RGFpbHlTdW1tYXJpZXMSIC5hcGkudjEuR2V0RGFpbHlTdW1tYXJpZXNSZXF1ZXN0GiEuYXBpLnYxLkdldERhaWx5U3VtbWFyaWVzUmVzcG9uc2USSQoMR2V0RGF5RGV0YWlsEhsuYXBpLnYxLkdldERheURldGFpbFJlcXVlc3QaHC5hcGkudjEuR2V0RGF5RGV0YWlsUmVzcG9uc2USTwoOR2V0V29yZEhpc3RvcnkSHS5hcGkudjEuR2V0V29yZEhpc3RvcnlSZXF1ZXN0Gh4uYXBpLnYxLkdldFdvcmRIaXN0b3J5UmVzcG9uc2USQAoJR2V0VHJlbmRzEhguYXBpLnYxLkdldFRyZW5kc1JlcXVlc3QaGS5hcGkudjEuR2V0VHJlbmRzUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
 
 /**
  * @generated from message api.v1.GetTrendsRequest
@@ -75,14 +75,6 @@ export type GetTrendsResponse = Message<"api.v1.GetTrendsResponse"> & {
    * @generated from field: api.v1.TrendsSummary summary = 2;
    */
   summary?: TrendsSummary | undefined;
-
-  /**
-   * backlog is a point-in-time snapshot at the end of the range, not a
-   * flow over it.
-   *
-   * @generated from field: api.v1.BacklogSnapshot backlog = 3;
-   */
-  backlog?: BacklogSnapshot | undefined;
 };
 
 /**
@@ -225,42 +217,6 @@ export const TrendsSummarySchema: GenMessage<TrendsSummary> = /*@__PURE__*/
   messageDesc(file_api_v1_analytics, 4);
 
 /**
- * BacklogSnapshot is the state of the user's words at the end of the
- * range — where things stand today, not what flowed over the period.
- *
- * @generated from message api.v1.BacklogSnapshot
- */
-export type BacklogSnapshot = Message<"api.v1.BacklogSnapshot"> & {
-  /**
-   * never_correct is words with attempts but no correct answer yet.
-   *
-   * @generated from field: int32 never_correct = 1;
-   */
-  neverCorrect: number;
-
-  /**
-   * in_progress is words being learned but not yet mastered.
-   *
-   * @generated from field: int32 in_progress = 2;
-   */
-  inProgress: number;
-
-  /**
-   * mastered is words whose latest status is usable or intuitive.
-   *
-   * @generated from field: int32 mastered = 3;
-   */
-  mastered: number;
-};
-
-/**
- * Describes the message api.v1.BacklogSnapshot.
- * Use `create(BacklogSnapshotSchema)` to create a new message.
- */
-export const BacklogSnapshotSchema: GenMessage<BacklogSnapshot> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 5);
-
-/**
  * AnalyticsFilters carries the optional notebook + quiz-type filters used
  * on both the Day List and Day Detail pages.
  *
@@ -288,7 +244,7 @@ export type AnalyticsFilters = Message<"api.v1.AnalyticsFilters"> & {
  * Use `create(AnalyticsFiltersSchema)` to create a new message.
  */
 export const AnalyticsFiltersSchema: GenMessage<AnalyticsFilters> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 6);
+  messageDesc(file_api_v1_analytics, 5);
 
 /**
  * @generated from message api.v1.GetDailySummariesRequest
@@ -313,7 +269,7 @@ export type GetDailySummariesRequest = Message<"api.v1.GetDailySummariesRequest"
  * Use `create(GetDailySummariesRequestSchema)` to create a new message.
  */
 export const GetDailySummariesRequestSchema: GenMessage<GetDailySummariesRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 7);
+  messageDesc(file_api_v1_analytics, 6);
 
 /**
  * @generated from message api.v1.GetDailySummariesResponse
@@ -330,7 +286,7 @@ export type GetDailySummariesResponse = Message<"api.v1.GetDailySummariesRespons
  * Use `create(GetDailySummariesResponseSchema)` to create a new message.
  */
 export const GetDailySummariesResponseSchema: GenMessage<GetDailySummariesResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 8);
+  messageDesc(file_api_v1_analytics, 7);
 
 /**
  * DailySummary is one row on the Day List.
@@ -374,7 +330,7 @@ export type DailySummary = Message<"api.v1.DailySummary"> & {
  * Use `create(DailySummarySchema)` to create a new message.
  */
 export const DailySummarySchema: GenMessage<DailySummary> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 9);
+  messageDesc(file_api_v1_analytics, 8);
 
 /**
  * @generated from message api.v1.GetDayDetailRequest
@@ -398,7 +354,7 @@ export type GetDayDetailRequest = Message<"api.v1.GetDayDetailRequest"> & {
  * Use `create(GetDayDetailRequestSchema)` to create a new message.
  */
 export const GetDayDetailRequestSchema: GenMessage<GetDayDetailRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 10);
+  messageDesc(file_api_v1_analytics, 9);
 
 /**
  * @generated from message api.v1.GetDayDetailResponse
@@ -434,7 +390,7 @@ export type GetDayDetailResponse = Message<"api.v1.GetDayDetailResponse"> & {
  * Use `create(GetDayDetailResponseSchema)` to create a new message.
  */
 export const GetDayDetailResponseSchema: GenMessage<GetDayDetailResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 11);
+  messageDesc(file_api_v1_analytics, 10);
 
 /**
  * WrongWord is one (word × quiz_type) attempt the user got wrong on the
@@ -590,7 +546,7 @@ export type WrongWord = Message<"api.v1.WrongWord"> & {
  * Use `create(WrongWordSchema)` to create a new message.
  */
 export const WrongWordSchema: GenMessage<WrongWord> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 12);
+  messageDesc(file_api_v1_analytics, 11);
 
 /**
  * RelatedGroup is one cluster of related entries surfaced on the
@@ -638,7 +594,7 @@ export type RelatedGroup = Message<"api.v1.RelatedGroup"> & {
  * Use `create(RelatedGroupSchema)` to create a new message.
  */
 export const RelatedGroupSchema: GenMessage<RelatedGroup> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 13);
+  messageDesc(file_api_v1_analytics, 12);
 
 /**
  * @generated from message api.v1.GetWordHistoryRequest
@@ -679,7 +635,7 @@ export type GetWordHistoryRequest = Message<"api.v1.GetWordHistoryRequest"> & {
  * Use `create(GetWordHistoryRequestSchema)` to create a new message.
  */
 export const GetWordHistoryRequestSchema: GenMessage<GetWordHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 14);
+  messageDesc(file_api_v1_analytics, 13);
 
 /**
  * @generated from message api.v1.GetWordHistoryResponse
@@ -729,7 +685,7 @@ export type GetWordHistoryResponse = Message<"api.v1.GetWordHistoryResponse"> & 
  * Use `create(GetWordHistoryResponseSchema)` to create a new message.
  */
 export const GetWordHistoryResponseSchema: GenMessage<GetWordHistoryResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 15);
+  messageDesc(file_api_v1_analytics, 14);
 
 /**
  * AttemptEntry is a single past attempt with the streak context just
@@ -782,7 +738,7 @@ export type AttemptEntry = Message<"api.v1.AttemptEntry"> & {
  * Use `create(AttemptEntrySchema)` to create a new message.
  */
 export const AttemptEntrySchema: GenMessage<AttemptEntry> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 16);
+  messageDesc(file_api_v1_analytics, 15);
 
 /**
  * Granularity is the width of one Trends bucket.

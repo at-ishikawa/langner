@@ -311,25 +311,6 @@ export default function AnalyticsOverviewPage() {
         })}
       </SimpleGrid>
 
-      {/* Backlog — point-in-time state, not flow */}
-      {data && (
-        <SimpleGrid columns={{ base: 3 }} gap={3} mb={5} data-testid="trend-backlog">
-          {[
-            { label: "Never correct", value: data.backlog?.neverCorrect ?? 0, color: "orange.500" },
-            { label: "In progress", value: data.backlog?.inProgress ?? 0, color: "blue.500" },
-            { label: "Usable+", value: data.backlog?.mastered ?? 0, color: "green.500" },
-          ].map((s) => (
-            <HStack key={s.label} borderWidth="1px" borderColor="border" borderRadius="md" p={3} gap={3}>
-              <Box w="3px" alignSelf="stretch" borderRadius="full" bg={s.color} />
-              <Box>
-                <Text fontSize="xl" fontWeight="bold" lineHeight="1.1">{String(s.value)}</Text>
-                <Text fontSize="xs" color="fg.muted">{s.label}</Text>
-              </Box>
-            </HStack>
-          ))}
-        </SimpleGrid>
-      )}
-
       {/* Chart */}
       {error && (
         <Text color="red.500" data-testid="trends-error">Failed to load trends: {error}</Text>

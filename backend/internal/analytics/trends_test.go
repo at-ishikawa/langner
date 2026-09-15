@@ -184,22 +184,26 @@ func TestComputeTrends_RangeFilterKeepsPriorState(t *testing.T) {
 	assert.Equal(t, 0, res.Summary.WordsLearned)
 }
 
-func TestComputeTrends_Backlog(t *testing.T) {
+// TestComputeTrends_WindowedFirstAttemptNotCountedAsLearned pins the windowed
+// read semantic: a word whose real prior drill was before the window appears
+// with only its in-window attempt(s), and its FIRST in-window attempt must NOT
+// be counted as newly "learned" (no observed transition) — otherwise windowing
+// would over-report words-learned/level-ups for already-known words. An observed
+// misunderstood->understood transition inside the window still counts.
+func TestComputeTrends_WindowedFirstAttemptNotCountedAsLearned(t *testing.T) {
+	start, _ := time.Parse("2006-01-02", "2026-06-01")
+	end, _ := time.Parse("2006-01-02", "2026-06-30")
 	attempts := []TrendAttempt{
-		// mastered: latest status usable
-		ta("mastered_word", "notebook", "understood", 4, 7, "2026-06-01"),
-		ta("mastered_word", "notebook", "usable", 5, 30, "2026-06-10"),
-		// in progress: retained but not mastered
-		ta("progress_word", "notebook", "understood", 4, 7, "2026-06-05"),
-		// never correct: only misunderstood
-		ta("stuck_word", "notebook", "misunderstood", 1, 1, "2026-06-06"),
-		ta("stuck_word", "notebook", "misunderstood", 1, 1, "2026-06-08"),
+		// Already-known word re-drilled once in-window (its prior drill, before
+		// the window, is not in the loaded set): must not count as learned.
+		ta("known_word", "notebook", "understood", 4, 30, "2026-06-05"),
+		// Genuine in-window transition (miss -> learn): counts once.
+		ta("learning_word", "notebook", "misunderstood", 1, 1, "2026-06-03"),
+		ta("learning_word", "notebook", "understood", 4, 7, "2026-06-10"),
 	}
-	res := ComputeTrends(attempts, TrendsQuery{Granularity: GranularityMonth})
-
-	assert.Equal(t, 1, res.Backlog.Mastered)
-	assert.Equal(t, 1, res.Backlog.InProgress)
-	assert.Equal(t, 1, res.Backlog.NeverCorrect)
+	res := ComputeTrends(attempts, TrendsQuery{Granularity: GranularityMonth, Start: start, End: end})
+	assert.Equal(t, 1, res.Summary.WordsLearned, "only the observed in-window transition counts as learned")
+	assert.Equal(t, 3, res.Summary.Attempts, "every attempt still counts")
 }
 
 func TestComputeTrends_YearBucketing(t *testing.T) {
