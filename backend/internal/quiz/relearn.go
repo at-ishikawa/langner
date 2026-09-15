@@ -169,7 +169,12 @@ type relearnCandidate struct {
 // (per-quiz-type skipped_at set via SkipWord) never enters the pool, matching the
 // normal card loaders (quiz-ui-invariants U1).
 func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) {
-	histories, err := s.loadHistories()
+	// Relearn only re-drills misses inside [windowStart, now), and the candidate
+	// loop below discards anything older than windowStart anyway — so read only
+	// that window's logs instead of the entire learning history. A zero `to`
+	// leaves the upper bound open (now). This is the single biggest read on the
+	// Relearn path; scoping it keeps a session from shipping the whole log table.
+	histories, err := s.loadHistoriesForDateRange(windowStart, time.Time{})
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}

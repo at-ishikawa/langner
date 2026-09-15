@@ -147,7 +147,17 @@ func (r *YAMLRepository) attemptsInRange(ctx context.Context, filters Filters, f
 // map[notebookID][]LearningHistory shape.
 func (r *YAMLRepository) loadHistories(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
 	if r.store != nil {
-		return r.store.LoadAll(ctx)
+		// The DB store has no unbounded read: enumerate the notebooks that have
+		// history (a cheap indexed-column DISTINCT) and issue a scoped read for
+		// exactly those. Result is identical to loading everything, but every SQL
+		// read carries a notebook scope. (Trends and the unfiltered Day Detail
+		// need each series' full pre-window state, so they can't be date-scoped —
+		// hence all notebooks rather than a window here.)
+		ids, err := r.store.NotebookIDs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list notebook ids: %w", err)
+		}
+		return r.store.LoadForNotebooks(ctx, ids)
 	}
 	return notebook.NewLearningHistories(r.directory)
 }

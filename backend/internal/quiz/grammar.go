@@ -240,7 +240,7 @@ func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistoriesForNotebooks(reader.GrammarStoryIDs()...)
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
@@ -394,7 +394,7 @@ func (s *Service) SaveGrammarBlankInfo(ctx context.Context, notebookID, senseID 
 		IsCorrect:        result.Correct,
 		LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(notebookID, senseID, notebook.QuizTypeGrammar, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, senseID)
+	log.IntervalDays = s.nextIntervalDays(ctx, notebookID, senseID, notebook.QuizTypeGrammar, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, senseID)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return "", "", fmt.Errorf("save grammar learning log for %q: %w", notebookID, err)
 	}

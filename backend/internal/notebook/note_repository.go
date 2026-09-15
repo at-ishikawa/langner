@@ -55,7 +55,7 @@ func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 	if err := r.db.SelectContext(ctx, &notes, "SELECT "+noteColumns+" FROM notes ORDER BY id"); err != nil {
 		return nil, fmt.Errorf("load all notes: %w", err)
 	}
-	if err := r.loadRelations(ctx, notes); err != nil {
+	if err := r.loadRelations(ctx, notes, true); err != nil {
 		return nil, err
 	}
 	return notes, nil
@@ -76,11 +76,12 @@ func (r *DBNoteRepository) CountNotebookNotes(ctx context.Context, notebookID st
 
 // FindByNotebooks returns the notes linked to ANY of notebookIDs, plus id-less
 // orphan notes (no notebook_notes links) — the legacy synthetic notes the
-// origin-history fallback keys by name — each with its FULL relations (images,
-// references, and ALL notebook_notes, so a note shared across notebooks still
-// attributes its logs correctly). It is the scoped counterpart to FindAll used
-// by HistoryStore.LoadForNotebooks so a per-notebook read doesn't pull every
-// note. Empty notebookIDs returns nil.
+// origin-history fallback keys by name — each with ALL its notebook_notes links
+// (so a note shared across notebooks still attributes its logs correctly). It is
+// the scoped counterpart to FindAll used by HistoryStore.LoadForNotebooks so a
+// per-notebook read doesn't pull every note. note_images / note_references are
+// NOT loaded: the history reconstruction never reads them, so fetching them here
+// was pure egress. Empty notebookIDs returns nil.
 func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []string) ([]NoteRecord, error) {
 	if len(notebookIDs) == 0 {
 		return nil, nil
@@ -99,16 +100,17 @@ func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []st
 	if err := r.db.SelectContext(ctx, &notes, r.db.Rebind(query), args...); err != nil {
 		return nil, fmt.Errorf("load notes by notebooks: %w", err)
 	}
-	if err := r.loadRelations(ctx, notes); err != nil {
+	if err := r.loadRelations(ctx, notes, false); err != nil {
 		return nil, err
 	}
 	return notes, nil
 }
 
-// FindByIDs returns the notes with the given ids, each with its full relations
-// (images, references, notebook_notes). The scoped counterpart to FindAll used
-// by HistoryStore.LoadForDateRange to fetch just the notes referenced by an
-// in-range set of logs. Empty ids returns nil.
+// FindByIDs returns the notes with the given ids, each with its notebook_notes
+// links. The scoped counterpart to FindAll used by HistoryStore.LoadForDateRange
+// to fetch just the notes referenced by an in-range set of logs. note_images /
+// note_references are NOT loaded (the history reconstruction never reads them).
+// Empty ids returns nil.
 func (r *DBNoteRepository) FindByIDs(ctx context.Context, ids []int64) ([]NoteRecord, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -121,7 +123,7 @@ func (r *DBNoteRepository) FindByIDs(ctx context.Context, ids []int64) ([]NoteRe
 	if err := r.db.SelectContext(ctx, &notes, r.db.Rebind(query), args...); err != nil {
 		return nil, fmt.Errorf("load notes by ids: %w", err)
 	}
-	if err := r.loadRelations(ctx, notes); err != nil {
+	if err := r.loadRelations(ctx, notes, false); err != nil {
 		return nil, err
 	}
 	return notes, nil
@@ -134,7 +136,7 @@ func (r *DBNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord,
 		return nil, fmt.Errorf("find note by id %d: %w", id, err)
 	}
 	notes := []NoteRecord{note}
-	if err := r.loadRelations(ctx, notes); err != nil {
+	if err := r.loadRelations(ctx, notes, true); err != nil {
 		return nil, err
 	}
 	return &notes[0], nil
@@ -355,7 +357,14 @@ func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord,
 	})
 }
 
-func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord) error {
+// loadRelations attaches each note's related rows. notebook_notes links are
+// ALWAYS loaded (the history reconstruction buckets logs per notebook/scene by
+// them). note_images / note_references are loaded only when includeMedia is
+// true: the history read paths (FindByNotebooks / FindByIDs) never read those
+// fields, so shipping every image URL and reference blob on a per-notebook quiz
+// load or an analytics read was pure egress waste. The full-fidelity callers
+// (FindAll for export/import, single-note FindByID) pass true.
+func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord, includeMedia bool) error {
 	if len(notes) == 0 {
 		return nil
 	}
@@ -367,33 +376,35 @@ func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord
 		noteMap[notes[i].ID] = &notes[i]
 	}
 
-	query, args, err := sqlx.In("SELECT "+noteImageColumns+" FROM note_images WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
-	if err != nil {
-		return fmt.Errorf("build note images query: %w", err)
-	}
-	var images []NoteImage
-	if err := r.db.SelectContext(ctx, &images, r.db.Rebind(query), args...); err != nil {
-		return fmt.Errorf("load note images: %w", err)
-	}
-	for _, img := range images {
-		n := noteMap[img.NoteID]
-		n.Images = append(n.Images, img)
+	if includeMedia {
+		query, args, err := sqlx.In("SELECT "+noteImageColumns+" FROM note_images WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
+		if err != nil {
+			return fmt.Errorf("build note images query: %w", err)
+		}
+		var images []NoteImage
+		if err := r.db.SelectContext(ctx, &images, r.db.Rebind(query), args...); err != nil {
+			return fmt.Errorf("load note images: %w", err)
+		}
+		for _, img := range images {
+			n := noteMap[img.NoteID]
+			n.Images = append(n.Images, img)
+		}
+
+		query, args, err = sqlx.In("SELECT "+noteReferenceColumns+" FROM note_references WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
+		if err != nil {
+			return fmt.Errorf("build note references query: %w", err)
+		}
+		var refs []NoteReference
+		if err := r.db.SelectContext(ctx, &refs, r.db.Rebind(query), args...); err != nil {
+			return fmt.Errorf("load note references: %w", err)
+		}
+		for _, ref := range refs {
+			n := noteMap[ref.NoteID]
+			n.References = append(n.References, ref)
+		}
 	}
 
-	query, args, err = sqlx.In("SELECT "+noteReferenceColumns+" FROM note_references WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
-	if err != nil {
-		return fmt.Errorf("build note references query: %w", err)
-	}
-	var refs []NoteReference
-	if err := r.db.SelectContext(ctx, &refs, r.db.Rebind(query), args...); err != nil {
-		return fmt.Errorf("load note references: %w", err)
-	}
-	for _, ref := range refs {
-		n := noteMap[ref.NoteID]
-		n.References = append(n.References, ref)
-	}
-
-	query, args, err = sqlx.In("SELECT "+notebookNoteColumns+" FROM notebook_notes WHERE note_id IN (?) ORDER BY id", noteIDs)
+	query, args, err := sqlx.In("SELECT "+notebookNoteColumns+" FROM notebook_notes WHERE note_id IN (?) ORDER BY id", noteIDs)
 	if err != nil {
 		return fmt.Errorf("build notebook notes query: %w", err)
 	}

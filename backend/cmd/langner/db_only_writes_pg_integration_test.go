@@ -231,7 +231,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 	assert.Equal(t, string(notebook.QuizTypeNotebook), row.QuizType)
 
 	// (c) reading back through DBHistoryStore reflects the attempt.
-	histories, err := repos.HistoryStore.LoadAll(ctx)
+	histories, err := repos.HistoryStore.LoadForNotebooks(ctx, []string{target.NotebookID})
 	require.NoError(t, err)
 	expr, ok := findExpressionInHistories(histories[target.NotebookID], target.Usage, target.Entry)
 	require.True(t, ok, "the just-saved word must appear in the DB-reconstructed history")
@@ -255,7 +255,7 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 		`SELECT COUNT(*) FROM note_skip_flags WHERE note_id = $1 AND quiz_type = 'notebook'`, target.ID))
 	assert.Equal(t, 1, skipCount, "Exclude must UPSERT a note_skip_flags row")
 	// (c) the loaders' read side now sees the word excluded (L2 symmetry).
-	histAfterSkip, err := repos.HistoryStore.LoadAll(ctx)
+	histAfterSkip, err := repos.HistoryStore.LoadForNotebooks(ctx, []string{target.NotebookID})
 	require.NoError(t, err)
 	exprSkip, ok := findExpressionInHistories(histAfterSkip[target.NotebookID], target.Usage, target.Entry)
 	require.True(t, ok)

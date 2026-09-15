@@ -108,6 +108,22 @@ func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, erro
 	return logs, nil
 }
 
+// DistinctNotebookIDs returns every notebook that has at least one learning log
+// (the distinct, non-empty source_notebook_id values). It reads a single narrow,
+// indexed column rather than the whole table, so callers that need "every
+// notebook" (e.g. the analytics all-notebooks view) can enumerate the set and
+// then issue a scoped LoadForNotebooks — no unbounded whole-history read.
+func (r *DBLearningRepository) DistinctNotebookIDs(ctx context.Context) ([]string, error) {
+	var ids []string
+	const q = `SELECT DISTINCT source_notebook_id FROM learning_logs
+		WHERE source_notebook_id IS NOT NULL AND source_notebook_id <> ''
+		ORDER BY source_notebook_id`
+	if err := r.db.SelectContext(ctx, &ids, q); err != nil {
+		return nil, fmt.Errorf("load distinct notebook ids: %w", err)
+	}
+	return ids, nil
+}
+
 // FindByTargets returns the logs whose target is in any of the given id sets
 // (note_id, origin_id, or correction_id). It is the scoped counterpart to
 // FindAll used by HistoryStore.LoadForNotebooks: only the logs for the notes /

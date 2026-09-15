@@ -99,7 +99,7 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 	skipFlagRepo := notebook.NewDBSkipFlagRepository(db)
 	store := NewDBHistoryStore(noteRepo, learningRepo, originRepo, skipFlagRepo, nil)
 
-	all, err := store.LoadAll(ctx)
+	all, err := store.loadAllFallback(ctx)
 	require.NoError(t, err)
 	scoped, err := store.LoadForNotebooks(ctx, []string{nbA})
 	require.NoError(t, err)
@@ -179,7 +179,7 @@ func TestDBHistoryStore_LoadForDateRange_ScopesByDate(t *testing.T) {
 		return n
 	}
 
-	all, err := store.LoadAll(ctx)
+	all, err := store.loadAllFallback(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 2, countAttempts(all), "both attempts present in the full load")
 
