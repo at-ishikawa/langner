@@ -29,24 +29,30 @@ type noteNotebook struct {
 // instance — the result map shape is identical so downstream consumers
 // (filters, validators, handlers) don't have to change.
 type HistoryStore interface {
-	// LoadAll returns every notebook's histories keyed by notebook ID.
-	// Mirrors notebook.NewLearningHistories return shape so the swap is
-	// drop-in.
-	LoadAll(ctx context.Context) (map[string][]notebook.LearningHistory, error)
 	// LoadForNotebooks returns histories for ONLY the given notebooks, keyed
-	// by notebook ID. It reconstructs each notebook identically to LoadAll but
-	// fetches only that subset of rows from the DB — the read that keeps a
+	// by notebook ID. It reconstructs each notebook the same way a whole-dataset
+	// load would, but fetches only that subset of rows from the DB — the read
+	// that keeps a
 	// per-notebook quiz load (and a per-card submit) from shipping the entire
 	// dataset over the wire on every request. An empty/nil id list returns an
-	// empty map. The reconstruction is shared with LoadAll (see reconstruct),
-	// so read/write symmetry (learning-history invariants L2/L4) is preserved.
+	// empty map. The reconstruction is shared (see reconstruct), so read/write
+	// symmetry (learning-history invariants L2/L4) is preserved.
+	//
+	// This is the ONLY "everything" read: a caller that needs every notebook
+	// enumerates NotebookIDs and passes them here, so every history read carries
+	// a notebook (or date) scope — there is no unbounded whole-history primitive.
 	LoadForNotebooks(ctx context.Context, notebookIDs []string) (map[string][]notebook.LearningHistory, error)
 	// LoadForDateRange returns histories built from ONLY the logs whose
 	// learned_at falls in [from, to) (plus the notes/origins/corrections those
-	// logs reference), keyed by notebook ID. Used by the Analytics daily view so
-	// a 30-day window doesn't pull the whole log table. A zero `from`/`to` means
-	// unbounded on that end. Same shared reconstruct() as LoadAll.
+	// logs reference), keyed by notebook ID. Used by the Analytics daily view and
+	// the Relearn pool so a bounded window doesn't pull the whole log table. A
+	// zero `from`/`to` means unbounded on that end. Same shared reconstruct().
 	LoadForDateRange(ctx context.Context, from, to time.Time) (map[string][]notebook.LearningHistory, error)
+	// NotebookIDs returns every notebook that has learning history — the "all
+	// notebooks" set. A view that genuinely needs every notebook (the analytics
+	// Trends / unfiltered Day Detail) enumerates this cheap indexed-column set
+	// and then issues a scoped LoadForNotebooks, instead of an unbounded read.
+	NotebookIDs(ctx context.Context) ([]string, error)
 }
 
 // Optional capability interfaces: only the DB-backed repositories implement the
@@ -107,11 +113,37 @@ func NewDBHistoryStore(noteRepo notebook.NoteRepository, learningRepo LearningRe
 	}
 }
 
-// LoadAll rebuilds the per-notebook LearningHistory map from DB rows.
-// Story notebooks land in the .Scenes shape (one LearningScene per
-// notebook_notes.subgroup); flashcard notebooks land in the flat
-// .Expressions shape with Metadata.Type = "flashcard".
-func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
+// NotebookIDs returns every notebook that has at least one learning log. It is
+// the enumeration the analytics all-notebooks views use so they can issue a
+// scoped LoadForNotebooks instead of a whole-history read. When the learning
+// repository doesn't expose the cheap distinct query (test doubles), it falls
+// back to deriving the ids from a full load.
+func (s *DBHistoryStore) NotebookIDs(ctx context.Context) ([]string, error) {
+	if src, ok := s.learningRepo.(interface {
+		DistinctNotebookIDs(ctx context.Context) ([]string, error)
+	}); ok {
+		return src.DistinctNotebookIDs(ctx)
+	}
+	histories, err := s.loadAllFallback(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(histories))
+	for id := range histories {
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// loadAllFallback rebuilds the per-notebook LearningHistory map from a
+// whole-table read. It is NOT part of the HistoryStore interface and is NOT
+// reachable from any page-serving path — the production repositories all
+// implement the scoped/date/id queries, so the scoped loaders never fall back
+// here. It exists only so LoadForDateRange / NotebookIDs still work against test
+// doubles that don't implement those capability interfaces. Story notebooks land
+// in the .Scenes shape (one LearningScene per notebook_notes.subgroup); flashcard
+// notebooks land in the flat .Expressions shape with Metadata.Type = "flashcard".
+func (s *DBHistoryStore) loadAllFallback(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
 	notes, err := s.noteRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load notes: %w", err)
@@ -138,8 +170,8 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 // LoadForNotebooks reconstructs histories for only notebookIDs. It fetches the
 // scoped rows (notes linked to those notebooks — plus id-less orphan notes for
 // the legacy origin fallback — their logs, and those notebooks' origins /
-// grammar corrections) then runs the SAME reconstruct as LoadAll, so the result
-// is identical to filtering LoadAll's output to these notebooks, but without
+// grammar corrections) then runs the SAME reconstruct, so the result
+// is identical to a whole-dataset load filtered to these notebooks, but without
 // pulling the whole dataset over the wire. Repos that don't implement the
 // scoped queries fall back to FindAll (correct, no egress win).
 func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []string) (map[string][]notebook.LearningHistory, error) {
@@ -210,7 +242,7 @@ func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []str
 	}
 	// A note shared with a notebook we didn't ask for carries that notebook's
 	// link too, so reconstruct may emit a partial entry for it. Drop anything
-	// outside the requested set so the result equals filtering LoadAll to
+	// outside the requested set so the result equals a whole-dataset load filtered to
 	// notebookIDs.
 	want := make(map[string]bool, len(notebookIDs))
 	for _, id := range notebookIDs {
@@ -232,7 +264,7 @@ func (s *DBHistoryStore) LoadForDateRange(ctx context.Context, from, to time.Tim
 	lr, okLogs := s.learningRepo.(dateScopedLogs)
 	nr, okNotes := s.noteRepo.(idScopedNotes)
 	if !okLogs || !okNotes {
-		return s.LoadAll(ctx)
+		return s.loadAllFallback(ctx)
 	}
 
 	logs, err := lr.FindByDateRange(ctx, from, to)
@@ -296,7 +328,7 @@ func keysOf(m map[int64]struct{}) []int64 {
 }
 
 // reconstruct builds the per-notebook LearningHistory map from already-fetched
-// rows. Shared by LoadAll (whole dataset) and LoadForNotebooks (a scoped
+// rows. Shared by loadAllFallback (whole dataset) and LoadForNotebooks (a scoped
 // subset) so both produce identical histories for any notebook they cover.
 func (s *DBHistoryStore) reconstruct(
 	ctx context.Context,

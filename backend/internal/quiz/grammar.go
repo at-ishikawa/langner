@@ -240,7 +240,7 @@ func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
-	learningHistories, err := s.loadHistories()
+	learningHistories, err := s.loadHistoriesForNotebooks(reader.GrammarStoryIDs()...)
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}

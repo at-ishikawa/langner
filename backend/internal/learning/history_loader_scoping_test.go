@@ -110,7 +110,7 @@ func TestDBHistoryStore_LoadAll_ScopesSharedNoteLogsPerNotebook(t *testing.T) {
 	}
 	store := NewDBHistoryStore(&scopeNoteRepo{notes: notes}, &scopeLearnRepo{logs: logs}, nil, scopeSkipRepo{}, nil)
 
-	histories, err := store.LoadAll(context.Background())
+	histories, err := store.loadAllFallback(context.Background())
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestDBHistoryStore_LoadAll_EmptySourceFallback(t *testing.T) {
 	}
 	store := NewDBHistoryStore(&scopeNoteRepo{notes: notes}, &scopeLearnRepo{logs: logs}, nil, scopeSkipRepo{}, nil)
 
-	histories, err := store.LoadAll(context.Background())
+	histories, err := store.loadAllFallback(context.Background())
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestWriteAllLoadAll_YAMLParity_SharedNote(t *testing.T) {
 
 	// DB side: reconstruct from the same rows.
 	store := NewDBHistoryStore(&scopeNoteRepo{notes: notes}, &scopeLearnRepo{logs: logs}, nil, scopeSkipRepo{}, nil)
-	dbHistories, err := store.LoadAll(context.Background())
+	dbHistories, err := store.loadAllFallback(context.Background())
 	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}

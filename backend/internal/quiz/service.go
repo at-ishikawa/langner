@@ -117,19 +117,6 @@ func (s *Service) ensureNotes(notebookIDs []string) {
 	}
 }
 
-// loadHistories returns every notebook's learning history keyed by notebook
-// ID. It is the single READ entry point every quiz-service method uses so a
-// change of source is a one-line swap: when a historyStore is installed the
-// data comes from the database, otherwise from the YAML learning_notes files.
-// The two sources return the identical map shape, so callers never branch on
-// which one served the read.
-func (s *Service) loadHistories() (map[string][]notebook.LearningHistory, error) {
-	if s.historyStore != nil {
-		return s.historyStore.LoadAll(context.Background())
-	}
-	return notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-}
-
 // loadHistoriesForNotebooks returns histories for ONLY the given notebooks. It
 // is the scoped read the quiz load / submit paths use so a single-notebook quiz
 // (or a per-card grade) doesn't ship the entire learning history over the wire
@@ -152,6 +139,24 @@ func (s *Service) loadHistoriesForNotebooks(notebookIDs ...string) (map[string][
 		}
 	}
 	return out, nil
+}
+
+// loadHistoriesForDateRange returns histories built from ONLY the logs whose
+// learned_at falls in [from, to) (plus the notes/origins/corrections those logs
+// reference). It is the scoped read the Relearn pool uses: Relearn only cares
+// about misses inside its recent-miss window, so a session doesn't ship the
+// entire learning history over the wire on every start. A zero from/to means
+// unbounded on that end. In DB mode it pushes the window into SQL
+// (HistoryStore.LoadForDateRange); in YAML mode it loads the local files then
+// filters by date, so the map shape is identical either way.
+func (s *Service) loadHistoriesForDateRange(from, to time.Time) (map[string][]notebook.LearningHistory, error) {
+	if s.historyStore != nil {
+		return s.historyStore.LoadForDateRange(context.Background(), from, to)
+	}
+	// YAML mode is local (no egress to save), and the sole caller re-filters by
+	// its window, so return the on-disk histories unchanged — same as the YAML
+	// branch of loadHistoriesForNotebooks.
+	return notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
@@ -198,7 +203,27 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := s.loadHistories()
+	// Scope the history read to exactly the notebooks this summary walks (every
+	// story + flashcard index, plus the definitions-only books below) instead of
+	// loading the whole dataset. The counts only index learningHistories[id] for
+	// these ids, so a scoped read is identical output with far less egress — and
+	// it carries no unbounded query. (Etymology notebooks need no history: their
+	// summary is just an origin count.)
+	summaryIDSet := make(map[string]struct{})
+	for id := range reader.GetStoryIndexes() {
+		summaryIDSet[id] = struct{}{}
+	}
+	for id := range reader.GetFlashcardIndexes() {
+		summaryIDSet[id] = struct{}{}
+	}
+	for _, id := range reader.GetDefinitionsBookIDs() {
+		summaryIDSet[id] = struct{}{}
+	}
+	summaryIDs := make([]string, 0, len(summaryIDSet))
+	for id := range summaryIDSet {
+		summaryIDs = append(summaryIDs, id)
+	}
+	learningHistories, err := s.loadHistoriesForNotebooks(summaryIDs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1932,8 +1957,11 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 		cards = append(cards, words...)
 	}
 
-	// Also load from definitions-only books
-	learningHistories, _ := s.loadHistories()
+	// Also load from definitions-only books. loadDefinitionWords only consults
+	// these books' histories (to drop skipped_at-excluded words), so scope the
+	// read to exactly the definitions-book IDs instead of loading every
+	// notebook's history — the definitions books are the only keys it indexes.
+	learningHistories, _ := s.loadHistoriesForNotebooks(reader.GetDefinitionsBookIDs()...)
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
 		if _, isStory := storyIndexes[nbID]; isStory {
 			continue

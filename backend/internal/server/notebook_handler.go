@@ -48,19 +48,6 @@ func (h *NotebookHandler) SetHistoryStore(store learning.HistoryStore) {
 	h.historyStore = store
 }
 
-// loadHistories returns every notebook's learning history keyed by notebook
-// ID, from the DB store when one is installed and otherwise from the on-disk
-// learning_notes YAML. Both sources return the identical map shape (the
-// DBHistoryStore mirrors notebook.NewLearningHistories), so callers never
-// branch on the source — mirroring quiz.Service.loadHistories, which keeps
-// the Learn page's reads symmetric with the quiz service's.
-func (h *NotebookHandler) loadHistories() (map[string][]notebook.LearningHistory, error) {
-	if h.historyStore != nil {
-		return h.historyStore.LoadAll(context.Background())
-	}
-	return notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
-}
-
 // loadHistoriesForNotebooks returns histories for ONLY the given notebooks —
 // the scoped read the per-notebook Learn page uses so viewing one notebook
 // doesn't pull the whole learning history over the wire (mirrors
@@ -739,7 +726,20 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 	// notebook-detail page does off NotebookWord). Both are keyed per notebook
 	// because a definition can come from any book. Skip exclusion is read via
 	// the SAME key SkipWord wrote (invariant L2).
-	learningHistories, _ := h.loadHistories()
+	// Learning histories are read lazily per referenced notebook and cached,
+	// mirroring noteIDsFor below — a definition can come from any book, but only
+	// a handful are actually referenced here, so this scopes the read to those
+	// instead of loading every notebook's history (and carries no unbounded read).
+	historyCache := make(map[string][]notebook.LearningHistory)
+	historiesFor := func(nbName string) []notebook.LearningHistory {
+		if hs, ok := historyCache[nbName]; ok {
+			return hs
+		}
+		scoped, _ := h.loadHistoriesForNotebooks(nbName)
+		hs := scoped[nbName]
+		historyCache[nbName] = hs
+		return hs
+	}
 	noteIDCache := make(map[string]map[string]int64)
 	noteIDsFor := func(nbName string) map[string]int64 {
 		if m, ok := noteIDCache[nbName]; ok {
@@ -820,7 +820,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		// etymology-origin exclusion; skipped_quiz_types lists every mode the
 		// word is excluded from; note_id lets the frontend call
 		// SkipWord/ResumeWord directly (zero when the DB isn't populated).
-		histories := learningHistories[nbName]
+		histories := historiesFor(nbName)
 		isSkipped := notebook.IsExpressionExcludedForQuizType(histories, id, notebook.QuizTypeEtymologyOrigin, expr)
 		var skippedTypes []string
 		if e := notebook.FindExpressionInHistories(histories, id, expr); e != nil {

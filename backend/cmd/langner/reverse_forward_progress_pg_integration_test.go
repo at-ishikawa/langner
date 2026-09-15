@@ -201,7 +201,7 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 
 	// The reconstructed history must surface the just-written attempt as latest,
 	// not the older imported miss (proves the newest-first ordering).
-	hist, err := repos.HistoryStore.LoadAll(ctx)
+	hist, err := repos.HistoryStore.LoadForNotebooks(ctx, []string{bookID})
 	require.NoError(t, err)
 	pulExpr, found := findExpressionInHistories(hist[bookID], "pulmonary", "relating to the lungs")
 	require.True(t, found)

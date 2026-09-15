@@ -192,7 +192,7 @@ func TestDBHistoryStore_LoadAll_RoutesLogsAndSkipFlags(t *testing.T) {
 		nil,
 	)
 
-	histories, err := store.LoadAll(context.Background())
+	histories, err := store.loadAllFallback(context.Background())
 	require.NoError(t, err)
 
 	// Vocab note 1 (story): recognition → LearnedLogs, reverse → ReverseLogs.
@@ -257,7 +257,7 @@ func TestDBHistoryStore_LoadAll_ReconstructsGrammarFromDB(t *testing.T) {
 		&fakeSkipFlagRepo{},
 		&fakeGrammarRepo{records: corrections},
 	)
-	histories, err := store.LoadAll(context.Background())
+	histories, err := store.loadAllFallback(context.Background())
 	require.NoError(t, err)
 
 	journal := histories["journal"]
@@ -289,7 +289,7 @@ func TestDBHistoryStore_LoadAll_ReconstructsGrammarFromDB(t *testing.T) {
 
 	// Grammar is DB-only now: with a nil grammar repo, no grammar history.
 	noGrammar := NewDBHistoryStore(&fakeNoteRepo{}, &fakeLearningRepo{logs: logs}, &fakeOriginRepo{}, &fakeSkipFlagRepo{}, nil)
-	got, err := noGrammar.LoadAll(context.Background())
+	got, err := noGrammar.loadAllFallback(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, got["journal"], "no grammar repo → no grammar history")
 }
