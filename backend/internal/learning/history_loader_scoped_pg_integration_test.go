@@ -132,6 +132,91 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 	_ = b1
 }
 
+// TestDBHistoryStore_LoadForNotebooks_OrphanOriginLogsScopedByUsage pins the
+// orphan-notes egress fix: FindByNotebooks no longer pulls EVERY id-less legacy
+// note; instead LoadForNotebooks fetches (via FindOrphanNotesByUsage) only the
+// orphans whose usage matches one of the loaded origins. The scoped result must
+// still be byte-identical to the whole-dataset load filtered to the notebook
+// (the orphan's log re-attaches to the matching origin), AND an orphan whose
+// usage matches no loaded origin must NOT be fetched.
+func TestDBHistoryStore_LoadForNotebooks_OrphanOriginLogsScopedByUsage(t *testing.T) {
+	dsn := os.Getenv("LANGNER_INTEGRATION_DB_URL")
+	if dsn == "" {
+		t.Skip("LANGNER_INTEGRATION_DB_URL not set")
+	}
+	db, err := sqlx.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.Ping())
+	_, err = db.Exec(`DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public`)
+	require.NoError(t, err)
+	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
+	ctx := context.Background()
+
+	const nbA = "book-a"
+	// A linked note so book-a is non-empty, and an origin "aqua" in book-a.
+	var linked int64
+	require.NoError(t, db.QueryRowContext(ctx,
+		`INSERT INTO notes (sense_id,"usage",entry,meaning) VALUES ('s1','aqueduct','aqueduct','a channel') RETURNING id`).Scan(&linked))
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, "group", subgroup) VALUES ($1,'story',$2,'UNIT ONE','scene 1')`, linked, nbA)
+	require.NoError(t, err)
+	var originID int64
+	require.NoError(t, db.QueryRowContext(ctx,
+		`INSERT INTO etymology_origins (notebook_id, session_title, sense, origin, type, language, meaning)
+		 VALUES ($1,'UNIT ONE','','aqua','root','Latin','water') RETURNING id`, nbA).Scan(&originID))
+
+	// Two id-less ORPHAN notes (no notebook_notes link), each with a note_id log:
+	// one keyed by the loaded origin's name ("aqua"), one by an unrelated name.
+	orphanNote := func(usage string) int64 {
+		var id int64
+		require.NoError(t, db.QueryRowContext(ctx,
+			`INSERT INTO notes (sense_id,"usage",entry,meaning) VALUES ('','' || $1,$1,'legacy') RETURNING id`, usage).Scan(&id))
+		_, err = db.ExecContext(ctx,
+			`INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
+			 VALUES ($1,'understood', now(), 5, 900, 'etymology_origin', 7, $2)`, id, nbA)
+		require.NoError(t, err)
+		return id
+	}
+	orphanNote("aqua")  // matches the loaded origin → must be fetched + merged
+	orphanNote("ignis") // matches no loaded origin → must NOT be fetched
+
+	noteRepo := notebook.NewDBNoteRepository(db)
+	store := NewDBHistoryStore(noteRepo, NewDBLearningRepository(db),
+		notebook.NewDBEtymologyOriginRepository(db), notebook.NewDBSkipFlagRepository(db), nil)
+
+	// Direct scoping check: only the matching orphan is fetched.
+	orphans, err := noteRepo.FindOrphanNotesByUsage(ctx, []string{"aqua"})
+	require.NoError(t, err)
+	require.Len(t, orphans, 1, "only the usage-matching orphan is fetched")
+	assert.Equal(t, "aqua", orphans[0].Usage)
+
+	// Parity: scoped equals the whole-dataset load filtered to book-a. This
+	// proves the "aqua" orphan's log still re-attaches to the origin under the
+	// scoped path, and the "ignis" orphan (matching no origin) is absent in both.
+	all, err := store.loadAllFallback(ctx)
+	require.NoError(t, err)
+	scoped, err := store.LoadForNotebooks(ctx, []string{nbA})
+	require.NoError(t, err)
+	assert.True(t, reflect.DeepEqual(all[nbA], scoped[nbA]),
+		"scoped LoadForNotebooks must equal the full load filtered to %q, orphan merge included", nbA)
+
+	// Guard: the origin actually carries BOTH its own log and the orphan's, so
+	// parity above isn't trivially "both missing the merge".
+	originLogs := 0
+	for _, h := range scoped[nbA] {
+		for _, e := range h.Expressions {
+			originLogs += len(e.EtymologyOriginLogs)
+		}
+		for _, sc := range h.Scenes {
+			for _, e := range sc.Expressions {
+				originLogs += len(e.EtymologyOriginLogs)
+			}
+		}
+	}
+	assert.GreaterOrEqual(t, originLogs, 1, "the aqua origin history must carry the merged orphan log")
+}
+
 // TestDBHistoryStore_LoadForDateRange_ScopesByDate pins the Analytics daily-view
 // egress fix: LoadForDateRange returns only attempts whose learned_at is in the
 // window, and FindByDateRange fetches only those log rows.

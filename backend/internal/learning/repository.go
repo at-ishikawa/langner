@@ -99,6 +99,14 @@ func NewDBLearningRepository(db *sqlx.DB) *DBLearningRepository {
 // to scan a NULL into int64).
 const selectLearningLogColumns = `SELECT id, COALESCE(note_id, 0) AS note_id, COALESCE(origin_id, 0) AS origin_id, COALESCE(correction_id, 0) AS correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, concept_key, easiness_factor, source_notebook_id, created_at, updated_at FROM learning_logs`
 
+// selectScopedLearningLogColumns is the narrow projection the history-read paths
+// (FindByTargets / FindByDateRange) use. The learning-history reconstruction
+// reads only these columns; concept_key, easiness_factor, created_at and
+// updated_at are never read there, so shipping them was pure egress. The wide
+// selectLearningLogColumns stays for FindAll (export/round-trip needs every
+// column).
+const selectScopedLearningLogColumns = `SELECT id, COALESCE(note_id, 0) AS note_id, COALESCE(origin_id, 0) AS origin_id, COALESCE(correction_id, 0) AS correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id FROM learning_logs`
+
 // FindAll returns all learning logs.
 func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, error) {
 	var logs []LearningLog
@@ -148,7 +156,7 @@ func (r *DBLearningRepository) FindByTargets(ctx context.Context, noteIDs, origi
 		return nil, nil
 	}
 	query, args, err := sqlx.In(
-		selectLearningLogColumns+" WHERE "+strings.Join(clauses, " OR ")+" ORDER BY id",
+		selectScopedLearningLogColumns+" WHERE "+strings.Join(clauses, " OR ")+" ORDER BY id",
 		inArgs...,
 	)
 	if err != nil {
@@ -176,7 +184,7 @@ func (r *DBLearningRepository) FindByDateRange(ctx context.Context, from, to tim
 		clauses = append(clauses, "learned_at < ?")
 		args = append(args, to)
 	}
-	q := selectLearningLogColumns
+	q := selectScopedLearningLogColumns
 	if len(clauses) > 0 {
 		q += " WHERE " + strings.Join(clauses, " AND ")
 	}
