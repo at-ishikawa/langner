@@ -37,6 +37,7 @@ func main() {
 		newParseCommand(),
 		newMigrateCommand(),
 		newEbookCommand(),
+		newAuthCommand(),
 	)
 	if err := rootCommand.Execute(); err != nil {
 		if _, fprintfErr := fmt.Fprintf(os.Stderr, "failed to execute a command: %+v\n", err); fprintfErr != nil {
@@ -70,6 +71,7 @@ func newMigrateCommand() *cobra.Command {
 
 	migrateCmd.AddCommand(newMigrateLearningHistoryCommand())
 	migrateCmd.AddCommand(newMigrateSchemaCommand())
+	migrateCmd.AddCommand(newMigrateRollbackCommand())
 	migrateCmd.AddCommand(newMigrateImportDBCommand())
 	migrateCmd.AddCommand(newMigrateResetDBCommand())
 	migrateCmd.AddCommand(newExportDBCommand())

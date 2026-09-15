@@ -32,6 +32,34 @@ type Config struct {
 	Books        BooksConfig        `mapstructure:"books"`
 	Database     DatabaseConfig     `mapstructure:"database"`
 	Quiz         QuizConfig         `mapstructure:"quiz"`
+	Auth         AuthConfig         `mapstructure:"auth"`
+}
+
+// AuthConfig configures Google-OAuth sign-in. Non-secret settings come from the
+// config file; the two secret fields (GoogleClientSecret, SessionSigningKey)
+// are usually provided via environment variables and must never be committed.
+// Auth is enabled when SessionSigningKey is set; otherwise the server runs
+// ungated (YAML-only dev). No user PII is stored, so there is no encryption key.
+type AuthConfig struct {
+	GoogleClientID    string   `mapstructure:"google_client_id"`
+	RedirectURL       string   `mapstructure:"redirect_url"`
+	FrontendURL       string   `mapstructure:"frontend_url"`
+	AllowedEmails     []string `mapstructure:"allowed_emails"`
+	InitialAdminEmail string   `mapstructure:"initial_admin_email"`
+	CookieSecure      bool     `mapstructure:"cookie_secure"`
+	CookieSameSite    string   `mapstructure:"cookie_samesite"`
+
+	// Secrets — SessionSigningKey signs the session cookie + OAuth CSRF state;
+	// GoogleClientSecret is the OAuth client secret. Provide privately (env or
+	// an uncommitted config); never commit real values.
+	GoogleClientSecret string `mapstructure:"google_client_secret"`
+	SessionSigningKey  string `mapstructure:"session_signing_key"`
+}
+
+// Enabled reports whether Google-OAuth sign-in is active. Auth turns on as soon
+// as a session signing key is configured.
+func (a AuthConfig) Enabled() bool {
+	return a.SessionSigningKey != ""
 }
 
 type QuizConfig struct {
@@ -227,6 +255,9 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000"})
 	v.SetDefault("quiz.algorithm", "modified_sm2")
 	v.SetDefault("quiz.fixed_intervals", []int{1, 7, 30, 90, 365, 1095, 1825})
+	v.SetDefault("auth.frontend_url", "http://localhost:3100")
+	v.SetDefault("auth.redirect_url", "http://localhost:8080/auth/google/callback")
+	v.SetDefault("auth.cookie_samesite", "lax")
 
 	// Bind RapidAPI config to environment variables only (not from config file)
 	if err := v.BindEnv("dictionaries.rapidapi.host", "RAPID_API_HOST"); err != nil {
@@ -262,6 +293,14 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	// Bind database password to environment variable
 	if err := v.BindEnv("database.password", "DB_PASSWORD"); err != nil {
 		return nil, fmt.Errorf("failed to bind DB_PASSWORD environment variable: %w", err)
+	}
+
+	// Auth secrets are env-bound only, never persisted in YAML/source.
+	if err := v.BindEnv("auth.google_client_secret", "GOOGLE_CLIENT_SECRET"); err != nil {
+		return nil, fmt.Errorf("failed to bind GOOGLE_CLIENT_SECRET environment variable: %w", err)
+	}
+	if err := v.BindEnv("auth.session_signing_key", "SESSION_SIGNING_KEY"); err != nil {
+		return nil, fmt.Errorf("failed to bind SESSION_SIGNING_KEY environment variable: %w", err)
 	}
 
 	if err := v.ReadInConfig(); err != nil {

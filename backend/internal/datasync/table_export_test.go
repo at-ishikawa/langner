@@ -114,6 +114,86 @@ func TestTableDumpSerializationRoundTrip(t *testing.T) {
 	assert.Equal(t, int64(7), toInt64(row["interval_days"]))
 }
 
+// TestTableDumpBinaryByteaRoundTrip proves bytea columns survive the
+// dump/restore losslessly WITHOUT a database. AES-GCM ciphertext (auth's
+// users.email_encrypted / users.name_encrypted / user_llm_credentials.
+// api_key_encrypted) can hold bytes Postgres text/varchar cannot: string()-ing
+// them and re-inserting produced `invalid byte sequence for encoding "UTF8":
+// 0x00`. Crucially, a lone NUL (0x00) is VALID UTF-8 (U+0000) yet Postgres text
+// still rejects it — so "valid UTF-8" is NOT enough to send as a text string;
+// the value must also be NUL-free. Each case is driven through the real
+// serialize -> yaml.Marshal(writeTableFile) -> yaml.Unmarshal(readTableFile) ->
+// denormalizeValue path and asserted byte-for-byte, with a stable re-serialise.
+func TestTableDumpBinaryByteaRoundTrip(t *testing.T) {
+	cases := []struct {
+		name string
+		// value is the original bytea. wantTagged is true when it must be
+		// base64-tagged (binary OR contains a NUL) rather than a plain string.
+		value      []byte
+		wantTagged bool
+	}{
+		// Non-UTF-8 ciphertext (high bytes + NUL).
+		{"non_utf8_ciphertext", []byte{0x00, 0x01, 0xDE, 0xAD, 0xBE, 0xEF, 0xFF}, true},
+		// A lone NUL: the EXACT round-trip seed value ('\x00'). Valid UTF-8 but
+		// Postgres text rejects it — the hole the first fix missed.
+		{"lone_null_byte", []byte{0x00}, true},
+		// Valid UTF-8 text with an embedded NUL — still cannot go through a text bind.
+		{"utf8_text_with_embedded_null", []byte("ab\x00cd"), true},
+		// Valid UTF-8, no NUL: JSONB / text-shaped bytea stays a plain string.
+		{"utf8_json_no_null", []byte(`{"word":"break the ice"}`), false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			original := map[string]any{"id": int64(1), "email_encrypted": tc.value}
+
+			normalized := normalizeRow(original)
+			s, ok := normalized["email_encrypted"].(string)
+			require.True(t, ok, "bytea must normalise to a string, got %T", normalized["email_encrypted"])
+			if tc.wantTagged {
+				assert.True(t, strings.HasPrefix(s, binaryValuePrefix),
+					"a value Postgres text cannot hold (non-UTF-8 or containing NUL) must be base64-tagged; got %q", s)
+				assert.NotContains(t, s, "\x00", "the serialised form must not embed a raw NUL byte")
+			} else {
+				assert.False(t, strings.HasPrefix(s, binaryValuePrefix),
+					"plain UTF-8 text (no NUL) must stay an untagged string; got %q", s)
+			}
+
+			dir := t.TempDir()
+			tablesDir := filepath.Join(dir, "tables")
+			require.NoError(t, os.MkdirAll(tablesDir, 0o755))
+			path := filepath.Join(tablesDir, "users.yml")
+			require.NoError(t, writeTableFile(path, []map[string]any{normalized}))
+
+			readBack, err := readTableFile(path)
+			require.NoError(t, err)
+			require.Len(t, readBack, 1)
+
+			// email_encrypted is NOT a timestamp column -> isTimestamp=false.
+			got := denormalizeValue(readBack[0]["email_encrypted"], false)
+			if tc.wantTagged {
+				b, ok := got.([]byte)
+				require.True(t, ok, "a tagged bytea must denormalise back to []byte, got %T", got)
+				assert.Equal(t, tc.value, b, "bytea round-trip must be byte-for-byte identical")
+			} else {
+				assert.Equal(t, string(tc.value), got, "plain UTF-8 text round-trips as the same string")
+			}
+
+			// Mirror the DB round trip export A -> import -> export B: re-normalise
+			// the DENORMALISED value (what would be re-inserted) and assert the file
+			// is byte-for-byte identical (the losslessness A==B proof).
+			path2 := filepath.Join(tablesDir, "users2.yml")
+			reNormalized := normalizeRow(map[string]any{"id": int64(1), "email_encrypted": got})
+			require.NoError(t, writeTableFile(path2, []map[string]any{reNormalized}))
+			a, err := os.ReadFile(path)
+			require.NoError(t, err)
+			b, err := os.ReadFile(path2)
+			require.NoError(t, err)
+			assert.Equal(t, string(a), string(b), "bytea must re-serialise stably")
+		})
+	}
+}
+
 // --- migration-schema parsing helpers (self-contained; mirrors the guard in
 // cmd/langner/datasync_test.go so this package needs no cross-package deps) ---
 

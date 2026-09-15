@@ -14,6 +14,16 @@
 //   2. The on-disk learning_notes YAML — the app dual-writes to it, and grammar
 //      history is read from it (grammar has no DB home), so restore it from git
 //      before re-importing.
+//
+// One row `reset-db` CANNOT restore is the auth `users` row: it is not sourced
+// from any YAML, it is minted by seed-and-serve.sh (`auth issue-test-cookie`).
+// `reset-db` drops + re-migrates the managed tables (`users` among them,
+// migration 024) and re-imports the YAML, which wipes that row and leaves the
+// pre-minted session cookie (see global-setup.ts) pointing at a nonexistent
+// user — so `/auth/me` 401s and every authenticated page redirects to /login.
+// We therefore re-mint the same allowlisted user after every reset. The scoped
+// rebuild restarts the BIGSERIAL sequence, so the re-inserted user reclaims
+// id=1 and the fixed storageState cookie keeps resolving.
 
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -22,6 +32,8 @@ import { join } from "node:path";
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const CONFIG_PATH = process.env.LANGNER_TEST_CONFIG ?? "config.e2e.yml";
 const DB_PASSWORD = process.env.LANGNER_TEST_DB_PASSWORD ?? "password";
+// Must match the email seed-and-serve.sh mints the session cookie for.
+const E2E_EMAIL = process.env.E2E_EMAIL ?? "e2e@example.com";
 const LEARNING_NOTES = "frontend/e2e/fixtures/learning_notes";
 
 function git(args: string[]): void {
@@ -45,4 +57,14 @@ export function resetState(): void {
     stdio: "pipe",
     env: { ...process.env, DB_PASSWORD },
   });
+
+  // 3. Re-mint the allowlisted auth user the rebuild just wiped, so the
+  //    pre-minted session cookie keeps resolving (upsert is idempotent; the
+  //    re-inserted user reclaims id=1 after the sequence restart). We only need
+  //    the user row — the printed cookie is discarded.
+  execFileSync(
+    "./langner",
+    ["auth", "issue-test-cookie", "--email", E2E_EMAIL, "--config", CONFIG_PATH],
+    { cwd: REPO_ROOT, stdio: "pipe", env: { ...process.env, DB_PASSWORD } },
+  );
 }
