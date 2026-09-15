@@ -121,6 +121,37 @@ func Migrate(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
 	return nil
 }
 
+// Rollback reverses the most recent `steps` applied migrations by running their
+// *.down.sql, sourced from the given embedded filesystem (same dir semantics as
+// Migrate). steps must be >= 1. Use it to undo an edited-in-place migration: roll
+// back past it, then Migrate to re-apply the current version. Returns nil when
+// there is nothing to roll back.
+func Rollback(db *sqlx.DB, migrationsFS fs.FS, dir string, steps int) error {
+	if steps < 1 {
+		return fmt.Errorf("rollback steps must be >= 1, got %d", steps)
+	}
+
+	src, err := iofs.New(migrationsFS, dir)
+	if err != nil {
+		return fmt.Errorf("init migration source: %w", err)
+	}
+
+	driver, err := migratepgx.WithInstance(db.DB, &migratepgx.Config{})
+	if err != nil {
+		return fmt.Errorf("init migration driver: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", src, "pgx5", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+
+	if err := m.Steps(-steps); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("roll back migrations: %w", err)
+	}
+	return nil
+}
+
 // BuildMultiRowInsert builds a multi-row INSERT query using PostgreSQL's
 // numbered placeholder syntax ($1, $2, ...).
 func BuildMultiRowInsert(table string, columns []string, rowCount int) string {

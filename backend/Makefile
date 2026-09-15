@@ -41,6 +41,26 @@ fix:
 db-migrate:
 	"$(MIGRATE_BIN)" -source file://schemas/migrations -database "$(DATABASE_URL)" up
 
+.PHONY: db-rollback
+db-rollback:
+	"$(MIGRATE_BIN)" -source file://schemas/migrations -database "$(DATABASE_URL)" down $(STEPS)
+
+# Config-aware schema apply / rollback via the langner binary (reads the DB
+# coordinates from --config, no DATABASE_URL needed) — the same path the running
+# server and `go run ./cmd/langner migrate schema` use. CONFIG/STEPS overridable:
+#   make db-schema-up CONFIG=config.yml
+#   make db-schema-rollback CONFIG=config.yml STEPS=1
+CONFIG ?= config.example.yml
+STEPS ?= 1
+
+.PHONY: db-schema-up
+db-schema-up:
+	$(GO) run ./cmd/langner migrate schema --config ../$(CONFIG)
+
+.PHONY: db-schema-rollback
+db-schema-rollback:
+	$(GO) run ./cmd/langner migrate rollback --steps $(STEPS) --config ../$(CONFIG)
+
 .PHONY: db-import
 db-import:
 	$(GO) build -o ../langner ./cmd/langner

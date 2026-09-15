@@ -247,6 +247,46 @@ needed. Idempotent: a no-op when the schema is already up to date.`,
 	return cmd
 }
 
+// newMigrateRollbackCommand reverses the most recent schema migration(s) by
+// running their *.down.sql. It is the counterpart to "schema": use it to undo a
+// migration that was edited in place (golang-migrate records the applied version
+// number, so re-running "schema" is a no-op — it never re-applies an already
+// recorded version). Roll the version back past the edited migration, then run
+// "schema" again to re-apply it in its current form.
+func newMigrateRollbackCommand() *cobra.Command {
+	var steps int
+	cmd := &cobra.Command{
+		Use:   "rollback",
+		Short: "Roll back the most recent schema migration(s) via their down migrations",
+		Long: `Reverse the most recent applied schema migration(s) by running their
+*.down.sql against the database configured in --config (no DATABASE_URL
+needed). --steps N rolls back N migrations (default 1).
+
+Typical use — re-apply a migration that was edited in place:
+
+  langner migrate rollback        # undo the latest migration (down)
+  langner migrate schema          # re-apply it in its current form (up)
+
+This is destructive to whatever the down migration drops (e.g. rolling back
+the users migration drops the users table). It never touches notebook data.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			_, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			if err := database.Rollback(db, schemas.Migrations, "migrations", steps); err != nil {
+				return fmt.Errorf("roll back schema migrations: %w", err)
+			}
+			fmt.Printf("Rolled back %d migration(s). Run \"migrate schema\" to re-apply the current schema.\n", steps)
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&steps, "steps", 1, "number of migrations to roll back")
+	return cmd
+}
+
 // newMigrateResetDBCommand rebuilds the database to the seeded baseline in
 // one shot: rebuild langner's managed tables from scratch (scoped drop +
 // migrate), re-import the source YAML, and re-seed the DB-only state tables.
