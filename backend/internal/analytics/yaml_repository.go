@@ -549,12 +549,17 @@ func (r *YAMLRepository) WordHistory(ctx context.Context, ref WordRef) (WordHist
 	}, nil
 }
 
-// Trends loads every attempt matching the notebook/quiz filters and
-// delegates to ComputeTrends. Attempts are intentionally NOT date-filtered
-// here: the aggregation needs each series' full history to know its state
-// before the range start.
+// Trends loads the attempts in the query's date window matching the
+// notebook/quiz filters and delegates to ComputeTrends. Since the end-of-range
+// backlog snapshot was removed, the aggregation no longer needs each series'
+// full pre-window history — so the read is scoped to [Start, End], a bounded,
+// index-friendly query instead of a whole-history scan.
 func (r *YAMLRepository) Trends(ctx context.Context, q TrendsQuery) (TrendsResult, error) {
-	attempts, err := r.allAttempts(ctx, q.Filters)
+	var endExcl time.Time
+	if !q.End.IsZero() {
+		endExcl = time.Date(q.End.Year(), q.End.Month(), q.End.Day(), 0, 0, 0, 0, q.End.Location()).AddDate(0, 0, 1)
+	}
+	attempts, err := r.attemptsInRange(ctx, q.Filters, q.Start, endExcl)
 	if err != nil {
 		return TrendsResult{}, err
 	}

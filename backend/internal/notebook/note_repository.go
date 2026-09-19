@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 
@@ -74,14 +75,14 @@ func (r *DBNoteRepository) CountNotebookNotes(ctx context.Context, notebookID st
 	return n, nil
 }
 
-// FindByNotebooks returns the notes linked to ANY of notebookIDs, plus id-less
-// orphan notes (no notebook_notes links) — the legacy synthetic notes the
-// origin-history fallback keys by name — each with ALL its notebook_notes links
-// (so a note shared across notebooks still attributes its logs correctly). It is
-// the scoped counterpart to FindAll used by HistoryStore.LoadForNotebooks so a
-// per-notebook read doesn't pull every note. note_images / note_references are
-// NOT loaded: the history reconstruction never reads them, so fetching them here
-// was pure egress. Empty notebookIDs returns nil.
+// FindByNotebooks returns the notes linked to ANY of notebookIDs, each with ALL
+// its notebook_notes links (so a note shared across notebooks still attributes
+// its logs correctly). It is the scoped counterpart to FindAll used by
+// HistoryStore.LoadForNotebooks so a per-notebook read doesn't pull every note.
+// note_images / note_references are NOT loaded: the history reconstruction never
+// reads them, so fetching them here was pure egress. Id-less legacy "orphan"
+// notes are NOT included here — the store fetches just the ones an origin
+// actually needs via FindOrphanNotesByUsage. Empty notebookIDs returns nil.
 func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []string) ([]NoteRecord, error) {
 	if len(notebookIDs) == 0 {
 		return nil, nil
@@ -89,7 +90,6 @@ func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []st
 	query, args, err := sqlx.In(
 		`SELECT `+noteColumns+` FROM notes
 		 WHERE id IN (SELECT note_id FROM notebook_notes WHERE notebook_id IN (?))
-		    OR id NOT IN (SELECT note_id FROM notebook_notes)
 		 ORDER BY id`,
 		notebookIDs,
 	)
@@ -99,6 +99,43 @@ func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []st
 	var notes []NoteRecord
 	if err := r.db.SelectContext(ctx, &notes, r.db.Rebind(query), args...); err != nil {
 		return nil, fmt.Errorf("load notes by notebooks: %w", err)
+	}
+	if err := r.loadRelations(ctx, notes, false); err != nil {
+		return nil, err
+	}
+	return notes, nil
+}
+
+// FindOrphanNotesByUsage returns the id-less legacy "orphan" notes (no
+// notebook_notes link) whose usage matches one of the given origin names. These
+// synthetic notes carry origin logs the old importer stashed under a note keyed
+// by the origin NAME; the history reconstruction re-attaches them to the
+// matching origin. Scoping by usage means a per-notebook read fetches only the
+// orphans its origins need, not every orphan in the DB. Matching is
+// case-insensitive and trims whitespace, mirroring mergeOriginHistories. Empty
+// usages returns nil. note_images / note_references are not loaded (history
+// path).
+func (r *DBNoteRepository) FindOrphanNotesByUsage(ctx context.Context, usages []string) ([]NoteRecord, error) {
+	if len(usages) == 0 {
+		return nil, nil
+	}
+	norm := make([]string, len(usages))
+	for i, u := range usages {
+		norm[i] = strings.ToLower(strings.TrimSpace(u))
+	}
+	query, args, err := sqlx.In(
+		`SELECT `+noteColumns+` FROM notes
+		 WHERE id NOT IN (SELECT note_id FROM notebook_notes)
+		   AND LOWER(TRIM("usage")) IN (?)
+		 ORDER BY id`,
+		norm,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build orphan-notes-by-usage query: %w", err)
+	}
+	var notes []NoteRecord
+	if err := r.db.SelectContext(ctx, &notes, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("load orphan notes by usage: %w", err)
 	}
 	if err := r.loadRelations(ctx, notes, false); err != nil {
 		return nil, err

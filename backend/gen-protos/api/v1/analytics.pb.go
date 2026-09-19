@@ -225,10 +225,7 @@ type GetTrendsResponse struct {
 	// words_learned) are de-duplicated over the WHOLE range, so they do not
 	// equal the sum of the per-bucket values — a word tested in two months
 	// is two bucket entries but one word in the range total.
-	Summary *TrendsSummary `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
-	// backlog is a point-in-time snapshot at the end of the range, not a
-	// flow over it.
-	Backlog       *BacklogSnapshot `protobuf:"bytes,3,opt,name=backlog,proto3" json:"backlog,omitempty"`
+	Summary       *TrendsSummary `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -273,13 +270,6 @@ func (x *GetTrendsResponse) GetBuckets() []*TrendBucket {
 func (x *GetTrendsResponse) GetSummary() *TrendsSummary {
 	if x != nil {
 		return x.Summary
-	}
-	return nil
-}
-
-func (x *GetTrendsResponse) GetBacklog() *BacklogSnapshot {
-	if x != nil {
-		return x.Backlog
 	}
 	return nil
 }
@@ -520,71 +510,6 @@ func (x *TrendsSummary) GetLapses() int32 {
 	return 0
 }
 
-// BacklogSnapshot is the state of the user's words at the end of the
-// range — where things stand today, not what flowed over the period.
-type BacklogSnapshot struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// never_correct is words with attempts but no correct answer yet.
-	NeverCorrect int32 `protobuf:"varint,1,opt,name=never_correct,json=neverCorrect,proto3" json:"never_correct,omitempty"`
-	// in_progress is words being learned but not yet mastered.
-	InProgress int32 `protobuf:"varint,2,opt,name=in_progress,json=inProgress,proto3" json:"in_progress,omitempty"`
-	// mastered is words whose latest status is usable or intuitive.
-	Mastered      int32 `protobuf:"varint,3,opt,name=mastered,proto3" json:"mastered,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BacklogSnapshot) Reset() {
-	*x = BacklogSnapshot{}
-	mi := &file_api_v1_analytics_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BacklogSnapshot) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BacklogSnapshot) ProtoMessage() {}
-
-func (x *BacklogSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BacklogSnapshot.ProtoReflect.Descriptor instead.
-func (*BacklogSnapshot) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *BacklogSnapshot) GetNeverCorrect() int32 {
-	if x != nil {
-		return x.NeverCorrect
-	}
-	return 0
-}
-
-func (x *BacklogSnapshot) GetInProgress() int32 {
-	if x != nil {
-		return x.InProgress
-	}
-	return 0
-}
-
-func (x *BacklogSnapshot) GetMastered() int32 {
-	if x != nil {
-		return x.Mastered
-	}
-	return 0
-}
-
 // AnalyticsFilters carries the optional notebook + quiz-type filters used
 // on both the Day List and Day Detail pages.
 type AnalyticsFilters struct {
@@ -600,7 +525,7 @@ type AnalyticsFilters struct {
 
 func (x *AnalyticsFilters) Reset() {
 	*x = AnalyticsFilters{}
-	mi := &file_api_v1_analytics_proto_msgTypes[6]
+	mi := &file_api_v1_analytics_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -612,7 +537,7 @@ func (x *AnalyticsFilters) String() string {
 func (*AnalyticsFilters) ProtoMessage() {}
 
 func (x *AnalyticsFilters) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[6]
+	mi := &file_api_v1_analytics_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -625,7 +550,7 @@ func (x *AnalyticsFilters) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyticsFilters.ProtoReflect.Descriptor instead.
 func (*AnalyticsFilters) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{6}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AnalyticsFilters) GetNotebookId() string {
@@ -654,7 +579,7 @@ type GetDailySummariesRequest struct {
 
 func (x *GetDailySummariesRequest) Reset() {
 	*x = GetDailySummariesRequest{}
-	mi := &file_api_v1_analytics_proto_msgTypes[7]
+	mi := &file_api_v1_analytics_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -666,7 +591,7 @@ func (x *GetDailySummariesRequest) String() string {
 func (*GetDailySummariesRequest) ProtoMessage() {}
 
 func (x *GetDailySummariesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[7]
+	mi := &file_api_v1_analytics_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -679,7 +604,7 @@ func (x *GetDailySummariesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDailySummariesRequest.ProtoReflect.Descriptor instead.
 func (*GetDailySummariesRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{7}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetDailySummariesRequest) GetRangeDays() int32 {
@@ -705,7 +630,7 @@ type GetDailySummariesResponse struct {
 
 func (x *GetDailySummariesResponse) Reset() {
 	*x = GetDailySummariesResponse{}
-	mi := &file_api_v1_analytics_proto_msgTypes[8]
+	mi := &file_api_v1_analytics_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -717,7 +642,7 @@ func (x *GetDailySummariesResponse) String() string {
 func (*GetDailySummariesResponse) ProtoMessage() {}
 
 func (x *GetDailySummariesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[8]
+	mi := &file_api_v1_analytics_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -730,7 +655,7 @@ func (x *GetDailySummariesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDailySummariesResponse.ProtoReflect.Descriptor instead.
 func (*GetDailySummariesResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{8}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetDailySummariesResponse) GetDays() []*DailySummary {
@@ -757,7 +682,7 @@ type DailySummary struct {
 
 func (x *DailySummary) Reset() {
 	*x = DailySummary{}
-	mi := &file_api_v1_analytics_proto_msgTypes[9]
+	mi := &file_api_v1_analytics_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -769,7 +694,7 @@ func (x *DailySummary) String() string {
 func (*DailySummary) ProtoMessage() {}
 
 func (x *DailySummary) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[9]
+	mi := &file_api_v1_analytics_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -782,7 +707,7 @@ func (x *DailySummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DailySummary.ProtoReflect.Descriptor instead.
 func (*DailySummary) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{9}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DailySummary) GetDate() string {
@@ -831,7 +756,7 @@ type GetDayDetailRequest struct {
 
 func (x *GetDayDetailRequest) Reset() {
 	*x = GetDayDetailRequest{}
-	mi := &file_api_v1_analytics_proto_msgTypes[10]
+	mi := &file_api_v1_analytics_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -843,7 +768,7 @@ func (x *GetDayDetailRequest) String() string {
 func (*GetDayDetailRequest) ProtoMessage() {}
 
 func (x *GetDayDetailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[10]
+	mi := &file_api_v1_analytics_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -856,7 +781,7 @@ func (x *GetDayDetailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDayDetailRequest.ProtoReflect.Descriptor instead.
 func (*GetDayDetailRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{10}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetDayDetailRequest) GetDate() string {
@@ -888,7 +813,7 @@ type GetDayDetailResponse struct {
 
 func (x *GetDayDetailResponse) Reset() {
 	*x = GetDayDetailResponse{}
-	mi := &file_api_v1_analytics_proto_msgTypes[11]
+	mi := &file_api_v1_analytics_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -900,7 +825,7 @@ func (x *GetDayDetailResponse) String() string {
 func (*GetDayDetailResponse) ProtoMessage() {}
 
 func (x *GetDayDetailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[11]
+	mi := &file_api_v1_analytics_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -913,7 +838,7 @@ func (x *GetDayDetailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDayDetailResponse.ProtoReflect.Descriptor instead.
 func (*GetDayDetailResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{11}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetDayDetailResponse) GetSummary() *DailySummary {
@@ -1014,7 +939,7 @@ type WrongWord struct {
 
 func (x *WrongWord) Reset() {
 	*x = WrongWord{}
-	mi := &file_api_v1_analytics_proto_msgTypes[12]
+	mi := &file_api_v1_analytics_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1026,7 +951,7 @@ func (x *WrongWord) String() string {
 func (*WrongWord) ProtoMessage() {}
 
 func (x *WrongWord) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[12]
+	mi := &file_api_v1_analytics_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1039,7 +964,7 @@ func (x *WrongWord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WrongWord.ProtoReflect.Descriptor instead.
 func (*WrongWord) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{12}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *WrongWord) GetNoteId() int64 {
@@ -1189,7 +1114,7 @@ type RelatedGroup struct {
 
 func (x *RelatedGroup) Reset() {
 	*x = RelatedGroup{}
-	mi := &file_api_v1_analytics_proto_msgTypes[13]
+	mi := &file_api_v1_analytics_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1201,7 +1126,7 @@ func (x *RelatedGroup) String() string {
 func (*RelatedGroup) ProtoMessage() {}
 
 func (x *RelatedGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[13]
+	mi := &file_api_v1_analytics_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1214,7 +1139,7 @@ func (x *RelatedGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelatedGroup.ProtoReflect.Descriptor instead.
 func (*RelatedGroup) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{13}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RelatedGroup) GetKind() string {
@@ -1254,7 +1179,7 @@ type GetWordHistoryRequest struct {
 
 func (x *GetWordHistoryRequest) Reset() {
 	*x = GetWordHistoryRequest{}
-	mi := &file_api_v1_analytics_proto_msgTypes[14]
+	mi := &file_api_v1_analytics_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1266,7 +1191,7 @@ func (x *GetWordHistoryRequest) String() string {
 func (*GetWordHistoryRequest) ProtoMessage() {}
 
 func (x *GetWordHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[14]
+	mi := &file_api_v1_analytics_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1279,7 +1204,7 @@ func (x *GetWordHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWordHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetWordHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{14}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetWordHistoryRequest) GetNoteId() int64 {
@@ -1334,7 +1259,7 @@ type GetWordHistoryResponse struct {
 
 func (x *GetWordHistoryResponse) Reset() {
 	*x = GetWordHistoryResponse{}
-	mi := &file_api_v1_analytics_proto_msgTypes[15]
+	mi := &file_api_v1_analytics_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1346,7 +1271,7 @@ func (x *GetWordHistoryResponse) String() string {
 func (*GetWordHistoryResponse) ProtoMessage() {}
 
 func (x *GetWordHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[15]
+	mi := &file_api_v1_analytics_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1359,7 +1284,7 @@ func (x *GetWordHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWordHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetWordHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{15}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetWordHistoryResponse) GetExpression() string {
@@ -1432,7 +1357,7 @@ type AttemptEntry struct {
 
 func (x *AttemptEntry) Reset() {
 	*x = AttemptEntry{}
-	mi := &file_api_v1_analytics_proto_msgTypes[16]
+	mi := &file_api_v1_analytics_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1444,7 +1369,7 @@ func (x *AttemptEntry) String() string {
 func (*AttemptEntry) ProtoMessage() {}
 
 func (x *AttemptEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[16]
+	mi := &file_api_v1_analytics_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1457,7 +1382,7 @@ func (x *AttemptEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttemptEntry.ProtoReflect.Descriptor instead.
 func (*AttemptEntry) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{16}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AttemptEntry) GetDate() string {
@@ -1513,11 +1438,10 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"start_date\x18\x02 \x01(\tR\tstartDate\x12\x19\n" +
 	"\bend_date\x18\x03 \x01(\tR\aendDate\x12/\n" +
 	"\bgroup_by\x18\x04 \x01(\x0e2\x14.api.v1.TrendGroupByR\agroupBy\x122\n" +
-	"\afilters\x18\x05 \x01(\v2\x18.api.v1.AnalyticsFiltersR\afilters\"\xa6\x01\n" +
+	"\afilters\x18\x05 \x01(\v2\x18.api.v1.AnalyticsFiltersR\afilters\"\x82\x01\n" +
 	"\x11GetTrendsResponse\x12-\n" +
 	"\abuckets\x18\x01 \x03(\v2\x13.api.v1.TrendBucketR\abuckets\x12/\n" +
-	"\asummary\x18\x02 \x01(\v2\x15.api.v1.TrendsSummaryR\asummary\x121\n" +
-	"\abacklog\x18\x03 \x01(\v2\x17.api.v1.BacklogSnapshotR\abacklog\"R\n" +
+	"\asummary\x18\x02 \x01(\v2\x15.api.v1.TrendsSummaryR\asummaryJ\x04\b\x03\x10\x04R\abacklog\"R\n" +
 	"\vTrendBucket\x12\x16\n" +
 	"\x06period\x18\x01 \x01(\tR\x06period\x12+\n" +
 	"\x06series\x18\x02 \x03(\v2\x13.api.v1.TrendSeriesR\x06series\"\xe4\x01\n" +
@@ -1535,12 +1459,7 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\fwords_tested\x18\x02 \x01(\x05R\vwordsTested\x12#\n" +
 	"\rwords_learned\x18\x03 \x01(\x05R\fwordsLearned\x12\x1b\n" +
 	"\tlevel_ups\x18\x04 \x01(\x05R\blevelUps\x12\x16\n" +
-	"\x06lapses\x18\x05 \x01(\x05R\x06lapses\"s\n" +
-	"\x0fBacklogSnapshot\x12#\n" +
-	"\rnever_correct\x18\x01 \x01(\x05R\fneverCorrect\x12\x1f\n" +
-	"\vin_progress\x18\x02 \x01(\x05R\n" +
-	"inProgress\x12\x1a\n" +
-	"\bmastered\x18\x03 \x01(\x05R\bmastered\"P\n" +
+	"\x06lapses\x18\x05 \x01(\x05R\x06lapses\"P\n" +
 	"\x10AnalyticsFilters\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x1b\n" +
@@ -1654,7 +1573,7 @@ func file_api_v1_analytics_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_analytics_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_v1_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_api_v1_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_api_v1_analytics_proto_goTypes = []any{
 	(Granularity)(0),                  // 0: api.v1.Granularity
 	(TrendGroupBy)(0),                 // 1: api.v1.TrendGroupBy
@@ -1663,47 +1582,45 @@ var file_api_v1_analytics_proto_goTypes = []any{
 	(*TrendBucket)(nil),               // 4: api.v1.TrendBucket
 	(*TrendSeries)(nil),               // 5: api.v1.TrendSeries
 	(*TrendsSummary)(nil),             // 6: api.v1.TrendsSummary
-	(*BacklogSnapshot)(nil),           // 7: api.v1.BacklogSnapshot
-	(*AnalyticsFilters)(nil),          // 8: api.v1.AnalyticsFilters
-	(*GetDailySummariesRequest)(nil),  // 9: api.v1.GetDailySummariesRequest
-	(*GetDailySummariesResponse)(nil), // 10: api.v1.GetDailySummariesResponse
-	(*DailySummary)(nil),              // 11: api.v1.DailySummary
-	(*GetDayDetailRequest)(nil),       // 12: api.v1.GetDayDetailRequest
-	(*GetDayDetailResponse)(nil),      // 13: api.v1.GetDayDetailResponse
-	(*WrongWord)(nil),                 // 14: api.v1.WrongWord
-	(*RelatedGroup)(nil),              // 15: api.v1.RelatedGroup
-	(*GetWordHistoryRequest)(nil),     // 16: api.v1.GetWordHistoryRequest
-	(*GetWordHistoryResponse)(nil),    // 17: api.v1.GetWordHistoryResponse
-	(*AttemptEntry)(nil),              // 18: api.v1.AttemptEntry
+	(*AnalyticsFilters)(nil),          // 7: api.v1.AnalyticsFilters
+	(*GetDailySummariesRequest)(nil),  // 8: api.v1.GetDailySummariesRequest
+	(*GetDailySummariesResponse)(nil), // 9: api.v1.GetDailySummariesResponse
+	(*DailySummary)(nil),              // 10: api.v1.DailySummary
+	(*GetDayDetailRequest)(nil),       // 11: api.v1.GetDayDetailRequest
+	(*GetDayDetailResponse)(nil),      // 12: api.v1.GetDayDetailResponse
+	(*WrongWord)(nil),                 // 13: api.v1.WrongWord
+	(*RelatedGroup)(nil),              // 14: api.v1.RelatedGroup
+	(*GetWordHistoryRequest)(nil),     // 15: api.v1.GetWordHistoryRequest
+	(*GetWordHistoryResponse)(nil),    // 16: api.v1.GetWordHistoryResponse
+	(*AttemptEntry)(nil),              // 17: api.v1.AttemptEntry
 }
 var file_api_v1_analytics_proto_depIdxs = []int32{
 	0,  // 0: api.v1.GetTrendsRequest.granularity:type_name -> api.v1.Granularity
 	1,  // 1: api.v1.GetTrendsRequest.group_by:type_name -> api.v1.TrendGroupBy
-	8,  // 2: api.v1.GetTrendsRequest.filters:type_name -> api.v1.AnalyticsFilters
+	7,  // 2: api.v1.GetTrendsRequest.filters:type_name -> api.v1.AnalyticsFilters
 	4,  // 3: api.v1.GetTrendsResponse.buckets:type_name -> api.v1.TrendBucket
 	6,  // 4: api.v1.GetTrendsResponse.summary:type_name -> api.v1.TrendsSummary
-	7,  // 5: api.v1.GetTrendsResponse.backlog:type_name -> api.v1.BacklogSnapshot
-	5,  // 6: api.v1.TrendBucket.series:type_name -> api.v1.TrendSeries
-	8,  // 7: api.v1.GetDailySummariesRequest.filters:type_name -> api.v1.AnalyticsFilters
-	11, // 8: api.v1.GetDailySummariesResponse.days:type_name -> api.v1.DailySummary
-	8,  // 9: api.v1.GetDayDetailRequest.filters:type_name -> api.v1.AnalyticsFilters
-	11, // 10: api.v1.GetDayDetailResponse.summary:type_name -> api.v1.DailySummary
-	14, // 11: api.v1.GetDayDetailResponse.wrong_words:type_name -> api.v1.WrongWord
-	15, // 12: api.v1.WrongWord.related_groups:type_name -> api.v1.RelatedGroup
-	18, // 13: api.v1.GetWordHistoryResponse.attempts:type_name -> api.v1.AttemptEntry
-	9,  // 14: api.v1.AnalyticsService.GetDailySummaries:input_type -> api.v1.GetDailySummariesRequest
-	12, // 15: api.v1.AnalyticsService.GetDayDetail:input_type -> api.v1.GetDayDetailRequest
-	16, // 16: api.v1.AnalyticsService.GetWordHistory:input_type -> api.v1.GetWordHistoryRequest
-	2,  // 17: api.v1.AnalyticsService.GetTrends:input_type -> api.v1.GetTrendsRequest
-	10, // 18: api.v1.AnalyticsService.GetDailySummaries:output_type -> api.v1.GetDailySummariesResponse
-	13, // 19: api.v1.AnalyticsService.GetDayDetail:output_type -> api.v1.GetDayDetailResponse
-	17, // 20: api.v1.AnalyticsService.GetWordHistory:output_type -> api.v1.GetWordHistoryResponse
-	3,  // 21: api.v1.AnalyticsService.GetTrends:output_type -> api.v1.GetTrendsResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	5,  // 5: api.v1.TrendBucket.series:type_name -> api.v1.TrendSeries
+	7,  // 6: api.v1.GetDailySummariesRequest.filters:type_name -> api.v1.AnalyticsFilters
+	10, // 7: api.v1.GetDailySummariesResponse.days:type_name -> api.v1.DailySummary
+	7,  // 8: api.v1.GetDayDetailRequest.filters:type_name -> api.v1.AnalyticsFilters
+	10, // 9: api.v1.GetDayDetailResponse.summary:type_name -> api.v1.DailySummary
+	13, // 10: api.v1.GetDayDetailResponse.wrong_words:type_name -> api.v1.WrongWord
+	14, // 11: api.v1.WrongWord.related_groups:type_name -> api.v1.RelatedGroup
+	17, // 12: api.v1.GetWordHistoryResponse.attempts:type_name -> api.v1.AttemptEntry
+	8,  // 13: api.v1.AnalyticsService.GetDailySummaries:input_type -> api.v1.GetDailySummariesRequest
+	11, // 14: api.v1.AnalyticsService.GetDayDetail:input_type -> api.v1.GetDayDetailRequest
+	15, // 15: api.v1.AnalyticsService.GetWordHistory:input_type -> api.v1.GetWordHistoryRequest
+	2,  // 16: api.v1.AnalyticsService.GetTrends:input_type -> api.v1.GetTrendsRequest
+	9,  // 17: api.v1.AnalyticsService.GetDailySummaries:output_type -> api.v1.GetDailySummariesResponse
+	12, // 18: api.v1.AnalyticsService.GetDayDetail:output_type -> api.v1.GetDayDetailResponse
+	16, // 19: api.v1.AnalyticsService.GetWordHistory:output_type -> api.v1.GetWordHistoryResponse
+	3,  // 20: api.v1.AnalyticsService.GetTrends:output_type -> api.v1.GetTrendsResponse
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_analytics_proto_init() }
@@ -1717,7 +1634,7 @@ func file_api_v1_analytics_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_analytics_proto_rawDesc), len(file_api_v1_analytics_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   17,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

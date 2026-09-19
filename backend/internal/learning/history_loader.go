@@ -85,6 +85,14 @@ type idScopedCorrections interface {
 	FindByIDs(ctx context.Context, ids []int64) ([]notebook.GrammarCorrectionRecord, error)
 }
 
+// orphanNotesByUsage fetches the id-less legacy "orphan" notes (no notebook_notes
+// link) whose usage matches one of the given origin names — the only orphans a
+// scoped read needs (mergeOriginHistories re-attaches them by origin name). Lets
+// LoadForNotebooks avoid pulling every orphan note in the DB on each read.
+type orphanNotesByUsage interface {
+	FindOrphanNotesByUsage(ctx context.Context, usages []string) ([]notebook.NoteRecord, error)
+}
+
 // DBHistoryStore composes the DB repositories needed to reconstruct the
 // learning_notes/*.yml view from rows.
 type DBHistoryStore struct {
@@ -181,8 +189,10 @@ func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []str
 
 	var notes []notebook.NoteRecord
 	var err error
+	scopedNotes := false
 	if sr, ok := s.noteRepo.(notebookScopedNotes); ok {
 		notes, err = sr.FindByNotebooks(ctx, notebookIDs)
+		scopedNotes = true
 	} else {
 		notes, err = s.noteRepo.FindAll(ctx)
 	}
@@ -200,6 +210,24 @@ func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []str
 		if err != nil {
 			return nil, fmt.Errorf("load scoped etymology origins: %w", err)
 		}
+	}
+
+	// Legacy synthetic "orphan" notes (no notebook_notes link) hold origin logs
+	// the old importer stashed under a note keyed by the origin NAME;
+	// reconstruct's mergeOriginHistories re-attaches them — but ONLY to origins we
+	// loaded. FindByNotebooks (scoped) deliberately omits orphans, so fetch just
+	// the ones whose usage matches one of these notebooks' origin names, rather
+	// than every orphan in the DB. (The FindAll fallback path already has them.)
+	if on, ok := s.noteRepo.(orphanNotesByUsage); ok && scopedNotes && len(origins) > 0 {
+		usages := make([]string, 0, len(origins))
+		for _, o := range origins {
+			usages = append(usages, o.Origin)
+		}
+		orphans, oerr := on.FindOrphanNotesByUsage(ctx, usages)
+		if oerr != nil {
+			return nil, fmt.Errorf("load scoped orphan notes: %w", oerr)
+		}
+		notes = append(notes, orphans...)
 	}
 
 	var corrections []notebook.GrammarCorrectionRecord

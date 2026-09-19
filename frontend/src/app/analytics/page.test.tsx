@@ -30,7 +30,6 @@ function trendsResponse() {
       },
     ],
     summary: { attempts: 16, wordsTested: 11, wordsLearned: 4, levelUps: 3, lapses: 0 },
-    backlog: { neverCorrect: 5, inProgress: 9, mastered: 20 },
   };
 }
 
@@ -48,7 +47,7 @@ describe("TrendsPage", () => {
     getQuizOptions.mockReset().mockResolvedValue({ notebooks: [{ notebookId: "flashcards", name: "Flashcards" }] });
   });
 
-  it("renders KPI summary, backlog, and the chart", async () => {
+  it("renders KPI summary and the chart", async () => {
     renderPage();
     // KPI values from the summary, scoped to the KPI strip (chart axis
     // labels can repeat the same digits).
@@ -56,8 +55,6 @@ describe("TrendsPage", () => {
     const kpis = within(screen.getByTestId("trend-kpis"));
     expect(kpis.getByText("11")).toBeInTheDocument(); // words tested
     expect(kpis.getByText("16")).toBeInTheDocument(); // attempts
-    // Backlog snapshot.
-    expect(within(screen.getByTestId("trend-backlog")).getByText("20")).toBeInTheDocument(); // mastered
     expect(screen.getByTestId("trend-chart")).toBeInTheDocument();
     expect(screen.getByTestId("trend-legend")).toBeInTheDocument();
   });
