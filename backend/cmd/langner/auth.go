@@ -19,6 +19,7 @@ func newAuthCommand() *cobra.Command {
 	}
 	authCmd.AddCommand(newAuthIssueTestCookieCommand())
 	authCmd.AddCommand(newAuthProvisionCommand())
+	authCmd.AddCommand(newAuthBackfillCommand())
 	return authCmd
 }
 
@@ -80,17 +81,97 @@ func provisionAuth(ctx context.Context, cfg *config.Config, db *sqlx.DB) error {
 	if err != nil {
 		return err
 	}
-
-	// Backfill pre-auth rows to the admin. Each table is scoped to user_id IS
-	// NULL so an already-attributed row (a real user's runtime attempt) is never
-	// reassigned.
-	for _, table := range []string{"learning_logs", "note_skip_flags", "origin_skip_flags"} {
-		if _, err := db.ExecContext(ctx,
-			fmt.Sprintf("UPDATE %s SET user_id = $1 WHERE user_id IS NULL", table), adminID); err != nil {
-			return fmt.Errorf("backfill %s.user_id: %w", table, err)
-		}
+	if _, err := backfillOwner(ctx, db, adminID); err != nil {
+		return err
 	}
 	return nil
+}
+
+// backfillOwner assigns every pre-auth (user_id IS NULL) row in the three
+// per-user STATE tables — learning_logs and both skip-flag tables — to ownerID,
+// and returns how many rows were reassigned. The `user_id IS NULL` guard means
+// an already-attributed row (a real user's runtime attempt) is never touched, so
+// it is safe to re-run. This is the one-time cutover step that gives a
+// single-user app's accumulated history an owner once auth is switched on.
+func backfillOwner(ctx context.Context, db *sqlx.DB, ownerID int64) (int64, error) {
+	var total int64
+	for _, table := range []string{"learning_logs", "note_skip_flags", "origin_skip_flags"} {
+		res, err := db.ExecContext(ctx,
+			fmt.Sprintf("UPDATE %s SET user_id = $1 WHERE user_id IS NULL", table), ownerID)
+		if err != nil {
+			return total, fmt.Errorf("backfill %s.user_id: %w", table, err)
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
+
+// newAuthBackfillCommand assigns all pre-auth history (user_id IS NULL) to one
+// owner account. It is the flag-driven counterpart to the config-based
+// provisioning that `migrate import-db` runs for the e2e seed: a human running
+// the one-time cutover names the owner on the command line, so no persistent
+// `initial_admin_email` config is required. `--owner-email` find-or-creates the
+// account (works even when no one has signed in yet); `--user-id` targets an
+// existing account directly. With neither flag it falls back to the config's
+// initial_admin_email so the automated path keeps working.
+func newAuthBackfillCommand() *cobra.Command {
+	var ownerEmail string
+	var userID int64
+	cmd := &cobra.Command{
+		Use:   "backfill",
+		Short: "Assign all pre-auth learning history (user_id IS NULL) to one owner account",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			cfg, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			if !cfg.Auth.Enabled() {
+				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
+			}
+
+			ownerID := userID
+			switch {
+			case userID != 0 && ownerEmail != "":
+				return fmt.Errorf("pass only one of --user-id or --owner-email")
+			case userID != 0:
+				// Target an existing account; verify it exists so a typo doesn't
+				// orphan every row under a non-existent id.
+				var exists bool
+				if err := db.GetContext(ctx, &exists, `SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)`, userID); err != nil {
+					return fmt.Errorf("check user id %d: %w", userID, err)
+				}
+				if !exists {
+					return fmt.Errorf("no user with id %d (sign in first, or use --owner-email to create the account)", userID)
+				}
+			case ownerEmail != "":
+				ownerID, err = ensureUser(ctx, auth.NewUserRepository(db), ownerEmail)
+				if err != nil {
+					return err
+				}
+			case cfg.Auth.InitialAdminEmail != "":
+				ownerID, err = ensureUser(ctx, auth.NewUserRepository(db), cfg.Auth.InitialAdminEmail)
+				if err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("provide --owner-email or --user-id (or set auth.initial_admin_email in config)")
+			}
+
+			n, err := backfillOwner(ctx, db, ownerID)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Backfilled %d pre-auth row(s) to user id %d.\n", n, ownerID)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&ownerEmail, "owner-email", "", "email of the account to own all pre-auth history (find-or-created)")
+	cmd.Flags().Int64Var(&userID, "user-id", 0, "id of an existing account to own all pre-auth history")
+	return cmd
 }
 
 // newAuthProvisionCommand provisions the allowlist/admin accounts and backfills
