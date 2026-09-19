@@ -59,11 +59,16 @@ func TestStateSeeder_PersistEtymologyLogs_KeyedByOriginNotNote(t *testing.T) {
 	}
 
 	var created []*learning.LearningLog
-	learningRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Times(2).
-		DoAndReturn(func(_ context.Context, log *learning.LearningLog) error {
-			// Capture a copy so later mutation of the argument can't affect us.
-			cp := *log
-			created = append(created, &cp)
+	// The seeder writes each pre-auth log via the lenient BatchCreate (single-
+	// element slice) so a user_id-0 seed row is accepted (the runtime-only
+	// Create guard rejects it).
+	learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).Times(2).
+		DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+			for _, log := range logs {
+				// Capture a copy so later mutation of the argument can't affect us.
+				cp := *log
+				created = append(created, &cp)
+			}
 			return nil
 		})
 

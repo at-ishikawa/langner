@@ -145,19 +145,20 @@ func (r *YAMLRepository) attemptsInRange(ctx context.Context, filters Filters, f
 // loadHistories is the single READ entry point: DB store when installed,
 // otherwise the YAML learning_notes files. Both return the identical
 // map[notebookID][]LearningHistory shape.
-func (r *YAMLRepository) loadHistories(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
+func (r *YAMLRepository) loadHistories(ctx context.Context, userID int64) (map[string][]notebook.LearningHistory, error) {
 	if r.store != nil {
 		// The DB store has no unbounded read: enumerate the notebooks that have
 		// history (a cheap indexed-column DISTINCT) and issue a scoped read for
 		// exactly those. Result is identical to loading everything, but every SQL
 		// read carries a notebook scope. (Trends and the unfiltered Day Detail
 		// need each series' full pre-window state, so they can't be date-scoped —
-		// hence all notebooks rather than a window here.)
-		ids, err := r.store.NotebookIDs(ctx)
+		// hence all notebooks rather than a window here.) Both reads are scoped to
+		// the requesting user (auth Phase 2).
+		ids, err := r.store.NotebookIDs(ctx, userID)
 		if err != nil {
 			return nil, fmt.Errorf("list notebook ids: %w", err)
 		}
-		return r.store.LoadForNotebooks(ctx, ids)
+		return r.store.LoadForNotebooks(ctx, ids, userID)
 	}
 	return notebook.NewLearningHistories(r.directory)
 }
@@ -169,7 +170,7 @@ func (r *YAMLRepository) loadHistories(ctx context.Context) (map[string][]notebo
 func (r *YAMLRepository) scopedHistories(ctx context.Context, filters Filters, from, to time.Time) (map[string][]notebook.LearningHistory, error) {
 	if filters.NotebookID != "" {
 		if r.store != nil {
-			return r.store.LoadForNotebooks(ctx, []string{filters.NotebookID})
+			return r.store.LoadForNotebooks(ctx, []string{filters.NotebookID}, filters.UserID)
 		}
 		all, err := notebook.NewLearningHistories(r.directory)
 		if err != nil {
@@ -181,9 +182,9 @@ func (r *YAMLRepository) scopedHistories(ctx context.Context, filters Filters, f
 		return map[string][]notebook.LearningHistory{}, nil
 	}
 	if r.store != nil && (!from.IsZero() || !to.IsZero()) {
-		return r.store.LoadForDateRange(ctx, from, to)
+		return r.store.LoadForDateRange(ctx, from, to, filters.UserID)
 	}
-	return r.loadHistories(ctx)
+	return r.loadHistories(ctx, filters.UserID)
 }
 
 func collectExpressions(
@@ -493,7 +494,7 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 
 // WordHistory returns every attempt for a single (notebook, expression, quiz_type) triple.
 func (r *YAMLRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistory, error) {
-	attempts, err := r.allAttempts(ctx, Filters{NotebookID: ref.NotebookID, QuizType: ref.QuizType})
+	attempts, err := r.allAttempts(ctx, Filters{NotebookID: ref.NotebookID, QuizType: ref.QuizType, UserID: ref.UserID})
 	if err != nil {
 		return WordHistory{}, err
 	}

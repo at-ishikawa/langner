@@ -25,7 +25,7 @@ func TestExampleData_DefinitionsSectionsFollowIndexOrder(t *testing.T) {
 
 	// includeUnstudied=true so a fresh (unseeded) learning history still counts
 	// every session's words and the book surfaces with all its sections.
-	summaries, err := svc.LoadNotebookSummaries(true)
+	summaries, err := svc.LoadNotebookSummaries(0, true)
 	require.NoError(t, err)
 
 	var book *NotebookSummary

@@ -135,37 +135,37 @@ origins:
 	ctx := context.Background()
 
 	// 1. standard quiz answer — Service.SaveResult
-	require.NoError(t, svc.SaveResult(ctx, Card{
+	require.NoError(t, svc.SaveResult(ctx, 0, Card{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Entry: vocabExpr, Meaning: "a quiet person",
 	}, GradeResult{Correct: true, Quality: 4}, 1000))
 
 	// 2. reverse quiz answer — Service.SaveReverseResult
-	require.NoError(t, svc.SaveReverseResult(ctx, ReverseCard{
+	require.NoError(t, svc.SaveReverseResult(ctx, 0, ReverseCard{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Expression: vocabExpr, Meaning: "a quiet person",
 	}, GradeResult{Correct: true, Quality: 4}, 1000))
 
 	// 3. freeform quiz answer — Service.SaveFreeformResult
-	require.NoError(t, svc.SaveFreeformResult(ctx, FreeformCard{
+	require.NoError(t, svc.SaveFreeformResult(ctx, 0, FreeformCard{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Expression: vocabExpr, Meaning: "a quiet person",
 	}, FreeformGradeResult{Correct: true, Quality: 4}, 1000))
 
 	// 4. per-type skip — Service.SkipWord (vocab side)
-	require.NoError(t, svc.SkipWord(CardInfo{
+	require.NoError(t, svc.SkipWord(0, CardInfo{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Expression: vocabExpr,
 	}, "", []notebook.QuizType{notebook.QuizTypeReverse}))
 
 	// 5. per-type resume — Service.ResumeWord (vocab side)
-	require.NoError(t, svc.ResumeWord(CardInfo{
+	require.NoError(t, svc.ResumeWord(0, CardInfo{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Expression: vocabExpr,
 	}, []notebook.QuizType{notebook.QuizTypeReverse}))
 
 	// 6. override answer — Service.OverrideAnswer (vocab side)
-	_, err := svc.OverrideAnswer(CardInfo{
+	_, err := svc.OverrideAnswer(0, CardInfo{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Expression: vocabExpr,
 	}, notebook.QuizTypeNotebook)

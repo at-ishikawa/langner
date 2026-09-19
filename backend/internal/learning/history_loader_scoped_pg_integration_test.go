@@ -99,9 +99,9 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 	skipFlagRepo := notebook.NewDBSkipFlagRepository(db)
 	store := NewDBHistoryStore(noteRepo, learningRepo, originRepo, skipFlagRepo, nil)
 
-	all, err := store.loadAllFallback(ctx)
+	all, err := store.loadAllFallback(ctx, 0)
 	require.NoError(t, err)
-	scoped, err := store.LoadForNotebooks(ctx, []string{nbA})
+	scoped, err := store.LoadForNotebooks(ctx, []string{nbA}, 0)
 	require.NoError(t, err)
 
 	// Scoping: only the requested notebook is returned.
@@ -125,7 +125,7 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 	for _, n := range scopedNotes {
 		noteIDs = append(noteIDs, n.ID)
 	}
-	scopedLogs, err := learningRepo.FindByTargets(ctx, noteIDs, []int64{originID}, nil)
+	scopedLogs, err := learningRepo.FindByTargets(ctx, noteIDs, []int64{originID}, nil, 0)
 	require.NoError(t, err)
 	assert.Less(t, len(scopedLogs), len(allLogs), "scoped log read must fetch fewer logs (book-b logs excluded)")
 	// Sanity: the shared word's book-b log is NOT in the scoped set for book-a.
@@ -194,9 +194,9 @@ func TestDBHistoryStore_LoadForNotebooks_OrphanOriginLogsScopedByUsage(t *testin
 	// Parity: scoped equals the whole-dataset load filtered to book-a. This
 	// proves the "aqua" orphan's log still re-attaches to the origin under the
 	// scoped path, and the "ignis" orphan (matching no origin) is absent in both.
-	all, err := store.loadAllFallback(ctx)
+	all, err := store.loadAllFallback(ctx, 0)
 	require.NoError(t, err)
-	scoped, err := store.LoadForNotebooks(ctx, []string{nbA})
+	scoped, err := store.LoadForNotebooks(ctx, []string{nbA}, 0)
 	require.NoError(t, err)
 	assert.True(t, reflect.DeepEqual(all[nbA], scoped[nbA]),
 		"scoped LoadForNotebooks must equal the full load filtered to %q, orphan merge included", nbA)
@@ -264,17 +264,17 @@ func TestDBHistoryStore_LoadForDateRange_ScopesByDate(t *testing.T) {
 		return n
 	}
 
-	all, err := store.loadAllFallback(ctx)
+	all, err := store.loadAllFallback(ctx, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 2, countAttempts(all), "both attempts present in the full load")
 
 	// Window: last 30 days → only the recent attempt.
-	scoped, err := store.LoadForDateRange(ctx, timeDaysAgo(30), time.Time{})
+	scoped, err := store.LoadForDateRange(ctx, timeDaysAgo(30), time.Time{}, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 1, countAttempts(scoped), "only the in-window attempt is reconstructed")
 
 	// FindByDateRange fetches only the in-window row.
-	inWindow, err := NewDBLearningRepository(db).FindByDateRange(ctx, timeDaysAgo(30), time.Time{})
+	inWindow, err := NewDBLearningRepository(db).FindByDateRange(ctx, timeDaysAgo(30), time.Time{}, 0)
 	require.NoError(t, err)
 	assert.Len(t, inWindow, 1, "date-scoped log read fetches only the in-window row")
 }

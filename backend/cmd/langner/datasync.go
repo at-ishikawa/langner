@@ -113,6 +113,17 @@ func newMigrateImportDBCommand() *cobra.Command {
 					fmt.Printf("  Grammar corrections:  %d new\n", stateResult.GrammarCorrectionsCreated)
 					fmt.Printf("  Grammar logs:         %d new\n", stateResult.GrammarLogsCreated)
 				}
+
+				// Provision auth accounts and backfill the just-imported/seeded
+				// (user_id NULL) learning history to the initial admin, so a fresh
+				// import is immediately usable by the admin and the e2e seed needs
+				// no separate provisioning step. No-op when auth is disabled.
+				if err := provisionAuth(ctx, cfg, db); err != nil {
+					return fmt.Errorf("provision auth: %w", err)
+				}
+				if cfg.Auth.Enabled() && cfg.Auth.InitialAdminEmail != "" {
+					fmt.Printf("\nProvisioned auth accounts; backfilled pre-auth history to %q\n", cfg.Auth.InitialAdminEmail)
+				}
 			}
 
 			return nil
@@ -326,6 +337,16 @@ func newMigrateResetDBCommand() *cobra.Command {
 				if _, err := seeder.SeedAll(ctx); err != nil {
 					return fmt.Errorf("seed db-only state: %w", err)
 				}
+			}
+			// Provision auth accounts and backfill the just-imported/seeded
+			// (user_id NULL) learning history to the initial admin — the SAME
+			// step import-db runs, so a scoped reset leaves the seeded history
+			// owned by the admin account (auth Phase 2). Without this a reset-db
+			// (e.g. the e2e per-scenario reset) would re-import history as
+			// user_id NULL, hiding it from every signed-in user. No-op when auth
+			// is disabled.
+			if err := provisionAuth(ctx, cfg, db); err != nil {
+				return fmt.Errorf("provision auth: %w", err)
 			}
 			return nil
 		},

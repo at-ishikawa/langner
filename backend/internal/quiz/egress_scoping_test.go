@@ -24,18 +24,18 @@ type spyHistoryStore struct {
 	lastTo           time.Time
 }
 
-func (s *spyHistoryStore) LoadForNotebooks(_ context.Context, _ []string) (map[string][]notebook.LearningHistory, error) {
+func (s *spyHistoryStore) LoadForNotebooks(_ context.Context, _ []string, _ int64) (map[string][]notebook.LearningHistory, error) {
 	s.notebookCalls++
 	return map[string][]notebook.LearningHistory{}, nil
 }
 
-func (s *spyHistoryStore) LoadForDateRange(_ context.Context, from, to time.Time) (map[string][]notebook.LearningHistory, error) {
+func (s *spyHistoryStore) LoadForDateRange(_ context.Context, from, to time.Time, _ int64) (map[string][]notebook.LearningHistory, error) {
 	s.dateRangeCalls++
 	s.lastFrom, s.lastTo = from, to
 	return map[string][]notebook.LearningHistory{}, nil
 }
 
-func (s *spyHistoryStore) NotebookIDs(_ context.Context) ([]string, error) {
+func (s *spyHistoryStore) NotebookIDs(_ context.Context, _ int64) ([]string, error) {
 	s.notebookIDsCalls++
 	return nil, nil
 }
@@ -56,7 +56,7 @@ func TestLoadRelearnPool_ReadsOnlyDateWindow(t *testing.T) {
 	svc, spy := newSpyService(t)
 	window := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 
-	_, err := svc.LoadRelearnPool(window)
+	_, err := svc.LoadRelearnPool(0, window)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, spy.dateRangeCalls, "Relearn must read via LoadForDateRange")
@@ -76,16 +76,16 @@ func TestNextIntervalDays_ReusesPreloadedHistories(t *testing.T) {
 	learnedAt := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 
 	// No preload → one scoped read per call.
-	svc.nextIntervalDays(context.Background(), "nb", "", notebook.QuizTypeNotebook, true, 4, 1000, learnedAt, "word")
+	svc.nextIntervalDays(context.Background(), 0, "nb", "", notebook.QuizTypeNotebook, true, 4, 1000, learnedAt, "word")
 	require.Equal(t, 1, spy.notebookCalls, "an un-preloaded notebook is read via LoadForNotebooks")
 
 	// Preloaded → no further store read for that notebook.
 	ctx := WithPreloadedHistories(context.Background(), map[string][]notebook.LearningHistory{"nb": {}})
-	svc.nextIntervalDays(ctx, "nb", "", notebook.QuizTypeNotebook, true, 4, 1000, learnedAt, "word")
-	svc.nextIntervalDays(ctx, "nb", "", notebook.QuizTypeReverse, true, 4, 1000, learnedAt, "word")
+	svc.nextIntervalDays(ctx, 0, "nb", "", notebook.QuizTypeNotebook, true, 4, 1000, learnedAt, "word")
+	svc.nextIntervalDays(ctx, 0, "nb", "", notebook.QuizTypeReverse, true, 4, 1000, learnedAt, "word")
 	require.Equal(t, 1, spy.notebookCalls, "a preloaded notebook must not trigger another read")
 
 	// A notebook absent from the preload still falls back to a scoped read.
-	svc.nextIntervalDays(ctx, "other", "", notebook.QuizTypeNotebook, true, 4, 1000, learnedAt, "word")
+	svc.nextIntervalDays(ctx, 0, "other", "", notebook.QuizTypeNotebook, true, 4, 1000, learnedAt, "word")
 	require.Equal(t, 2, spy.notebookCalls, "a notebook missing from the preload is read on demand")
 }
