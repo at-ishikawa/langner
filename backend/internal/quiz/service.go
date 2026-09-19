@@ -1314,8 +1314,21 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 func applyForwardMask(cards []ReverseCard) {
 	for i := range cards {
 		for j := range cards[i].Contexts {
-			ctx := cards[i].Contexts[j].Context
-			// Mask the current card's expression with standard blank.
+			// Start from the already-masked text, not the raw Context: the
+			// loaders (reverseHintContext / buildReverseContexts) blank the
+			// current card's answer using its `highlight`, which is the ONLY
+			// thing that hides an inflected/irregular surface form (e.g. lemma
+			// "integrate" appearing as "integrates"). Rebuilding from raw
+			// Context here would mask only the bare lemma and re-expose the
+			// inflected answer. This pass then only ADDS the cross-card
+			// spoiler masking on top. Fall back to raw Context if a loader ever
+			// leaves MaskedContext empty, so nothing regresses.
+			ctx := cards[i].Contexts[j].MaskedContext
+			if ctx == "" {
+				ctx = cards[i].Contexts[j].Context
+			}
+			// Mask the current card's expression with standard blank
+			// (idempotent/harmless on text the highlight already blanked).
 			ctx = maskOccurrences(ctx, cards[i].Expression)
 			if cards[i].AltForm != "" {
 				ctx = maskOccurrences(ctx, cards[i].AltForm)

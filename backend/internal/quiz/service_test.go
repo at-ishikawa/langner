@@ -2161,6 +2161,36 @@ func TestApplyForwardMask_AltForm(t *testing.T) {
 	assert.Equal(t, "She likes to run ______.", cards[1].Contexts[0].MaskedContext, "second card masks only itself; the past card's forms are revealed")
 }
 
+func TestApplyForwardMask_PreservesHighlightMaskOfInflectedForm(t *testing.T) {
+	// Regression: the answer's INFLECTED surface form ("went" for lemma "go") is
+	// blanked only via the loader's highlight mask, stored in MaskedContext.
+	// applyForwardMask must build ON TOP of MaskedContext so that mask survives —
+	// rebuilding from the raw Context would mask only the bare lemma "go" (which
+	// does not whole-word-match "went") and re-expose the answer. A later card's
+	// expression in the same sentence must still be spoiler-masked as "[...]".
+	cards := []ReverseCard{
+		{
+			Expression: "go",
+			Contexts: []ReverseContext{{
+				Context:       "She went home before the show.",
+				MaskedContext: "She ______ home before the show.", // highlight "went" already blanked by the loader
+			}},
+		},
+		{
+			Expression: "show",
+			Contexts:   []ReverseContext{{Context: "We watch the show.", MaskedContext: "We watch the show."}},
+		},
+	}
+
+	applyForwardMask(cards)
+
+	got := cards[0].Contexts[0].MaskedContext
+	assert.NotContains(t, got, "went", "the inflected answer must stay blanked (highlight mask preserved)")
+	assert.Contains(t, got, "______", "the answer blank is preserved")
+	assert.Contains(t, got, "[...]", "a later card's expression is still spoiler-masked")
+	assert.Equal(t, "She ______ home before the [...].", got)
+}
+
 func TestContainsExpressionWord(t *testing.T) {
 	tests := []struct {
 		name       string
