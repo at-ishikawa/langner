@@ -148,7 +148,11 @@ func (s *StateSeeder) seedGrammarCorrections(ctx context.Context, result *StateS
 						IntervalDays:     r.IntervalDays,
 						SourceNotebookID: nbID,
 					}
-					if err := s.learningRepo.Create(ctx, log); err != nil {
+					// Seed/import path: write via the lenient BatchCreate so a
+					// pre-auth row (user_id NULL, backfilled later by
+					// `langner auth provision`) is accepted — the runtime-only
+					// Create guard rejects user_id 0.
+					if err := s.learningRepo.BatchCreate(ctx, []*learning.LearningLog{log}); err != nil {
 						return fmt.Errorf("insert grammar log: %w", err)
 					}
 					result.GrammarLogsCreated++
@@ -356,7 +360,9 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 			}
 			for quizType, ts := range expr.SkippedAt {
 				at := parseSkippedTimestamp(ts)
-				if err := s.skipFlagRepo.SkipOrigin(ctx, id, quizType, at); err != nil {
+				// user_id 0: seeded before auth backfill; `langner auth
+				// provision` stamps these to the initial admin.
+				if err := s.skipFlagRepo.SkipOrigin(ctx, 0, id, quizType, at); err != nil {
 					return fmt.Errorf("seed origin skip flag: %w", err)
 				}
 				result.OriginSkipFlagsCreated++
@@ -371,7 +377,7 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 	}
 	for quizType, ts := range expr.SkippedAt {
 		at := parseSkippedTimestamp(ts)
-		if err := s.skipFlagRepo.SkipNote(ctx, noteID, quizType, at); err != nil {
+		if err := s.skipFlagRepo.SkipNote(ctx, 0, noteID, quizType, at); err != nil {
 			return fmt.Errorf("seed note skip flag: %w", err)
 		}
 		result.NoteSkipFlagsCreated++
@@ -447,7 +453,9 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 				IntervalDays:     r.IntervalDays,
 				SourceNotebookID: nbID,
 			}
-			if err := s.learningRepo.Create(ctx, log); err != nil {
+			// Seed/import path: lenient BatchCreate (see grammar log above) so a
+			// pre-auth row with user_id 0 is accepted and backfilled later.
+			if err := s.learningRepo.BatchCreate(ctx, []*learning.LearningLog{log}); err != nil {
 				return fmt.Errorf("insert etymology log: %w", err)
 			}
 			result.EtymologyLogsCreated++

@@ -20,6 +20,10 @@ auth:
   # Only these Google emails may sign in (registration = first sign-in).
   allowed_emails:
     - "admin@example.com"
+  # Optional. Only used to auto-backfill pre-auth history during the automated
+  # `migrate import-db` seed (e2e). For a real one-time cutover, prefer the
+  # flag-driven `langner auth backfill --owner-email you@example.com`, which
+  # needs nothing here. The running server never reads this field.
   initial_admin_email: "admin@example.com"
   cookie_secure: true
   cookie_samesite: lax

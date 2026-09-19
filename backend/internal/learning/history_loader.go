@@ -41,18 +41,26 @@ type HistoryStore interface {
 	// This is the ONLY "everything" read: a caller that needs every notebook
 	// enumerates NotebookIDs and passes them here, so every history read carries
 	// a notebook (or date) scope — there is no unbounded whole-history primitive.
-	LoadForNotebooks(ctx context.Context, notebookIDs []string) (map[string][]notebook.LearningHistory, error)
+	//
+	// userID scopes the reconstruction to a single user (auth Phase 2): only
+	// that user's learning logs and exclude markers are read, so a word carries
+	// one series PER (user, note, quiz mode) — the per-user extension of L4. The
+	// DB store filters by user_id; the YAML store (single-tenant dev) ignores
+	// userID. userID 0 matches the pre-auth NULL rows.
+	LoadForNotebooks(ctx context.Context, notebookIDs []string, userID int64) (map[string][]notebook.LearningHistory, error)
 	// LoadForDateRange returns histories built from ONLY the logs whose
 	// learned_at falls in [from, to) (plus the notes/origins/corrections those
 	// logs reference), keyed by notebook ID. Used by the Analytics daily view and
 	// the Relearn pool so a bounded window doesn't pull the whole log table. A
-	// zero `from`/`to` means unbounded on that end. Same shared reconstruct().
-	LoadForDateRange(ctx context.Context, from, to time.Time) (map[string][]notebook.LearningHistory, error)
-	// NotebookIDs returns every notebook that has learning history — the "all
-	// notebooks" set. A view that genuinely needs every notebook (the analytics
-	// Trends / unfiltered Day Detail) enumerates this cheap indexed-column set
-	// and then issues a scoped LoadForNotebooks, instead of an unbounded read.
-	NotebookIDs(ctx context.Context) ([]string, error)
+	// zero `from`/`to` means unbounded on that end. userID scopes per user (see
+	// LoadForNotebooks). Same shared reconstruct().
+	LoadForDateRange(ctx context.Context, from, to time.Time, userID int64) (map[string][]notebook.LearningHistory, error)
+	// NotebookIDs returns every notebook that has learning history for the given
+	// user — the "all notebooks" set. A view that genuinely needs every notebook
+	// (the analytics Trends / unfiltered Day Detail) enumerates this cheap
+	// indexed-column set and then issues a scoped LoadForNotebooks, instead of an
+	// unbounded read. userID scopes per user (auth Phase 2).
+	NotebookIDs(ctx context.Context, userID int64) ([]string, error)
 }
 
 // Optional capability interfaces: only the DB-backed repositories implement the
@@ -64,7 +72,7 @@ type notebookScopedNotes interface {
 	FindByNotebooks(ctx context.Context, notebookIDs []string) ([]notebook.NoteRecord, error)
 }
 type targetScopedLogs interface {
-	FindByTargets(ctx context.Context, noteIDs, originIDs, correctionIDs []int64) ([]LearningLog, error)
+	FindByTargets(ctx context.Context, noteIDs, originIDs, correctionIDs []int64, userID int64) ([]LearningLog, error)
 }
 type notebookScopedOrigins interface {
 	FindByNotebooks(ctx context.Context, notebookIDs []string) ([]notebook.EtymologyOriginRecord, error)
@@ -73,7 +81,7 @@ type notebookScopedCorrections interface {
 	FindByNotebooks(ctx context.Context, notebookIDs []string) ([]notebook.GrammarCorrectionRecord, error)
 }
 type dateScopedLogs interface {
-	FindByDateRange(ctx context.Context, from, to time.Time) ([]LearningLog, error)
+	FindByDateRange(ctx context.Context, from, to time.Time, userID int64) ([]LearningLog, error)
 }
 type idScopedNotes interface {
 	FindByIDs(ctx context.Context, ids []int64) ([]notebook.NoteRecord, error)
@@ -126,13 +134,13 @@ func NewDBHistoryStore(noteRepo notebook.NoteRepository, learningRepo LearningRe
 // scoped LoadForNotebooks instead of a whole-history read. When the learning
 // repository doesn't expose the cheap distinct query (test doubles), it falls
 // back to deriving the ids from a full load.
-func (s *DBHistoryStore) NotebookIDs(ctx context.Context) ([]string, error) {
+func (s *DBHistoryStore) NotebookIDs(ctx context.Context, userID int64) ([]string, error) {
 	if src, ok := s.learningRepo.(interface {
-		DistinctNotebookIDs(ctx context.Context) ([]string, error)
+		DistinctNotebookIDs(ctx context.Context, userID int64) ([]string, error)
 	}); ok {
-		return src.DistinctNotebookIDs(ctx)
+		return src.DistinctNotebookIDs(ctx, userID)
 	}
-	histories, err := s.loadAllFallback(ctx)
+	histories, err := s.loadAllFallback(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -151,15 +159,19 @@ func (s *DBHistoryStore) NotebookIDs(ctx context.Context) ([]string, error) {
 // doubles that don't implement those capability interfaces. Story notebooks land
 // in the .Scenes shape (one LearningScene per notebook_notes.subgroup); flashcard
 // notebooks land in the flat .Expressions shape with Metadata.Type = "flashcard".
-func (s *DBHistoryStore) loadAllFallback(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
+func (s *DBHistoryStore) loadAllFallback(ctx context.Context, userID int64) (map[string][]notebook.LearningHistory, error) {
 	notes, err := s.noteRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load notes: %w", err)
 	}
-	logs, err := s.learningRepo.FindAll(ctx)
+	allLogs, err := s.learningRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load learning logs: %w", err)
 	}
+	// FindAll is the unscoped read (it also feeds import/export/validate CLI);
+	// keep only this user's logs (auth Phase 2). userID 0 matches unattributed
+	// (pre-auth NULL) rows.
+	logs := filterLogsByUser(allLogs, userID)
 	var origins []notebook.EtymologyOriginRecord
 	if s.originRepo != nil {
 		if origins, err = s.originRepo.FindAll(ctx); err != nil {
@@ -172,7 +184,21 @@ func (s *DBHistoryStore) loadAllFallback(ctx context.Context) (map[string][]note
 			return nil, fmt.Errorf("load grammar corrections: %w", err)
 		}
 	}
-	return s.reconstruct(ctx, notes, logs, origins, corrections)
+	return s.reconstruct(ctx, notes, logs, origins, corrections, userID)
+}
+
+// filterLogsByUser keeps only the logs owned by userID (auth Phase 2). Used on
+// the unscoped FindAll fallback path; the DB scoped reads (FindByTargets /
+// FindByDateRange) already filter by user_id in SQL. userID 0 matches
+// unattributed (pre-auth NULL → COALESCE 0) rows.
+func filterLogsByUser(logs []LearningLog, userID int64) []LearningLog {
+	out := make([]LearningLog, 0, len(logs))
+	for _, l := range logs {
+		if l.UserID == userID {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // LoadForNotebooks reconstructs histories for only notebookIDs. It fetches the
@@ -182,7 +208,7 @@ func (s *DBHistoryStore) loadAllFallback(ctx context.Context) (map[string][]note
 // is identical to a whole-dataset load filtered to these notebooks, but without
 // pulling the whole dataset over the wire. Repos that don't implement the
 // scoped queries fall back to FindAll (correct, no egress win).
-func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []string) (map[string][]notebook.LearningHistory, error) {
+func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []string, userID int64) (map[string][]notebook.LearningHistory, error) {
 	if len(notebookIDs) == 0 {
 		return map[string][]notebook.LearningHistory{}, nil
 	}
@@ -256,15 +282,17 @@ func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []str
 		for _, c := range corrections {
 			correctionIDs = append(correctionIDs, c.ID)
 		}
-		logs, err = lr.FindByTargets(ctx, noteIDs, originIDs, correctionIDs)
+		logs, err = lr.FindByTargets(ctx, noteIDs, originIDs, correctionIDs, userID)
 	} else {
-		logs, err = s.learningRepo.FindAll(ctx)
+		var all []LearningLog
+		all, err = s.learningRepo.FindAll(ctx)
+		logs = filterLogsByUser(all, userID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("load scoped learning logs: %w", err)
 	}
 
-	histories, err := s.reconstruct(ctx, notes, logs, origins, corrections)
+	histories, err := s.reconstruct(ctx, notes, logs, origins, corrections, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -288,14 +316,14 @@ func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []str
 // the notes/origins/corrections those logs reference. Falls back to LoadAll if
 // the repos don't implement the scoped queries. See LoadForDateRange on the
 // interface for why this exists (Analytics daily view egress).
-func (s *DBHistoryStore) LoadForDateRange(ctx context.Context, from, to time.Time) (map[string][]notebook.LearningHistory, error) {
+func (s *DBHistoryStore) LoadForDateRange(ctx context.Context, from, to time.Time, userID int64) (map[string][]notebook.LearningHistory, error) {
 	lr, okLogs := s.learningRepo.(dateScopedLogs)
 	nr, okNotes := s.noteRepo.(idScopedNotes)
 	if !okLogs || !okNotes {
-		return s.loadAllFallback(ctx)
+		return s.loadAllFallback(ctx, userID)
 	}
 
-	logs, err := lr.FindByDateRange(ctx, from, to)
+	logs, err := lr.FindByDateRange(ctx, from, to, userID)
 	if err != nil {
 		return nil, fmt.Errorf("load logs by date range: %w", err)
 	}
@@ -343,7 +371,7 @@ func (s *DBHistoryStore) LoadForDateRange(ctx context.Context, from, to time.Tim
 		}
 	}
 
-	return s.reconstruct(ctx, notes, logs, origins, corrections)
+	return s.reconstruct(ctx, notes, logs, origins, corrections, userID)
 }
 
 // keysOf returns the map's int64 keys as a slice.
@@ -358,12 +386,17 @@ func keysOf(m map[int64]struct{}) []int64 {
 // reconstruct builds the per-notebook LearningHistory map from already-fetched
 // rows. Shared by loadAllFallback (whole dataset) and LoadForNotebooks (a scoped
 // subset) so both produce identical histories for any notebook they cover.
+// userID scopes the exclude markers (skip flags) to their owner (auth Phase 2):
+// only this user's note/origin skip flags are applied. The logs passed in are
+// already user-scoped by the caller (SQL filter on the scoped reads, Go filter
+// on the FindAll fallback). userID 0 matches unattributed (pre-auth) markers.
 func (s *DBHistoryStore) reconstruct(
 	ctx context.Context,
 	notes []notebook.NoteRecord,
 	logs []LearningLog,
 	origins []notebook.EtymologyOriginRecord,
 	corrections []notebook.GrammarCorrectionRecord,
+	userID int64,
 ) (map[string][]notebook.LearningHistory, error) {
 	noteByID := make(map[int64]*notebook.NoteRecord, len(notes))
 	for i := range notes {
@@ -428,6 +461,10 @@ func (s *DBHistoryStore) reconstruct(
 	}
 	skipFlagsByNote := make(map[int64]notebook.SkippedAtMap, len(noteSkipFlags))
 	for _, f := range noteSkipFlags {
+		// Apply only this user's exclude markers (auth Phase 2).
+		if f.UserID != userID {
+			continue
+		}
 		m := skipFlagsByNote[f.NoteID]
 		if m == nil {
 			m = make(notebook.SkippedAtMap)
@@ -450,6 +487,10 @@ func (s *DBHistoryStore) reconstruct(
 		}
 		skipFlagsByOrigin := make(map[int64]notebook.SkippedAtMap, len(originSkipFlags))
 		for _, f := range originSkipFlags {
+			// Apply only this user's exclude markers (auth Phase 2).
+			if f.UserID != userID {
+				continue
+			}
 			m := skipFlagsByOrigin[f.OriginID]
 			if m == nil {
 				m = make(notebook.SkippedAtMap)

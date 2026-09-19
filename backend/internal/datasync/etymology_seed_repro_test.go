@@ -43,7 +43,13 @@ type fakeLearningRepoRepro struct{ created []*learning.LearningLog }
 func (f *fakeLearningRepoRepro) FindAll(context.Context) ([]learning.LearningLog, error) {
 	return nil, nil
 }
-func (f *fakeLearningRepoRepro) BatchCreate(context.Context, []*learning.LearningLog) error {
+func (f *fakeLearningRepoRepro) BatchCreate(_ context.Context, logs []*learning.LearningLog) error {
+	// The seeder writes each pre-auth log via BatchCreate (lenient path); record
+	// them the same way Create does so the repro assertions see them.
+	for _, l := range logs {
+		cp := *l
+		f.created = append(f.created, &cp)
+	}
 	return nil
 }
 func (f *fakeLearningRepoRepro) Create(_ context.Context, l *learning.LearningLog) error {
@@ -64,10 +70,12 @@ func (fakeSkipRepoRepro) FindNoteFlags(context.Context, []int64) ([]notebook.Not
 func (fakeSkipRepoRepro) FindOriginFlags(context.Context, []int64) ([]notebook.OriginSkipFlagRecord, error) {
 	return nil, nil
 }
-func (fakeSkipRepoRepro) SkipNote(context.Context, int64, string, time.Time) error   { return nil }
-func (fakeSkipRepoRepro) ResumeNote(context.Context, int64, string) error            { return nil }
-func (fakeSkipRepoRepro) SkipOrigin(context.Context, int64, string, time.Time) error { return nil }
-func (fakeSkipRepoRepro) ResumeOrigin(context.Context, int64, string) error          { return nil }
+func (fakeSkipRepoRepro) SkipNote(context.Context, int64, int64, string, time.Time) error { return nil }
+func (fakeSkipRepoRepro) ResumeNote(context.Context, int64, int64, string) error          { return nil }
+func (fakeSkipRepoRepro) SkipOrigin(context.Context, int64, int64, string, time.Time) error {
+	return nil
+}
+func (fakeSkipRepoRepro) ResumeOrigin(context.Context, int64, int64, string) error { return nil }
 
 // TestReproSeeder_EtymologyLogsFromE2EFixtures drives the StateSeeder's
 // etymology-log seeding against the real e2e fixtures (etymology notebooks +
