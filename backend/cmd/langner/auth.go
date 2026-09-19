@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -107,20 +110,84 @@ func backfillOwner(ctx context.Context, db *sqlx.DB, ownerID int64) (int64, erro
 	return total, nil
 }
 
-// newAuthBackfillCommand assigns all pre-auth history (user_id IS NULL) to one
-// owner account. It is the flag-driven counterpart to the config-based
-// provisioning that `migrate import-db` runs for the e2e seed: a human running
-// the one-time cutover names the owner on the command line, so no persistent
-// `initial_admin_email` config is required. `--owner-email` find-or-creates the
-// account (works even when no one has signed in yet); `--user-id` targets an
-// existing account directly. With neither flag it falls back to the config's
-// initial_admin_email so the automated path keeps working.
+// toolingSubPrefix marks accounts minted by tooling (auth provision /
+// issue-test-cookie / the e2e seed) rather than a real Google sign-in — their
+// google_sub is syntheticSub(email) = "e2e-test|<email>". A real sign-in keys on
+// Google's own opaque sub, so such rows never carry this prefix. claimHistory
+// treats tooling-owned history as unowned so it can be reclaimed to a real
+// account (there is no email stored to look an account up by).
+const toolingSubPrefix = "e2e-test|"
+
+// claimHistory assigns to ownerID every learning-history row that has no REAL
+// owner yet — rows with user_id IS NULL (imported before auth) OR owned by a
+// tooling account (google_sub 'e2e-test|...', e.g. from the e2e seed or an
+// earlier mistaken run). It never touches a row owned by another real account,
+// so it is safe on a live multi-user DB. Returns the number of rows moved.
+func claimHistory(ctx context.Context, db *sqlx.DB, ownerID int64) (int64, error) {
+	var total int64
+	for _, table := range []string{"learning_logs", "note_skip_flags", "origin_skip_flags"} {
+		res, err := db.ExecContext(ctx, fmt.Sprintf(
+			`UPDATE %s SET user_id = $1
+			 WHERE user_id IS NULL
+			    OR user_id IN (SELECT id FROM users WHERE google_sub LIKE '%s%%')`,
+			table, toolingSubPrefix), ownerID)
+		if err != nil {
+			return total, fmt.Errorf("claim %s.user_id: %w", table, err)
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
+
+// listAuthUsers prints the accounts so the owner can find their real id. Kept
+// PII-free: it shows only the id, the auto-generated username, and whether the
+// row is a real Google account or a tooling account.
+func listAuthUsers(ctx context.Context, db *sqlx.DB) error {
+	var users []struct {
+		ID        int64  `db:"id"`
+		GoogleSub string `db:"google_sub"`
+		Username  string `db:"username"`
+	}
+	if err := db.SelectContext(ctx, &users, `SELECT id, google_sub, username FROM users ORDER BY id`); err != nil {
+		return fmt.Errorf("list users: %w", err)
+	}
+	if len(users) == 0 {
+		fmt.Println("No accounts yet. Sign in with Google first, then re-run with --user-id <id>.")
+		return nil
+	}
+	fmt.Println("Accounts — pass --user-id <id> of your REAL (google) account:")
+	for _, u := range users {
+		kind := "google"
+		if strings.HasPrefix(u.GoogleSub, toolingSubPrefix) {
+			kind = "tooling"
+		}
+		fmt.Printf("  id=%-4d %-8s username=%s\n", u.ID, kind, u.Username)
+	}
+	return nil
+}
+
+// newAuthBackfillCommand assigns unowned learning history to ONE real account —
+// the one-time per-user cutover. "Unowned" is user_id IS NULL (imported before
+// auth) plus history stuck on a tooling account. Because accounts store no email
+// (no PII), it cannot look you up by address: sign in with Google FIRST so your
+// account exists, then pass --user-id. Run with no flag to list accounts.
 func newAuthBackfillCommand() *cobra.Command {
-	var ownerEmail string
 	var userID int64
 	cmd := &cobra.Command{
 		Use:   "backfill",
-		Short: "Assign all pre-auth learning history (user_id IS NULL) to one owner account",
+		Short: "Assign unowned learning history to your real account (the per-user cutover)",
+		Long: `Assign learning history that has no real owner — rows with user_id NULL
+(imported before auth) or stuck on a tooling account (google_sub 'e2e-test|...',
+e.g. from the e2e seed or an earlier run) — to ONE real account.
+
+Accounts store no email, so this cannot look you up by address. Sign in with
+Google FIRST (creating your account), then:
+
+  langner auth backfill --user-id <your id>
+
+Run with no flag to list accounts and find your id. History already owned by a
+different real account is never touched.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			cfg, db, err := openConfigAndDB()
@@ -133,44 +200,30 @@ func newAuthBackfillCommand() *cobra.Command {
 				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
 			}
 
-			ownerID := userID
-			switch {
-			case userID != 0 && ownerEmail != "":
-				return fmt.Errorf("pass only one of --user-id or --owner-email")
-			case userID != 0:
-				// Target an existing account; verify it exists so a typo doesn't
-				// orphan every row under a non-existent id.
-				var exists bool
-				if err := db.GetContext(ctx, &exists, `SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)`, userID); err != nil {
-					return fmt.Errorf("check user id %d: %w", userID, err)
-				}
-				if !exists {
-					return fmt.Errorf("no user with id %d (sign in first, or use --owner-email to create the account)", userID)
-				}
-			case ownerEmail != "":
-				ownerID, err = ensureUser(ctx, auth.NewUserRepository(db), ownerEmail)
-				if err != nil {
-					return err
-				}
-			case cfg.Auth.InitialAdminEmail != "":
-				ownerID, err = ensureUser(ctx, auth.NewUserRepository(db), cfg.Auth.InitialAdminEmail)
-				if err != nil {
-					return err
-				}
-			default:
-				return fmt.Errorf("provide --owner-email or --user-id (or set auth.initial_admin_email in config)")
+			if userID == 0 {
+				return listAuthUsers(ctx, db)
 			}
 
-			n, err := backfillOwner(ctx, db, ownerID)
+			var sub string
+			if err := db.GetContext(ctx, &sub, `SELECT google_sub FROM users WHERE id = $1`, userID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("no account with id %d — sign in with Google first, then run `auth backfill` with no flag to list ids", userID)
+				}
+				return fmt.Errorf("look up user %d: %w", userID, err)
+			}
+			if strings.HasPrefix(sub, toolingSubPrefix) {
+				return fmt.Errorf("id %d is a tooling account, not a Google sign-in — pass the id of your real account (run `auth backfill` with no flag to find it)", userID)
+			}
+
+			n, err := claimHistory(ctx, db, userID)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Backfilled %d pre-auth row(s) to user id %d.\n", n, ownerID)
+			fmt.Printf("Assigned %d row(s) of unowned history to user id %d.\n", n, userID)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&ownerEmail, "owner-email", "", "email of the account to own all pre-auth history (find-or-created)")
-	cmd.Flags().Int64Var(&userID, "user-id", 0, "id of an existing account to own all pre-auth history")
+	cmd.Flags().Int64Var(&userID, "user-id", 0, "id of your real (Google) account to own all unowned history; omit to list accounts")
 	return cmd
 }
 
