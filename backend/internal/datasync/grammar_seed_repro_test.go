@@ -88,6 +88,10 @@ func TestStateSeeder_SeedGrammarCorrections_FromE2EFixtures(t *testing.T) {
 		if l.Status != "misunderstood" {
 			t.Errorf("seeded party-suggested log status = %q, want misunderstood", l.Status)
 		}
+		// Seeded history must be attributed to the owner (user_id NOT NULL).
+		if l.UserID != seeder.ownerID {
+			t.Errorf("grammar log user_id = %d, want owner %d", l.UserID, seeder.ownerID)
+		}
 	}
 	if !found {
 		t.Fatalf("no grammar log written for the practice notebook")

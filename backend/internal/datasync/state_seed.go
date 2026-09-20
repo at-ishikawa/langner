@@ -464,6 +464,9 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 	if originID == 0 {
 		return nil
 	}
+	if err := s.requireOwner(); err != nil {
+		return err
+	}
 
 	writeLogs := func(records []notebook.LearningRecord, defaultQuizType notebook.QuizType) error {
 		for _, r := range records {
@@ -472,6 +475,7 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 				quizType = string(defaultQuizType)
 			}
 			log := &learning.LearningLog{
+				UserID:           s.ownerID,
 				OriginID:         originID,
 				Status:           string(r.Status),
 				LearnedAt:        r.LearnedAt.Time,
@@ -481,8 +485,8 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 				IntervalDays:     r.IntervalDays,
 				SourceNotebookID: nbID,
 			}
-			// Seed/import path: lenient BatchCreate (see grammar log above) so a
-			// pre-auth row with user_id 0 is accepted and backfilled later.
+			// Seed/import path: attributed to the resolved owner at insert
+			// (user_id NOT NULL, migration 028).
 			if err := s.learningRepo.BatchCreate(ctx, []*learning.LearningLog{log}); err != nil {
 				return fmt.Errorf("insert etymology log: %w", err)
 			}

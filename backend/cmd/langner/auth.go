@@ -59,11 +59,18 @@ func ensureUser(ctx context.Context, users *auth.UserRepository, email string) (
 // history. Seeded learning_logs and skip flags are attributed to it AT INSERT
 // (user_id is NOT NULL, migration 028) — the same initial-admin account
 // provisionAuth used to backfill NULL rows to, only stamped up front instead.
-// Returns (0, nil) when auth is disabled or no initial_admin_email is set; the
-// seeder then errors only if there is actually history to seed (see
-// StateSeeder.requireOwner), leaving a content-only / auth-less import intact.
+//
+// Attribution keys off whether an OWNER is configured (initial_admin_email), NOT
+// on whether the server's session auth is running (Auth.Enabled() /
+// SESSION_SIGNING_KEY) — those are orthogonal. import-db attributes imported
+// history to the designated owner even when the HTTP auth server is off, which
+// is exactly how the seed/validate steps run it (import-db with only DB_PASSWORD
+// set, no signing key). Returns (0, nil) only when NO owner is configured; the
+// seeder/importer then errors if there is actually history to attribute (see
+// StateSeeder.requireOwner / validateLearningLog), leaving a content-only import
+// with no configured owner intact.
 func resolveSeedOwnerID(ctx context.Context, cfg *config.Config, db *sqlx.DB) (int64, error) {
-	if !cfg.Auth.Enabled() || cfg.Auth.InitialAdminEmail == "" {
+	if cfg.Auth.InitialAdminEmail == "" {
 		return 0, nil
 	}
 	users := auth.NewUserRepository(db)

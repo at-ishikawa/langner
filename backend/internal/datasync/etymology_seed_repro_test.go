@@ -158,5 +158,11 @@ func TestReproSeeder_EtymologyLogsFromE2EFixtures(t *testing.T) {
 		if l.QuizType != string(notebook.QuizTypeEtymologyOrigin) {
 			t.Errorf("etymology log quiz_type = %q, want etymology_origin", l.QuizType)
 		}
+		// Every seeded log must carry the owner (user_id NOT NULL, migration 028).
+		// The fake repo does not validate, so assert it here — this is the guard
+		// that catches a missing UserID stamp without a live DB.
+		if l.UserID != seeder.ownerID {
+			t.Errorf("etymology log user_id = %d, want owner %d (seeded history must be attributed)", l.UserID, seeder.ownerID)
+		}
 	}
 }
