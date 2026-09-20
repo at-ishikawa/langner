@@ -34,6 +34,32 @@ auth:
   #                          (e.g. `openssl rand -hex 32`)
   # No email/name is stored, so there is no credential-encryption key.
 
+# Notebook ownership + public/private visibility (auth Phase 3). Content stays a
+# shared global catalog; this overlay decides who may SEE each notebook. A
+# notebook_id NOT listed here has no ownership row and is therefore PUBLIC (all
+# logged-in users see it). A private notebook is visible only to its owner.
+# owner_email must be an auth account (allowed_emails / initial_admin_email).
+# Provisioned into the `notebooks` table by `langner auth provision` (also run
+# inside `migrate import-db`); adjust ad hoc with `langner notebooks set-owner`.
+# NOTE: owner_email here find-or-creates a TOOLING account (google_sub
+# "e2e-test|<email>") — correct for the e2e/dev seed (the test cookie is that
+# same synthetic account), but NOT what a real Google sign-in resolves to. For a
+# PRODUCTION private notebook, assign the owner to your REAL account instead:
+# sign in with Google, then `langner notebooks set-owner --notebook-id <id>
+# --user-id <your id> --visibility private` (run `langner auth backfill` with no
+# flag to list account ids). A synthetic owner would make a private notebook
+# visible to nobody who actually signs in.
+notebook_ownership:
+  # The example private book: only the (tooling) admin account sees it.
+  - notebook_id: visibility-private-demo
+    owner_email: "admin@example.com"
+    visibility: private
+  # The example public book, stated explicitly (any unlisted notebook is public
+  # too — this row just documents the intent and pins the owner).
+  - notebook_id: visibility-public-demo
+    owner_email: "admin@example.com"
+    visibility: public
+
 database:
   host: localhost
   port: 5432
