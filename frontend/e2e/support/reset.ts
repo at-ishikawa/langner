@@ -9,21 +9,25 @@
 // every one.
 //
 // Two stores must return to baseline:
-//   1. The database (vocabulary / etymology history) — `migrate reset-db`
-//      clears every data table and re-imports + re-seeds from the source YAML.
+//   1. The database (vocabulary / etymology history) — `langner-admin migrate
+//      reset-db` clears every data table and re-imports + re-seeds from the
+//      source YAML.
 //   2. The on-disk learning_notes YAML — the app dual-writes to it, and grammar
 //      history is read from it (grammar has no DB home), so restore it from git
 //      before re-importing.
 //
-// One row `reset-db` CANNOT restore is the auth `users` row: it is not sourced
-// from any YAML, it is minted by seed-and-serve.sh (`auth issue-test-cookie`).
-// `reset-db` drops + re-migrates the managed tables (`users` among them,
-// migration 024) and re-imports the YAML, which wipes that row and leaves the
-// pre-minted session cookie (see global-setup.ts) pointing at a nonexistent
-// user — so `/auth/me` 401s and every authenticated page redirects to /login.
-// We therefore re-mint the same allowlisted user after every reset. The scoped
-// rebuild restarts the BIGSERIAL sequence, so the re-inserted user reclaims
-// id=1 and the fixed storageState cookie keeps resolving.
+// The auth accounts + notebook ownership `reset-db` CANNOT restore: auth
+// provisioning is now DECOUPLED from reset-db (it no longer runs implicitly), so
+// we run `langner-admin auth provision` explicitly after every reset to re-upsert
+// the allowlist/admin accounts and re-assign notebook ownership from the config's
+// notebook_ownership block. `reset-db` drops + re-migrates the managed tables
+// (`users` among them, migration 024) and re-imports the YAML, which wipes those
+// rows and would leave the pre-minted session cookie (see global-setup.ts)
+// pointing at a nonexistent user — so `/auth/me` 401s and every authenticated
+// page redirects to /login. We therefore re-provision and re-mint the same
+// allowlisted user after every reset. The scoped rebuild restarts the BIGSERIAL
+// sequence, so the re-inserted user reclaims id=1 and the fixed storageState
+// cookie keeps resolving.
 
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -52,18 +56,26 @@ export function resetState(): void {
   git(["clean", "-fdq", LEARNING_NOTES]);
 
   // 2. Rebuild the DB to the seeded baseline from the restored YAML.
-  execFileSync("./langner", ["migrate", "reset-db", "--config", CONFIG_PATH], {
+  execFileSync("./langner-admin", ["migrate", "reset-db", "--config", CONFIG_PATH], {
     cwd: REPO_ROOT,
     stdio: "pipe",
     env: { ...process.env, DB_PASSWORD },
   });
 
-  // 3. Re-mint the allowlisted auth user the rebuild just wiped, so the
+  // 3. Re-provision auth accounts + notebook ownership the rebuild wiped (auth
+  //    provisioning is decoupled from reset-db, so it must run explicitly).
+  execFileSync("./langner-admin", ["auth", "provision", "--config", CONFIG_PATH], {
+    cwd: REPO_ROOT,
+    stdio: "pipe",
+    env: { ...process.env, DB_PASSWORD },
+  });
+
+  // 4. Re-mint the allowlisted auth user the rebuild just wiped, so the
   //    pre-minted session cookie keeps resolving (upsert is idempotent; the
   //    re-inserted user reclaims id=1 after the sequence restart). We only need
   //    the user row — the printed cookie is discarded.
   execFileSync(
-    "./langner",
+    "./langner-admin",
     ["auth", "issue-test-cookie", "--email", E2E_EMAIL, "--config", CONFIG_PATH],
     { cwd: REPO_ROOT, stdio: "pipe", env: { ...process.env, DB_PASSWORD } },
   );

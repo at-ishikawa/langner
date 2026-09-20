@@ -65,6 +65,13 @@ jobs:
   validate-examples:
     name: Validate example configurations
     runs-on: ubuntu-latest
+    # The `auth provision` step below requires auth to be ENABLED (its command
+    # errors when session auth is off). A non-secret throwaway signing key
+    # enables auth for this CI job (AuthConfig.Enabled() only checks the key is
+    # non-empty). import-db / sync-db do NOT need it — they attribute seeded
+    # history to the configured initial_admin_email at insert regardless.
+    env:
+      SESSION_SIGNING_KEY: ci0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
     services:
       postgres:
         image: postgres:16
@@ -87,14 +94,11 @@ jobs:
         with:
           go-version-file: 'backend/go.mod'
 
-      - name: Build langner
-        run: cd backend && go build -o ../langner ./cmd/langner
+      - name: Build langner + langner-admin
+        run: cd backend && go build -o ../langner ./cmd/langner && go build -o ../langner-admin ./cmd/langner-admin
 
       - name: Run langner validate
         run: ./langner validate --config config.example.yml
-
-      - name: Output markdown and PDF files
-        run: ./langner --config config.example.yml notebooks stories friends --pdf
 
       - name: Install migrate tool
         run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
@@ -103,7 +107,15 @@ jobs:
         run: migrate -source file://backend/schemas/migrations -database "postgres://user:password@localhost:5432/local?sslmode=disable" up
 
       - name: Import example data to DB
-        run: ./langner migrate import-db --config config.example.yml
+        run: ./langner-admin migrate import-db --config config.example.yml
+        env:
+          DB_PASSWORD: password
+
+      # Auth provisioning is now decoupled from import-db (it no longer runs
+      # implicitly): provision the allowlist/admin accounts and assign notebook
+      # ownership from config.example.yml's notebook_ownership block explicitly.
+      - name: Provision auth accounts
+        run: ./langner-admin auth provision --config config.example.yml
         env:
           DB_PASSWORD: password
 
@@ -112,8 +124,8 @@ jobs:
         env:
           DB_PASSWORD: password
 
-      - name: Run langner migrate validate-db
-        run: ./langner migrate validate-db --config config.example.yml
+      - name: Run langner-admin migrate validate-db
+        run: ./langner-admin migrate validate-db --config config.example.yml
         env:
           DB_PASSWORD: password
 
@@ -156,7 +168,7 @@ jobs:
       - name: Integration test — DB table-dump round-trip (isolated, fresh schema)
         run: |
           PGPASSWORD=password psql -h localhost -U user -d local -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-          cd backend && go test -count=1 -run TestTableDumpRoundTrip_LivePostgres_Integration ./cmd/langner/
+          cd backend && go test -count=1 -run TestTableDumpRoundTrip_LivePostgres_Integration ./internal/clicmd/
         env:
           LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
 
@@ -165,8 +177,8 @@ jobs:
       # the MySQL-era SET foreign_key_checks that broke on PG, or a
       # future TRUNCATE against tables that a migration forgot to
       # create.
-      - name: Run langner migrate sync-db
-        run: ./langner migrate sync-db --config config.example.yml
+      - name: Run langner-admin migrate sync-db
+        run: ./langner-admin migrate sync-db --config config.example.yml
         env:
           DB_PASSWORD: password
 
@@ -178,8 +190,8 @@ jobs:
       - name: Drop all tables so the database is empty
         run: PGPASSWORD=password psql -h localhost -U user -d local -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
 
-      - name: Run langner migrate sync-db on empty DB
-        run: ./langner migrate sync-db --config config.example.yml
+      - name: Run langner-admin migrate sync-db on empty DB
+        run: ./langner-admin migrate sync-db --config config.example.yml
         env:
           DB_PASSWORD: password
 
@@ -211,6 +223,6 @@ jobs:
 
       - name: Integration tests — import-db + sync-db drift/dirty rebuild + homograph/multi-notebook pipeline
         working-directory: backend
-        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/database/ ./cmd/langner/
+        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/database/ ./internal/clicmd/
         env:
           LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable

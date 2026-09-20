@@ -1,4 +1,4 @@
-package main
+package clicmd
 
 import (
 	"bytes"
@@ -49,7 +49,7 @@ func TestIsDBConfigured(t *testing.T) {
 }
 
 func TestNewValidateCommand(t *testing.T) {
-	cmd := newValidateCommand()
+	cmd := NewValidateCommand()
 
 	assert.Equal(t, "validate", cmd.Use)
 	assert.NotNil(t, cmd.RunE)
@@ -239,7 +239,7 @@ func TestNewValidateCommand_RunE(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup(t)
-			cmd := newValidateCommand()
+			cmd := NewValidateCommand()
 			cmd.SetArgs(tt.args)
 			err := cmd.Execute()
 			if tt.wantErr != "" {
@@ -350,7 +350,7 @@ books:
 	)), 0o644))
 	setConfigFile(t, cfgPath)
 
-	cmd := newValidateCommand()
+	cmd := NewValidateCommand()
 	cmd.SetArgs([]string{"--fix"})
 	_ = cmd.Execute() // --fix may exit non-zero if other validations fail; the assertion is on the skip-only entry
 

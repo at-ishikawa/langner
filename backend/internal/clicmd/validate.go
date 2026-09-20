@@ -1,4 +1,4 @@
-package main
+package clicmd
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-func newValidateCommand() *cobra.Command {
+func NewValidateCommand() *cobra.Command {
 	var fix bool
 
 	command := &cobra.Command{

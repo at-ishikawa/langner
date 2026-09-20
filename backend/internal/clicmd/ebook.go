@@ -1,4 +1,4 @@
-package main
+package clicmd
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newEbookCommand() *cobra.Command {
+func NewEbookCommand() *cobra.Command {
 	ebookCmd := &cobra.Command{
 		Use:   "ebook",
 		Short: "Manage ebook repositories",

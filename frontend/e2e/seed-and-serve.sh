@@ -29,8 +29,8 @@ cd "$(dirname "$0")/../.."
 export PGPASSWORD="${DB_PASSWORD}"
 psql_e2e() { psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -v ON_ERROR_STOP=1 -tAc "$1"; }
 
-echo "[seed] building langner + langner-server"
-(cd backend && go build -o ../langner ./cmd/langner && go build -o ../langner-server ./cmd/langner-server)
+echo "[seed] building langner + langner-admin + langner-server"
+(cd backend && go build -o ../langner ./cmd/langner && go build -o ../langner-admin ./cmd/langner-admin && go build -o ../langner-server ./cmd/langner-server)
 
 # Count existing e2e users (0 if the DB or table doesn't exist yet). If a prior
 # invocation already seeded, DON'T drop/reseed — a second DROP would wipe the
@@ -45,11 +45,17 @@ if [ "${existing}" -lt 1 ]; then
     -c "CREATE DATABASE ${DB_NAME} ENCODING 'UTF8'"
 
   echo "[seed] importing notebooks (migrate import-db)"
-  DB_PASSWORD="${DB_PASSWORD}" ./langner migrate import-db --config "${TEST_CONFIG_PATH}"
+  DB_PASSWORD="${DB_PASSWORD}" ./langner-admin migrate import-db --config "${TEST_CONFIG_PATH}"
+
+  # Auth provisioning is decoupled from import-db (it no longer runs
+  # implicitly): upsert the allowlist/admin accounts + notebook ownership so
+  # the minted cookie's account exists and the seeded history is owned.
+  echo "[seed] provisioning auth accounts (auth provision)"
+  DB_PASSWORD="${DB_PASSWORD}" ./langner-admin auth provision --config "${TEST_CONFIG_PATH}"
 
   echo "[seed] minting e2e session cookie for ${E2E_EMAIL}"
   mkdir -p "$(dirname "${COOKIE_FILE}")"
-  DB_PASSWORD="${DB_PASSWORD}" ./langner auth issue-test-cookie --email "${E2E_EMAIL}" --config "${TEST_CONFIG_PATH}" >"${COOKIE_FILE}"
+  DB_PASSWORD="${DB_PASSWORD}" ./langner-admin auth issue-test-cookie --email "${E2E_EMAIL}" --config "${TEST_CONFIG_PATH}" >"${COOKIE_FILE}"
 fi
 
 # Hard guard: the server must NOT start unless the user row is really present.
