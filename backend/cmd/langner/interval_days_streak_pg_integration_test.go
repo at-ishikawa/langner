@@ -69,8 +69,9 @@ func TestIntervalDaysStreak_LivePostgres_Integration(t *testing.T) {
 
 	// Import the example notebooks the SAME way import-db does, so every note
 	// gets its notebook_notes link and DBHistoryStore can reconstruct it.
+	importOwner := seedIntegrationUser(t, db, "interval-streak-import-owner")
 	importer := newImporterFromConfig(cfg, db, io.Discard)
-	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{})
+	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{OwnerID: importOwner})
 	require.NoError(t, err)
 
 	repos := bootstrap.BuildStateRepositories(cfg.Notebooks, cfg.Quiz, db)

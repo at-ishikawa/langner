@@ -216,6 +216,15 @@ type ImportEtymologyResult struct {
 type ImportOptions struct {
 	DryRun         bool
 	UpdateExisting bool
+	// OwnerID attributes every imported learning_logs row to a user
+	// (learning_logs.user_id is NOT NULL, migration 028). A YAML-notebook
+	// import carries no per-row owner, so the caller resolves one (the initial
+	// admin) and passes it here — the same account the seeder stamps. Zero is
+	// rejected by the learning-log write boundary (validateLearningLog) the
+	// moment a log would be inserted, so an import that actually carries history
+	// must supply it. (The table-dump restore preserves each row's own user_id
+	// via raw SQL and does not use this path.)
+	OwnerID int64
 }
 
 // Importer reads YAML notebook data and writes to DB.
@@ -852,6 +861,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 				continue
 			}
 			newLogs = append(newLogs, &learning.LearningLog{
+				UserID:           opts.OwnerID,
 				NoteID:           n.ID,
 				Status:           string(rec.Status),
 				LearnedAt:        rec.LearnedAt.Time,
@@ -879,6 +889,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 				continue
 			}
 			newLogs = append(newLogs, &learning.LearningLog{
+				UserID:           opts.OwnerID,
 				NoteID:           n.ID,
 				Status:           string(rec.Status),
 				LearnedAt:        rec.LearnedAt.Time,
@@ -907,6 +918,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 					continue
 				}
 				newLogs = append(newLogs, &learning.LearningLog{
+					UserID:           opts.OwnerID,
 					NoteID:           n.ID,
 					Status:           string(rec.Status),
 					LearnedAt:        rec.LearnedAt.Time,

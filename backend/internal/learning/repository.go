@@ -329,14 +329,16 @@ func validateLearningLog(log *LearningLog, enforceComputedInterval bool) error {
 	if enforceComputedInterval && isSuccessStatus(log.Status) && log.IntervalDays <= 0 {
 		return fmt.Errorf("learning log for %s: %s attempt has interval_days=%d (interval was not computed)", target, log.Status, log.IntervalDays)
 	}
-	// Runtime writes (Create, enforceComputedInterval=true) MUST carry the
-	// answering user's id — a per-user attempt with user_id=0 would be
-	// unattributable and invisible to every user-scoped read (auth Phase 2).
-	// Import/seed (BatchCreate, enforceComputedInterval=false) stays lenient:
-	// pre-auth rows land with user_id=0 (NULL) and are backfilled by
-	// `langner auth provision`.
-	if enforceComputedInterval && log.UserID == 0 {
-		return fmt.Errorf("learning log for %s: user_id is zero (runtime write must be attributed to a user)", target)
+	// EVERY log MUST carry an owning user id — on BOTH paths (auth Phase 2,
+	// enforced at the DB by learning_logs.user_id NOT NULL, migration 028). A
+	// user_id=0 row would be unattributable and invisible to every user-scoped
+	// read. Runtime writes get it from the request context; import/seed now
+	// attributes each row to the resolved owner at insert (StateSeeder.ownerID),
+	// so the old "pre-auth rows land NULL and are backfilled later" leniency is
+	// gone. (The table-dump restore inserts rows verbatim via raw SQL, not this
+	// path, and relies on the NOT NULL column for the same guarantee.)
+	if log.UserID == 0 {
+		return fmt.Errorf("learning log for %s: user_id is zero (a learning log must be attributed to a user)", target)
 	}
 	return nil
 }

@@ -55,6 +55,21 @@ func ensureUser(ctx context.Context, users *auth.UserRepository, email string) (
 	return u.ID, nil
 }
 
+// resolveSeedOwnerID resolves the user id that owns imported/seeded learning
+// history. Seeded learning_logs and skip flags are attributed to it AT INSERT
+// (user_id is NOT NULL, migration 028) — the same initial-admin account
+// provisionAuth used to backfill NULL rows to, only stamped up front instead.
+// Returns (0, nil) when auth is disabled or no initial_admin_email is set; the
+// seeder then errors only if there is actually history to seed (see
+// StateSeeder.requireOwner), leaving a content-only / auth-less import intact.
+func resolveSeedOwnerID(ctx context.Context, cfg *config.Config, db *sqlx.DB) (int64, error) {
+	if !cfg.Auth.Enabled() || cfg.Auth.InitialAdminEmail == "" {
+		return 0, nil
+	}
+	users := auth.NewUserRepository(db)
+	return ensureUser(ctx, users, cfg.Auth.InitialAdminEmail)
+}
+
 // provisionAuth upserts the configured allowlist + initial-admin accounts and
 // backfills every pre-auth (user_id IS NULL) learning-history row — learning
 // logs and both skip-flag tables — to the initial admin's id, so history

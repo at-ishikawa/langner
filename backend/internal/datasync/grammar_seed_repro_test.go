@@ -50,6 +50,7 @@ func TestStateSeeder_SeedGrammarCorrections_FromE2EFixtures(t *testing.T) {
 		grammarRepo:      grammarRepo,
 		learningRepo:     learnRepo,
 		learningNotesDir: learningNotes,
+		ownerID:          1, // seeded history is attributed to an owner (user_id NOT NULL)
 	}
 
 	result := &StateSeedResult{}

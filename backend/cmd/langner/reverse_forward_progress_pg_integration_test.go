@@ -76,8 +76,9 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 	cfg, err := loader.Load()
 	require.NoError(t, err)
 
+	importOwner := seedIntegrationUser(t, db, "reverse-progress-import-owner")
 	importer := newImporterFromConfig(cfg, db, io.Discard)
-	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{})
+	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{OwnerID: importOwner})
 	require.NoError(t, err)
 
 	// Build the Service exactly as langner-server does in DB mode.
@@ -190,9 +191,9 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 	// Seed a stale misunderstood reverse attempt (30 days ago) the way a prior
 	// session's import would — it takes a LOWER id than the runtime answer below.
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
-		 VALUES ($1, 'misunderstood', $2, 1, 0, 'reverse', 1, $3)`,
-		pulmonaryNoteID, time.Now().AddDate(0, 0, -30), bookID)
+		`INSERT INTO learning_logs (user_id, note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
+		 VALUES ($1, $2, 'misunderstood', $3, 1, 0, 'reverse', 1, $4)`,
+		userID, pulmonaryNoteID, time.Now().AddDate(0, 0, -30), bookID)
 	require.NoError(t, err)
 
 	pulCard, ok := findReverse(loadReverse(), "pulmonary")

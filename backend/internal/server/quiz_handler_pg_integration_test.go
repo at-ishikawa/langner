@@ -178,7 +178,14 @@ notebooks:
 // with a single shared notes row backing them. This is what a
 // regression in ensureNoteExists / SaveResult / MultiLearningRepository
 // silently gets wrong.
-func assertDBHasQuizAnswers(t *testing.T, db *sqlx.DB, expression, quizType string, expectedLogs int) {
+//
+// wantUserID additionally pins that EVERY written row is attributed to the
+// answering user — user_id equals wantUserID and is never NULL. This is the
+// auth Phase 2 write contract: a signed-in save must stamp the caller's id, not
+// drop it to NULL (a NULL row is invisible to every user-scoped read and is
+// exactly the unowned-history symptom seen against a binary that predates the
+// per-user threading).
+func assertDBHasQuizAnswers(t *testing.T, db *sqlx.DB, expression, quizType string, expectedLogs int, wantUserID int64) {
 	t.Helper()
 
 	var noteCount int
@@ -196,6 +203,17 @@ func assertDBHasQuizAnswers(t *testing.T, db *sqlx.DB, expression, quizType stri
 	assert.Equal(t, expectedLogs, logCount,
 		"expected %d learning_logs rows with quiz_type=%q for %q, got %d",
 		expectedLogs, quizType, expression, logCount)
+
+	var attributed int
+	require.NoError(t, db.Get(&attributed, `
+		SELECT COUNT(*) FROM learning_logs ll
+		JOIN notes n ON n.id = ll.note_id
+		WHERE n."usage" = $1 AND n.entry = $1 AND ll.quiz_type = $2
+		  AND ll.user_id = $3`,
+		expression, quizType, wantUserID))
+	assert.Equal(t, expectedLogs, attributed,
+		"every %s log for %q must be attributed to user %d (never NULL); got %d of %d attributed",
+		quizType, expression, wantUserID, attributed, logCount)
 }
 
 // TestQuizHandler_Standard_LivePostgres_Integration exercises
@@ -233,7 +251,7 @@ func TestQuizHandler_Standard_LivePostgres_Integration(t *testing.T) {
 	answerCard(t)
 	answerCard(t)
 
-	assertDBHasQuizAnswers(t, db, "serendipity", "notebook", 2)
+	assertDBHasQuizAnswers(t, db, "serendipity", "notebook", 2, userID)
 }
 
 // TestQuizHandler_Reverse_LivePostgres_Integration covers the
@@ -271,7 +289,7 @@ func TestQuizHandler_Reverse_LivePostgres_Integration(t *testing.T) {
 	answer(t)
 	answer(t)
 
-	assertDBHasQuizAnswers(t, db, "serendipity", "reverse", 2)
+	assertDBHasQuizAnswers(t, db, "serendipity", "reverse", 2, userID)
 }
 
 // TestQuizHandler_Freeform_LivePostgres_Integration covers the
@@ -310,7 +328,7 @@ func TestQuizHandler_Freeform_LivePostgres_Integration(t *testing.T) {
 	answer(t)
 	answer(t)
 
-	assertDBHasQuizAnswers(t, db, "preposterous", "freeform", 2)
+	assertDBHasQuizAnswers(t, db, "preposterous", "freeform", 2, userID)
 }
 
 // TestQuizHandler_BatchSubmit_LivePostgres_Integration covers the
@@ -352,7 +370,7 @@ func TestQuizHandler_BatchSubmit_LivePostgres_Integration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	assertDBHasQuizAnswers(t, db, "serendipity", "notebook", 2)
+	assertDBHasQuizAnswers(t, db, "serendipity", "notebook", 2, userID)
 }
 
 // TestQuizHandler_Standard_OverrideAnswer_LivePostgres_Integration

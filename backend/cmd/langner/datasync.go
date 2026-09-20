@@ -69,10 +69,23 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return err
 			}
 
+			// Resolve the owner up front: imported AND seeded learning history is
+			// attributed to the initial admin AT INSERT (user_id NOT NULL,
+			// migration 028). Skipped on dry-run (no writes) so it mints no user.
+			var ownerID int64
+			if !dryRun {
+				var oerr error
+				ownerID, oerr = resolveSeedOwnerID(ctx, cfg, db)
+				if oerr != nil {
+					return fmt.Errorf("resolve import owner: %w", oerr)
+				}
+			}
+
 			importer := newImporterFromConfig(cfg, db, os.Stdout)
 			opts := datasync.ImportOptions{
 				DryRun:         dryRun,
 				UpdateExisting: updateExisting,
+				OwnerID:        ownerID,
 			}
 
 			result, err := importer.ImportAll(ctx, opts)
@@ -98,7 +111,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 			// logs) from the same YAML the importer just consumed. The
 			// seeder is idempotent so re-runs only insert what's missing.
 			if !opts.DryRun {
-				if seeder := newStateSeederFromConfig(cfg, db, os.Stdout); seeder != nil {
+				if seeder := newStateSeederFromConfig(cfg, db, os.Stdout, ownerID); seeder != nil {
 					stateResult, serr := seeder.SeedAll(ctx)
 					if serr != nil {
 						return fmt.Errorf("seed db-only state: %w", serr)
@@ -329,11 +342,15 @@ func newMigrateResetDBCommand() *cobra.Command {
 			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
 				return fmt.Errorf("apply schema migrations: %w", err)
 			}
+			ownerID, oerr := resolveSeedOwnerID(ctx, cfg, db)
+			if oerr != nil {
+				return fmt.Errorf("resolve seed owner: %w", oerr)
+			}
 			importer := newImporterFromConfig(cfg, db, io.Discard)
-			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true}); err != nil {
+			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true, OwnerID: ownerID}); err != nil {
 				return fmt.Errorf("import source yaml: %w", err)
 			}
-			if seeder := newStateSeederFromConfig(cfg, db, io.Discard); seeder != nil {
+			if seeder := newStateSeederFromConfig(cfg, db, io.Discard, ownerID); seeder != nil {
 				if _, err := seeder.SeedAll(ctx); err != nil {
 					return fmt.Errorf("seed db-only state: %w", err)
 				}
@@ -407,14 +424,18 @@ WITHOUT modifying the database, use "migrate validate-db" instead.`,
 			}
 			fmt.Println("  Rebuild complete.")
 
+			ownerID, oerr := resolveSeedOwnerID(ctx, cfg, db)
+			if oerr != nil {
+				return fmt.Errorf("resolve seed owner: %w", oerr)
+			}
 			fmt.Println("Step 2: Importing source YAML into the empty database...")
 			importer := newImporterFromConfig(cfg, db, io.Discard)
-			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true}); err != nil {
+			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true, OwnerID: ownerID}); err != nil {
 				return err
 			}
 			fmt.Println("  Import complete.")
 
-			if seeder := newStateSeederFromConfig(cfg, db, io.Discard); seeder != nil {
+			if seeder := newStateSeederFromConfig(cfg, db, io.Discard, ownerID); seeder != nil {
 				fmt.Println("Step 3: Seeding DB-only state tables from YAML...")
 				if _, err := seeder.SeedAll(ctx); err != nil {
 					return fmt.Errorf("seed db-only state: %w", err)
@@ -564,7 +585,7 @@ func newExporterFromConfig(cfg *config.Config, db *sqlx.DB, outputDir string, wr
 // newStateSeederFromConfig wires the datasync.StateSeeder used by
 // import-db and sync-db to populate the DB-only state tables from YAML.
 // Returns nil when the notebook reader can't be constructed.
-func newStateSeederFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *datasync.StateSeeder {
+func newStateSeederFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer, ownerID int64) *datasync.StateSeeder {
 	reader, err := notebook.NewReader(
 		cfg.Notebooks.StoriesDirectories,
 		cfg.Notebooks.FlashcardsDirectories,
@@ -588,6 +609,7 @@ func newStateSeederFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer)
 		learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, nil),
 		cfg.Notebooks.LearningNotesDirectory,
 		writer,
+		ownerID,
 	)
 }
 

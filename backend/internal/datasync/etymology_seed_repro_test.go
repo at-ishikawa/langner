@@ -134,6 +134,7 @@ func TestReproSeeder_EtymologyLogsFromE2EFixtures(t *testing.T) {
 		skipFlagRepo: fakeSkipRepoRepro{},
 		learningRepo: learnRepo,
 		learningSrc:  learningSrc,
+		ownerID:      1, // seeded history is attributed to an owner (user_id NOT NULL)
 	}
 
 	result := &StateSeedResult{}
