@@ -38,18 +38,27 @@ Users are not engineers, cannot SSH, and the app is Vercel-hosted. The CLI must 
 
 ## 2. Goals / non-goals
 
+> **Architecture update (supersedes the original cookie-based framing below).**
+> The frontend (Next.js) and the RPC API (Go) will run on **separate origins** once
+> hosted on Vercel (static/SSR frontend on Vercel, the Go connect-RPC server on its
+> own host). A session **cookie is cross-site** in that topology — it needs
+> `SameSite=None; Secure` and is subject to third-party-cookie blocking, so it is
+> the wrong primitive. The **web app therefore uses the SAME bearer access-token
+> model as the CLI**: one unified langner-token auth for both clients. The cookie
+> flow is **removed**, not kept in parallel.
+
 **Goals**
-- `langner login` authenticates the CLI with zero API keys, via a browser approval the user already knows (Google sign-in).
-- The CLI receives a **langner-owned access JWT (24h)** + a **refresh token** (opaque; stored **hashed** server-side).
-- The Connect RPC middleware **also** accepts `Authorization: Bearer <access-jwt>` **without weakening** existing cookie auth.
-- Tokens are stored locally at `~/.config/langner/credentials.json`, `0600`. Silent refresh on access-token expiry; `langner logout` revokes.
+- **One auth model for both web and CLI: a langner-owned bearer access token.** `langner login` (CLI, device flow) and the web sign-in both end with a langner **access JWT (24h)** + a **refresh token** (opaque; stored **hashed** server-side); every RPC — from the browser or the CLI — carries `Authorization: Bearer <access-jwt>`.
+- **Auth is ALWAYS mounted and ALWAYS required.** There is no opt-in/opt-out: no `Auth.Enabled()` gate, no "run ungated" mode, no `AUTH=0`. The server fails fast at startup if its token-signing key is absent. Cross-origin requests authenticate by bearer, never by cookie.
+- Zero API keys — a browser approval the user already knows (Google sign-in) is the only credential ceremony.
+- Tokens are stored client-side (CLI: a JSON file, `0600`; web: see §8). Silent refresh on access-token expiry; `logout` revokes server-side.
+- **No fallbacks** — not for signing keys (the token key is its own required secret) and not across servers (the CLI store is keyed per server; a missing entry is an error, never a silent default).
 - Public repo: secrets only via env; nothing personal committed.
 
 **Non-goals**
-- No change to the browser/web session cookie flow.
 - No API keys, ever.
-- No new identity provider — Google remains the only sign-in.
-- Device-flow is for the **CLI**; the web app keeps using cookies.
+- No new identity provider — Google remains the only upstream sign-in.
+- No session cookie — it is removed, not merely deprecated. (The only remaining browser cookie use is the short-lived OAuth CSRF `state` during the Google redirect, which is same-site to the API host and not an app session.)
 
 ---
 
@@ -124,8 +133,8 @@ Server creates a `cli_device_codes` row (`user_id` NULL, `approved_at` NULL). `e
 
 ### 4.2 `GET /auth/device` + `POST /auth/device/approve` — browser approval (reuses Google sign-in)
 
-- `GET /auth/device?user_code=…` renders a minimal HTML page: a field pre-filled with `user_code` and an **Approve** button. If the request has **no valid `langner_session` cookie**, the page links to `/auth/google/login?next=/auth/device?user_code=…` so the user signs in with the **existing** Google flow and returns here. (Reuse `AuthCookieMiddleware`, which already populates the session context for `/auth/*`.)
-- `POST /auth/device/approve` (form or JSON `{ "user_code": "WDJB-MJHT" }`) requires a valid session cookie (`auth.SessionFromContext`). It looks up the device row by `user_code`, checks it is unexpired and unapproved, sets `user_id = <session user id>` and `approved_at = now()`. Shows a "You can return to your terminal" confirmation. A deny action sets a terminal `access_denied` state (see below).
+- `GET /auth/device?user_code=…` renders a minimal HTML page: a field pre-filled with `user_code` and an **Approve** button. Because there is no app session cookie (§8), the page **always** routes the user through a one-shot Google sign-in — `/auth/google/login?next=/auth/device/approve?user_code=…` — and the approving identity is carried through the OAuth `state` (short-lived, same-site-to-API cookie), not a persistent session.
+- `POST /auth/device/approve` (form or JSON `{ "user_code": "WDJB-MJHT" }`) is reachable only at the end of that fresh Google sign-in; it takes the server-verified Google identity (allowlist-checked, user upserted), looks up the device row by `user_code`, checks it is unexpired and unapproved, sets `user_id = <that identity's user id>` and `approved_at = now()`. Shows a "You can return to your terminal" confirmation. A deny action sets a terminal `access_denied` state (see below).
 
 Security: `user_code` lookup is rate-limited and constant-time-compared; an expired/consumed code returns a generic error page (no enumeration signal).
 
@@ -235,29 +244,25 @@ A compact JWT (HS256), claims:
   "exp": <iat + 86400>          // 24h
 }
 ```
-`sub` is the numeric `users.id` (same identity the cookie's `uid` carries). `jti` gives per-token identity for future denylisting/audit. No email/name (data minimisation, matching the cookie's no-PII rule). Aud/scope omitted (single audience, single scope).
+`sub` is the numeric `users.id`. `jti` gives per-token identity for future denylisting/audit. No email/name (data minimisation, keeping the no-PII rule migration 024 established). Aud/scope omitted (single audience, single scope).
 
-### 6.2 Signing key — recommendation
+### 6.2 Signing key — one required key
 
-**Use a dedicated `CLI_TOKEN_SIGNING_KEY`, not `SESSION_SIGNING_KEY`.** Justification:
-- **Blast-radius isolation.** The two tokens have different lifetimes (cookie 30d vs access JWT 24h), different transports (browser cookie vs CLI bearer), and different revocation stories. A dedicated key lets us rotate one without invalidating the other.
-- **Format divergence.** The cookie today is a **custom HMAC envelope** (`base64url(json).base64url(hmac)`), not a JWT. Introducing a JWT under the same key mixes two token formats on one secret — easy to confuse in verification code. Separate keys keep `SessionSigner.Verify` and the new JWT verifier from ever being pointed at each other's tokens.
-- **Least surprise / defense in depth.** If the CLI token verifier had a bug, we would not want it reachable with the cookie key.
+There is exactly **one** auth signing key now: `TOKEN_SIGNING_KEY`, which signs the access JWT for **both** the web SPA and the CLI (they share the token model, §2/§8). The old `SESSION_SIGNING_KEY` is **removed** with the cookie — there is no second token format and no separate cookie key to isolate from. (Refresh tokens are opaque random strings stored hashed, not signed, so they need no key.)
 
-Wire it exactly like `SESSION_SIGNING_KEY`: add `auth.session_cli_token_signing_key` (or `auth.cli_token_signing_key`) to `AuthConfig`, `v.BindEnv("auth.cli_token_signing_key", "CLI_TOKEN_SIGNING_KEY")` in `config.go`, decode with `auth.DecodeKey`. **Fallback for single-key deployments:** if `CLI_TOKEN_SIGNING_KEY` is unset, fall back to `SESSION_SIGNING_KEY` so a minimal deployment still works — but document the dedicated key as recommended. Never commit either (public repo).
+Wire it: add `auth.token_signing_key` to `AuthConfig`, `v.BindEnv("auth.token_signing_key", "TOKEN_SIGNING_KEY")` in `config.go`, decode with `auth.DecodeKey`. **No fallback.** The token signing key is the single required auth secret; the server **fails fast at startup if it is unset** (auth is always mounted, §2). Because the session cookie is removed, `SESSION_SIGNING_KEY` goes away entirely — there is only one signing key now, and it signs the access JWT. (If a deployment set both today, the migration is: drop `SESSION_SIGNING_KEY`, set `TOKEN_SIGNING_KEY`.) Never commit it (public repo).
 
 A small `auth.CLITokenSigner` (new file `internal/auth/cli_token.go`) wraps sign/verify. Use a vetted JWT library or a tiny hand-rolled HS256 (the codebase already hand-rolls HMAC in `session.go`); given HS256's simplicity and the existing pattern, a hand-rolled signer keeps dependencies minimal and is acceptable — but a maintained library (e.g. `golang-jwt/jwt`) is preferable for standards conformance (base64url header, `alg` pinning to reject `none`). Decide in review (§9).
 
-### 6.3 Verification path (bearer alongside cookie — the key requirement)
+### 6.3 Verification path (bearer is the ONLY path)
 
-Today `AuthCookieMiddleware` is the only thing that populates the session/user-id context, and it is cookie-only. To accept a bearer **without weakening cookie auth**, extend the *middleware*, not the interceptor:
+The `langner_session` cookie and `AuthCookieMiddleware`'s cookie branch are **removed**. A single **`AuthBearerMiddleware`** populates the session/user-id context from `Authorization: Bearer <token>`:
 
-- In `AuthCookieMiddleware` (rename conceptually to "auth context middleware"; keep the function or add a sibling `AuthBearerMiddleware` chained after it), after the existing cookie check, **if no session was established from the cookie**, check for an `Authorization: Bearer <token>` header. If present and `CLITokenSigner.Verify` succeeds (valid signature, `exp` not passed, `iss == "langner"`), populate the context with `auth.WithSession(ctx, Session{UserID: sub, ExpiresAt: exp})` and `auth.WithUserID`.
-- The `NewAuthInterceptor()` is **unchanged** — it still only reads `auth.SessionFromContext`. Because either the cookie path or the bearer path fills that context, both authenticate uniformly and every downstream handler's `auth.UserIDFromContext` keeps working with no per-handler change.
-- **Cookie precedence / no weakening:** the cookie branch runs first and is untouched; the bearer branch only *adds* a second way to populate the same context and only runs when the cookie is absent/invalid. A malformed/expired bearer simply leaves the context empty → the interceptor rejects with `CodeUnauthenticated`, exactly as an anonymous request does today. No existing cookie behavior changes.
-- CORS: bearer requests come from the CLI (no browser Origin), so the credentialed-CORS logic is irrelevant to them; leave it as-is. The `Authorization` header must be added to `Access-Control-Allow-Headers` only if a browser ever needs to send a bearer (not required for the CLI).
+- `AuthBearerMiddleware(next)` reads the `Authorization: Bearer <token>` header. If present and `TokenSigner.Verify` succeeds (valid signature, `exp` not passed, `iss == "langner"`), it populates the context with `auth.WithSession(ctx, Session{UserID: sub, ExpiresAt: exp})` and `auth.WithUserID`. Absent/invalid → context stays empty. It **never rejects** (so `/auth/*` still passes through); the interceptor does the rejecting.
+- `NewAuthInterceptor()` is **unchanged** — it still only reads `auth.SessionFromContext` and rejects with `CodeUnauthenticated` when empty. This is the always-on gate; there is no `Auth.Enabled()` guard around appending it (auth is always mounted, §2). Every handler's `auth.UserIDFromContext` keeps working untouched.
+- **CORS matters now** (unlike the CLI-only original): the browser sends the bearer from a *different origin*, so `Authorization` MUST be in `Access-Control-Allow-Headers`, the API's allowed-origins list must include the Vercel frontend origin(s), and — because auth is a header, not a cookie — the response no longer needs `Access-Control-Allow-Credentials` for auth. See §8.
 
-This is the entire "server also accepts Bearer" change: **one middleware, no interceptor or handler changes.**
+This removes a whole class of cross-site-cookie problems: there is no cookie to be `SameSite`-blocked, and no CSRF surface on the RPC (a bearer is not sent automatically by the browser the way a cookie is).
 
 ---
 
@@ -283,18 +288,29 @@ New cobra commands under `cmd/langner/` (sibling files, e.g. `login.go`), regist
 
 - **`langner whoami`** — ensure a valid access token (refresh if needed, §7.3), call an identity endpoint (reuse `/auth/me`, which returns `{authenticated, username}` and already reads the session context — now also satisfiable by the bearer), print the username. If not logged in, print guidance to run `langner login`.
 
-### 7.2 Token storage
+### 7.2 Token storage — per-server, no fallback
 
-Path: **`~/.config/langner/credentials.json`** (respect `$XDG_CONFIG_HOME` if set → `$XDG_CONFIG_HOME/langner/credentials.json`). Create the dir `0700`, the file `0600`. Shape:
+The CLI must hold credentials for **multiple servers** — a **dev** server (e.g. `http://localhost:8080`) and a future **production** server (which does not exist yet) — at the same time, without one leaking into the other. The store is therefore a map **keyed by server URL**, and the active server is selected explicitly per invocation (a `--server` flag and/or a `LANGNER_SERVER` env var, with a `login`-set default). There is **no fallback**: if there is no entry for the selected server, commands that need auth fail with "not logged in to `<server>` — run `langner login --server <server>`", never silently reuse another server's token.
+
+Path: **`~/.config/langner/credentials.json`** (respect `$XDG_CONFIG_HOME` → `$XDG_CONFIG_HOME/langner/credentials.json`). Dir `0700`, file `0600`. Shape:
 ```json
 {
-  "server_url": "https://api.langner.app",
-  "access_token": "<jwt>",
-  "access_token_expires_at": "2026-09-21T12:00:00Z",
-  "refresh_token": "<opaque>"
+  "default_server": "http://localhost:8080",
+  "servers": {
+    "http://localhost:8080": {
+      "access_token": "<jwt>",
+      "access_token_expires_at": "2026-09-21T12:00:00Z",
+      "refresh_token": "<opaque>"
+    },
+    "https://api.langner.app": {
+      "access_token": "<jwt>",
+      "access_token_expires_at": "2026-09-21T12:00:00Z",
+      "refresh_token": "<opaque>"
+    }
+  }
 }
 ```
-A small `internal/cli/credentials.go` (or `internal/clitoken/`) owns load/save/delete with the perm bits enforced on write (and a warning if it finds looser perms). Never log token values.
+Server-URL resolution order (first match wins, **no fallback beyond it**): explicit `--server` flag → `LANGNER_SERVER` env → `default_server` in the store. `langner login --server <url>` adds/replaces that server's entry and (if it's the first, or `--set-default`) sets `default_server`; `langner logout --server <url>` revokes and removes just that entry. A small `internal/cli/credentials.go` (or `internal/clitoken/`) owns load/save/delete keyed by server, enforces the perm bits on write (warns on looser perms), and never logs token values. Tokens from different servers are signed by different keys, so a token is only ever presented to the server it was issued by.
 
 ### 7.3 Auto-refresh + attaching the bearer
 
@@ -307,7 +323,25 @@ Because the CLI commands today are DB-direct, the bearer plumbing is only needed
 
 ---
 
-## 8. Security review
+## 8. Web app auth (token-based, cross-origin)
+
+The browser SPA authenticates with the **same langner access/refresh tokens** as the CLI — no session cookie. This is what makes the Vercel split-origin topology work: the frontend on Vercel talks to the API on another host purely via `Authorization: Bearer`.
+
+**Obtaining a token (browser).** The web sign-in is NOT the device flow (that is for the headless CLI). It is the ordinary Google authorization-code flow, ending in a token mint:
+
+1. Frontend sends the user to `GET {api}/auth/google/login?next=<frontend-url>`.
+2. `/auth/google/callback` verifies the OAuth `state` (short-lived, `SameSite=Lax` cookie **same-site to the API host** — this is the only browser cookie left, and it is not an app session), exchanges the code, checks the email allowlist, upserts the user — then **mints a langner access JWT + refresh token** (same issuer/keys as the CLI path, §6) and hands them to the SPA.
+3. **Token delivery to the SPA** (decide in review, §10): either (a) redirect to `{frontend}/auth/callback#access_token=…&refresh_token=…` (fragment, never sent to a server, read by JS then cleared), or (b) a same-site-to-API `POST`-back page that `postMessage`s the tokens to the opener. Fragment redirect is simplest and avoids any cross-site cookie.
+
+**Storing a token (browser).** The SPA keeps the access token **in memory** and the refresh token in the least-bad available store; because there is no cookie, XSS is the threat model, so: short 24h access token, refresh rotation-on-use (§8 security), and a strict CSP. (A refresh token in a `Secure; HttpOnly; SameSite=None` cookie scoped to the **API** origin is an alternative that keeps it out of JS reach — evaluate in review; it is a *refresh-only* cookie on the API host, not an app session, and still leaves the access token as a bearer.)
+
+**Using it.** The SPA's Connect client attaches `Authorization: Bearer <access_token>` to every RPC and refreshes via `/auth/token/refresh` exactly like the CLI (§7.3). CORS on the API must allow the Vercel origin(s) and the `Authorization` header (§6.3).
+
+**Consequence for existing code.** `internal/auth/session.go` (`SessionSigner`, the `langner_session` cookie) and the cookie branch of `AuthCookieMiddleware` are **deleted**; `/auth/google/callback` stops `Set-Cookie`-ing a session and instead returns tokens; `/auth/me` and `/auth/logout` move to bearer/refresh semantics. `AppHeader`'s username fetch (`/auth/me`) works unchanged once it sends the bearer.
+
+---
+
+## 9. Security review
 
 - **Device code entropy.** `device_code` = 32 random bytes (`crypto/rand`) base64url (~43 chars), stored **hashed** (SHA-256). It is a bearer secret during the polling window; hashing at rest means a DB read cannot mint tokens.
 - **`user_code` format.** 8 chars from an unambiguous alphabet (RFC 8628 recommends excluding easily-confused chars; use Crockford-style `BCDFGHJKLMNPQRSTVWXZ` + digits minus `0/1`), rendered `XXXX-XXXX`. ~20^8 ≈ 2.5e10 space; combined with a 15-min expiry, single-active-code-per-poll, and rate limiting, brute force on the approval page is impractical. Look it up case-insensitively but compare in constant time.
@@ -315,19 +349,19 @@ Because the CLI commands today are DB-direct, the bearer plumbing is only needed
 - **No plaintext secrets at rest.** Neither the refresh token nor the device code is stored in plaintext server-side (only SHA-256 hashes) — the same posture as the stateless cookie storing no server copy. The plaintext refresh token exists only in the CLI's `0600` file.
 - **Revocation.** `langner logout` → `/auth/token/revoke`. Access JWTs are stateless and **not** individually revocable before `exp`; the 24h lifetime bounds exposure. If instant kill-switch is needed later, add a `jti`/user denylist checked in the bearer middleware (the `jti` claim is already provisioned).
 - **Clock skew.** Verify `exp` with a small leeway (± a few seconds). CLI refreshes proactively at <60s remaining so a slightly-fast client clock never sends a just-expired token.
-- **Binding approval to the right user.** Approval requires a valid `langner_session` cookie and only sets `user_id` from that server-verified session — the browser cannot approve a device for someone else.
+- **Binding approval to the right user.** The approval page authenticates the browser with a **one-shot Google sign-in** (the authorization-code flow, §8), not an app session cookie; it sets the device's `user_id` only from that freshly server-verified Google identity, so the browser cannot approve a device for someone else. (No persistent app session is created — the Google `state` cookie is short-lived and same-site to the API host.)
 - **Enumeration resistance.** `/auth/device/token` returns `expired_token` for both unknown and expired `device_code`; the approval page shows a generic error for bad/consumed `user_code`. Rate-limit `/auth/device/*`.
 - **Transport.** All endpoints must be HTTPS in production (Vercel/host-terminated TLS); the CLI should refuse a non-HTTPS `server_url` unless `localhost` (dev).
 - **Allowlist still applies.** Approval goes through the existing Google sign-in, so the email allowlist (`auth.IsAllowed`) gates who can ever get a session to approve with — CLI access inherits it for free.
-- **Public-repo secret rules.** `CLI_TOKEN_SIGNING_KEY` (and `SESSION_SIGNING_KEY`, `GOOGLE_CLIENT_SECRET`) are **env-only**, bound in `config.go`, never written to YAML or committed. `config.example.yml` documents the env var names only (as it already does for the session key). No personal data in examples/tests (use neutral placeholders).
+- **Public-repo secret rules.** `TOKEN_SIGNING_KEY` and `GOOGLE_CLIENT_SECRET` are **env-only**, bound in `config.go`, never written to YAML or committed. (`SESSION_SIGNING_KEY` is removed with the cookie.) `config.example.yml` documents the env var names only. No personal data in examples/tests (use neutral placeholders).
 
 ---
 
-## 9. Open questions / decisions still needed
+## 10. Open questions / decisions still needed
 
 1. **JWT library vs hand-rolled HS256.** Recommend a maintained library (`golang-jwt/jwt/v5`) for `alg` pinning and standards conformance; the repo's minimalist style could justify hand-rolling. **Decide before implementation.**
 2. **Exact migration numbers.** This doc assumes 028 is taken by the in-flight `NOT NULL` change → use **029/030**. Re-confirm the next free versions at implementation time.
-3. **Signing-key fallback policy.** Confirm whether `CLI_TOKEN_SIGNING_KEY` should fall back to `SESSION_SIGNING_KEY` when unset (proposed: yes, for single-key deployments) or be **required** when CLI login is enabled (stricter).
+3. **Token delivery to the SPA (§8).** Fragment redirect vs `postMessage` vs an API-scoped refresh-only cookie for the refresh token. (Signing-key fallback is decided: **no fallback** — one required `TOKEN_SIGNING_KEY`, cookie/`SESSION_SIGNING_KEY` removed.)
 4. **Device-code cleanup mechanism.** Server goroutine ticker vs `langner-admin` maintenance command vs a DB TTL job — pick one.
 5. **`client_id` semantics.** Single fixed `"langner-cli"` public client (no secret, per RFC 8628 for native apps) — confirm we don't want per-build client ids.
 6. **Server base URL discovery for the CLI.** How does a non-engineer learn the `--server` value? Options: bake a production default into the binary, ship it in a public `config.example.yml`, or prompt on first `login`. Recommend a compiled-in default (`https://api.langner.app`) overridable by `--server`/env.
@@ -337,13 +371,13 @@ Because the CLI commands today are DB-direct, the bearer plumbing is only needed
 
 ---
 
-## 10. Migration / rollout plan
+## 11. Migration / rollout plan
 
 1. **Migrations 029/030** (`cli_device_codes`, `cli_refresh_tokens`) + repositories. Additive, no change to existing tables. Down-migrations drop the new tables only.
-2. **Config + key.** Add `CLI_TOKEN_SIGNING_KEY` binding (env-only); document in `config.example.yml` (name only). CLI login is enabled whenever auth is enabled (same `cfg.Auth.Enabled()` gate).
-3. **Server endpoints** (`DeviceAuthHandler`) mounted in the existing `if authSetup != nil { … }` block; **bearer verification added to the auth-context middleware** (§6.3) — the interceptor and handlers are untouched.
+2. **Config + key.** Add `TOKEN_SIGNING_KEY` binding (env-only); document in `config.example.yml` (name only). **Remove** the `Auth.Enabled()` gate and `SESSION_SIGNING_KEY`/`SessionSigner`/cookie — auth is always mounted and the server fails fast at startup if `TOKEN_SIGNING_KEY` is unset (§2). This is a breaking change to how the server boots; sequence it so dev (`make dev`) and e2e always provide the key (they already generate a signing key today).
+3. **Server endpoints** (`DeviceAuthHandler` + the token-minting web callback, §8) mounted always; **`AuthBearerMiddleware`** replaces the cookie middleware (§6.3); the interceptor is now appended unconditionally and handlers are untouched.
 4. **CLI commands** `login`/`logout`/`whoami` + credentials store + auto-refresh interceptor, in the user `langner` binary.
-5. **Example notebooks + real-config integration test** (per repo rule `verify-data-features-with-example-notebooks.md`): construct the server the way `main.go` does from `config.example.yml` (auth enabled, DB), drive the full device flow end-to-end against a real Postgres — request a code, approve it via a synthesized session (reuse `issue-test-cookie`/`SessionSigner` to mint the approving session), poll to success, call a gated RPC with the returned bearer and observe it authenticates, refresh (assert rotation + old-token reuse revokes the family), and revoke (assert subsequent refresh fails). Also seed/verify the bearer path does **not** weaken cookie auth (a cookie'd request still works; an anonymous one still 401s).
-6. **Rollback:** feature is additive and gated; disabling is dropping the new endpoints/commands and rolling back 030→029. Existing cookie auth is entirely independent.
-7. **Verification gate (repo rule `no-unverified-main-merges`):** do not propose merge until CI is green on the exact head SHA **and** the device flow has been exercised end-to-end against a real Postgres (browser-approval simulated via the session signer) with the bearer observed authenticating a real RPC. Anything that can only run against the live Vercel/Postgres deployment is called out as unverified until exercised there.
+5. **Example notebooks + real-config integration test** (per repo rule `verify-data-features-with-example-notebooks.md`): construct the server the way `main.go` does from `config.example.yml` (auth always on, DB), drive the full device flow end-to-end against a real Postgres — request a code, approve it via a synthesized approving identity (a test helper that stands in for the Google sign-in and sets the device's `user_id`), poll to success, call a gated RPC with the returned bearer and observe it authenticates, refresh (assert rotation + old-token reuse revokes the family), and revoke (assert subsequent refresh fails). Also assert the always-on gate: an anonymous (no-bearer) RPC still 401s, and a valid bearer authenticates. Add a web-callback test that `/auth/google/callback` mints a token pair (not a `Set-Cookie` session).
+6. **Rollback:** the device-flow/CLI pieces are additive (drop the new endpoints/commands, roll 030→029). The cookie→token switch is NOT additive — it is the migration itself; its rollback is reverting to the cookie commit. Sequence the cookie removal as its own reviewable step.
+7. **Verification gate (repo rule `no-unverified-main-merges`):** do not propose merge until CI is green on the exact head SHA **and** the flow has been exercised end-to-end against a real Postgres (browser-approval simulated) with the bearer observed authenticating a real RPC, and the web token-mint callback observed returning tokens. Cross-origin behavior that can only be exercised against the live Vercel/Postgres deployment (real SPA↔API CORS, third-party-cookie-free refresh) is called out as unverified until exercised there.
 ```
