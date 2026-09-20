@@ -7,7 +7,7 @@ weight: 1
 
 Status: design proposal (no code in this doc)
 Audience: langner maintainers
-Companion doc: [`cli-auth-device-flow.md`](./cli-auth-device-flow.md) — the CLI OAuth device-flow login that `notebooks push` authenticates with. This doc references that flow and does not re-specify it.
+Companion doc: [CLI Authentication (Device Flow)]({{< relref "../cli-authentication/design" >}}) — the unified **bearer access-token** auth (web + CLI) that `notebooks push` authenticates with. This doc references that flow and does not re-specify it.
 
 ---
 
@@ -125,7 +125,7 @@ The quiz service composes this in one place: `Service.visibleNotebooks(userID)` 
 Two cooperating layers, added on top of the existing catalog:
 
 1. **Content-storage layer (server, DB).** User-pushed notebook content is stored in the DB, keyed by a server-minted `nb_` id, and made readable by the same Reader that serves shipped notebooks — with **zero read-path divergence** (a hard requirement, see `.claude/rules/verify-data-features-with-example-notebooks.md`).
-2. **Authoring/delivery layer (CLI).** `langner notebooks push|pull|list` plus a `langner validate <file>` file-mode, authenticated by the device-flow session from the companion doc.
+2. **Authoring/delivery layer (CLI).** `langner notebooks push|pull|list` plus a `langner validate <file>` file-mode, authenticated by the **bearer access token** from the companion doc.
 
 The registry/ownership decision uses the **existing `notebooks` table** (extended), so visibility "just works" for user notebooks: a private `nb_` notebook is hidden from everyone but its owner by the exact `VisibleNotebookIDs` query already in production.
 
@@ -181,7 +181,9 @@ Notes:
 
 This new table MUST be added to `DataTablesInDependencyOrder()` (`table_export.go`) — a completeness guard test (`TestDataTablesCoverAllSchema`) derives the table set from the migrations and fails if the export list drifts.
 
-### 5.3 Extend the `notebooks` registry (new migration 028)
+### 5.3 Extend the `notebooks` registry (new migration 031)
+
+> **Migration numbering (coordinated across in-flight work).** On-disk migrations end at 027. **028** = the `learning_logs.user_id NOT NULL` change (PR #77, in flight). **029/030** = the CLI-auth device-flow tables (companion doc). This proposal therefore takes **031** for `notebook_files` + the `notebooks` columns. Re-confirm the next free number at implementation time.
 
 The `notebooks` table is already the per-notebook registry. Extend it (additively) so it also records provenance and the metadata the reader needs to enumerate DB notebooks without parsing every blob up front:
 
@@ -241,7 +243,7 @@ Scoping note: because `newReader()` currently builds a **process-wide** reader, 
 
 ## 8. CLI surface (in the user `langner` binary)
 
-All three notebook subcommands authenticate with the device-flow session token from [`cli-auth-device-flow.md`](./cli-auth-device-flow.md) (the CLI holds a stored session credential; these commands attach it to the RPC). They are added under the existing `newNotebookCommand()` group (`cmd/langner/notebook.go`), alongside `stories`/`flashcards`/`set-owner`.
+All three notebook subcommands authenticate with the **bearer access token** from [CLI Authentication]({{< relref "../cli-authentication/design" >}}) (the CLI holds a stored access token + refresh token, keyed per server; these commands attach the bearer to the RPC). They are added under the user `langner` binary's notebook command group (the personal generators like `stories`/`flashcards` are being removed in the two-binary split; `set-owner` moves to `langner-admin`).
 
 ### 8.1 `langner validate <file|dir>` — file-mode (prerequisite)
 
@@ -317,7 +319,7 @@ No new SRS/log/skip write paths are introduced — those already key off `note_i
 
 ## 10. Migration and rollout (existing ids untouched)
 
-- **Migration 028** adds `notebook_files` and the four additive `notebooks` columns (`source` default `'shipped'`, nullable `kind`/`display_name`/`content_hash`). All existing rows are valid unchanged; no data migration.
+- **Migration 031** adds `notebook_files` and the four additive `notebooks` columns (`source` default `'shipped'`, nullable `kind`/`display_name`/`content_hash`). All existing rows are valid unchanged; no data migration.
 - Add `notebook_files` to `DataTablesInDependencyOrder()` (child of nothing content-wise; place near `notebooks`) so `export-db`/`import-db` and the drift/rebuild tooling cover it, and the `TestDataTablesCoverAllSchema` guard passes.
 - Shipped catalog keeps loading from the filesystem via `FilesystemContentSource`; its ids, `index.yml`s, and prod DB references are untouched. The DB source is purely additive.
 - Rollout order: (1) migration 028 + export-list update; (2) `ContentSource` refactor with the filesystem source behaving identically (pure refactor, guarded by the existing reader tests); (3) `DBContentSource` + `SetContentSource` wiring; (4) `PushNotebook`/`Pull`/`List` RPCs; (5) CLI `validate` file-mode + `notebooks push/pull/list`. Each step is independently shippable and dark until the RPCs land.
