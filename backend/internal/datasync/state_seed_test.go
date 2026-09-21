@@ -72,7 +72,7 @@ func TestStateSeeder_PersistEtymologyLogs_KeyedByOriginNotNote(t *testing.T) {
 			return nil
 		})
 
-	seeder := &StateSeeder{learningRepo: learningRepo}
+	seeder := &StateSeeder{learningRepo: learningRepo, ownerID: 1} // seeded history is attributed (user_id NOT NULL)
 	result := &StateSeedResult{}
 	err := seeder.persistEtymologyLogsForExpression(context.Background(), nbID, expr, originIDByKey, result)
 	require.NoError(t, err)

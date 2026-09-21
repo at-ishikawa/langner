@@ -56,8 +56,12 @@ func TestPerUserHistoryIsolation_LivePostgres_Integration(t *testing.T) {
 	cfg, err := loader.Load()
 	require.NoError(t, err)
 
+	// Imported history is attributed to an owner (user_id NOT NULL); this test's
+	// subject is runtime per-user isolation on a NEVER-QUIZZED note, so the
+	// import owner is a throwaway distinct from userA/userB and never read here.
+	importOwner := seedIntegrationUser(t, db, "isolation-import-owner")
 	importer := newImporterFromConfig(cfg, db, io.Discard)
-	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{})
+	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{OwnerID: importOwner})
 	require.NoError(t, err)
 
 	ctx := context.Background()

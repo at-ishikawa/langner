@@ -78,21 +78,28 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	loaded, err := cfg.Load()
 	require.NoError(t, err)
 
+	// Seed the owner first: imported learning logs AND seeded skip flags are
+	// attributed to it at insert (user_id NOT NULL, migration 028). Same
+	// google_sub the later seedIfEmpty("users") uses, so that call no-ops.
+	var seedOwnerID int64
+	require.NoError(t, db.QueryRowContext(ctx,
+		`INSERT INTO users (google_sub, username) VALUES ('roundtrip-seed-sub', 'user_roundtrip') RETURNING id`).Scan(&seedOwnerID))
+
 	// Seed the DB across every content-bearing table via the REAL importer,
-	// with the same all-false options `langner migrate import-db` uses. On the
-	// now-empty tables this creates the same 37 notes the CI import-db step
-	// reports, exercising the full load path (per verify-data-features-with-
+	// with the same options `langner migrate import-db` uses (owner attributed).
+	// On the now-empty tables this creates the same 37 notes the CI import-db
+	// step reports, exercising the full load path (per verify-data-features-with-
 	// example-notebooks): notes, notebook_notes, learning_logs, dictionary,
 	// and the etymology/semantic tables the notebook export never covered.
 	importer := newImporterFromConfig(loaded, db, io.Discard)
-	_, err = importer.ImportAll(ctx, datasync.ImportOptions{})
+	_, err = importer.ImportAll(ctx, datasync.ImportOptions{OwnerID: seedOwnerID})
 	require.NoError(t, err)
 
 	// Seed the DB-only-state tables the same way `import-db` does (PR #26):
 	// definitions_sessions/scenes, flashcard_decks, note/origin skip flags,
 	// grammar_corrections + grammar logs. Runs after ImportAll so its FK
 	// parents (notes, etymology_origins) already exist.
-	if seeder := newStateSeederFromConfig(loaded, db, io.Discard); seeder != nil {
+	if seeder := newStateSeederFromConfig(loaded, db, io.Discard, seedOwnerID); seeder != nil {
 		_, err = seeder.SeedAll(ctx)
 		require.NoError(t, err)
 	}
@@ -139,18 +146,24 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		`INSERT INTO definitions_scenes (session_id, title, scene_index, sort_order) SELECT MIN(id), 'seed scene', 0, 0 FROM definitions_sessions`)
 	seedIfEmpty(ctx, t, db, "flashcard_decks",
 		`INSERT INTO flashcard_decks (notebook_id, title, description, sort_order) VALUES ('roundtrip-seed', 'seed deck', '', 0)`)
+	// user_id is NOT NULL on the three per-user state tables (migration 028), so
+	// every seeded skip flag / learning log is attributed to the seeded user —
+	// which also proves user_id itself dumps and restores through the round trip.
 	seedIfEmpty(ctx, t, db, "note_skip_flags",
-		`INSERT INTO note_skip_flags (note_id, quiz_type, skipped_at) SELECT MIN(id), 'notebook', CURRENT_TIMESTAMP FROM notes`)
+		`INSERT INTO note_skip_flags (user_id, note_id, quiz_type, skipped_at)
+		 SELECT (SELECT id FROM users WHERE google_sub='roundtrip-seed-sub'), MIN(id), 'notebook', CURRENT_TIMESTAMP FROM notes`)
 	seedIfEmpty(ctx, t, db, "origin_skip_flags",
-		`INSERT INTO origin_skip_flags (origin_id, quiz_type, skipped_at) SELECT MIN(id), 'etymology_origin', CURRENT_TIMESTAMP FROM etymology_origins`)
+		`INSERT INTO origin_skip_flags (user_id, origin_id, quiz_type, skipped_at)
+		 SELECT (SELECT id FROM users WHERE google_sub='roundtrip-seed-sub'), MIN(id), 'etymology_origin', CURRENT_TIMESTAMP FROM etymology_origins`)
 	seedIfEmpty(ctx, t, db, "grammar_corrections",
 		`INSERT INTO grammar_corrections (notebook_id, sense_id) VALUES ('roundtrip-seed', 'seed-correction')`)
 	// A grammar learning_log (note_id NULL, correction_id set) so the new
 	// learning_logs.correction_id column carries a non-NULL value through the
-	// dump -> restore -> dump round trip.
+	// dump -> restore -> dump round trip. Attributed to the seeded user (user_id
+	// NOT NULL).
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO learning_logs (correction_id, status, learned_at, quiz_type, source_notebook_id)
-		 SELECT MIN(id), 'understood', CURRENT_TIMESTAMP, 'grammar', 'roundtrip-seed' FROM grammar_corrections`)
+		`INSERT INTO learning_logs (user_id, correction_id, status, learned_at, quiz_type, source_notebook_id)
+		 SELECT (SELECT id FROM users WHERE google_sub='roundtrip-seed-sub'), MIN(id), 'understood', CURRENT_TIMESTAMP, 'grammar', 'roundtrip-seed' FROM grammar_corrections`)
 	require.NoError(t, err)
 
 	// Every table must actually carry rows so the round trip is meaningful —

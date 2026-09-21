@@ -39,6 +39,13 @@ type StateSeeder struct {
 	learningSrc      LearningSource
 	learningNotesDir string
 	writer           io.Writer
+	// ownerID attributes every seeded learning-history row (learning_logs +
+	// both skip-flag tables) to a user at insert time. learning_logs.user_id
+	// and the skip-flag user_id columns are NOT NULL (migration 028), so a
+	// pre-auth NULL row is no longer possible: the caller resolves the owner
+	// (the initial admin) BEFORE seeding and passes it here. A zero ownerID is
+	// rejected the moment a history row would be written (see requireOwner).
+	ownerID int64
 }
 
 // NewStateSeeder constructs a seeder. learningSrc is the YAML-side
@@ -58,6 +65,7 @@ func NewStateSeeder(
 	learningSrc LearningSource,
 	learningNotesDir string,
 	writer io.Writer,
+	ownerID int64,
 ) *StateSeeder {
 	return &StateSeeder{
 		reader:           reader,
@@ -71,7 +79,20 @@ func NewStateSeeder(
 		learningSrc:      learningSrc,
 		learningNotesDir: learningNotesDir,
 		writer:           writer,
+		ownerID:          ownerID,
 	}
+}
+
+// requireOwner guards a learning-history write: seeded logs and skip flags are
+// attributed to s.ownerID, and their user_id columns are NOT NULL. A zero
+// ownerID means the caller could not resolve an owner (auth disabled / no
+// initial_admin_email) — the seed must fail loudly rather than attempt a NULL
+// write, since ownerless history is invisible to every signed-in user.
+func (s *StateSeeder) requireOwner() error {
+	if s.ownerID == 0 {
+		return fmt.Errorf("cannot seed learning history: no owner resolved (enable auth and set initial_admin_email, or import into an already-owned DB via export-db/import-db)")
+	}
+	return nil
 }
 
 // SeedAll runs every seed phase and returns aggregated counts.
@@ -138,7 +159,11 @@ func (s *StateSeeder) seedGrammarCorrections(ctx context.Context, result *StateS
 					if quizType == "" {
 						quizType = string(notebook.QuizTypeGrammar)
 					}
+					if err := s.requireOwner(); err != nil {
+						return err
+					}
 					log := &learning.LearningLog{
+						UserID:           s.ownerID,
 						CorrectionID:     rec.ID,
 						Status:           string(r.Status),
 						LearnedAt:        r.LearnedAt.Time,
@@ -148,10 +173,10 @@ func (s *StateSeeder) seedGrammarCorrections(ctx context.Context, result *StateS
 						IntervalDays:     r.IntervalDays,
 						SourceNotebookID: nbID,
 					}
-					// Seed/import path: write via the lenient BatchCreate so a
-					// pre-auth row (user_id NULL, backfilled later by
-					// `langner auth provision`) is accepted — the runtime-only
-					// Create guard rejects user_id 0.
+					// Seed/import path: attributed to the resolved owner at insert
+					// (user_id NOT NULL, migration 028). BatchCreate stays lenient
+					// on the success-interval rule for legacy data; the runtime
+					// Create guard is unchanged.
 					if err := s.learningRepo.BatchCreate(ctx, []*learning.LearningLog{log}); err != nil {
 						return fmt.Errorf("insert grammar log: %w", err)
 					}
@@ -346,6 +371,9 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 	if len(expr.SkippedAt) == 0 {
 		return nil
 	}
+	if err := s.requireOwner(); err != nil {
+		return err
+	}
 
 	if expr.Type == notebook.LearningExpressionTypeOrigin {
 		// Origin entries hung off etymology sessions — match against
@@ -360,9 +388,9 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 			}
 			for quizType, ts := range expr.SkippedAt {
 				at := parseSkippedTimestamp(ts)
-				// user_id 0: seeded before auth backfill; `langner auth
-				// provision` stamps these to the initial admin.
-				if err := s.skipFlagRepo.SkipOrigin(ctx, 0, id, quizType, at); err != nil {
+				// Attributed to the resolved owner at insert (user_id NOT NULL,
+				// migration 028).
+				if err := s.skipFlagRepo.SkipOrigin(ctx, s.ownerID, id, quizType, at); err != nil {
 					return fmt.Errorf("seed origin skip flag: %w", err)
 				}
 				result.OriginSkipFlagsCreated++
@@ -377,7 +405,7 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 	}
 	for quizType, ts := range expr.SkippedAt {
 		at := parseSkippedTimestamp(ts)
-		if err := s.skipFlagRepo.SkipNote(ctx, 0, noteID, quizType, at); err != nil {
+		if err := s.skipFlagRepo.SkipNote(ctx, s.ownerID, noteID, quizType, at); err != nil {
 			return fmt.Errorf("seed note skip flag: %w", err)
 		}
 		result.NoteSkipFlagsCreated++
@@ -436,6 +464,9 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 	if originID == 0 {
 		return nil
 	}
+	if err := s.requireOwner(); err != nil {
+		return err
+	}
 
 	writeLogs := func(records []notebook.LearningRecord, defaultQuizType notebook.QuizType) error {
 		for _, r := range records {
@@ -444,6 +475,7 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 				quizType = string(defaultQuizType)
 			}
 			log := &learning.LearningLog{
+				UserID:           s.ownerID,
 				OriginID:         originID,
 				Status:           string(r.Status),
 				LearnedAt:        r.LearnedAt.Time,
@@ -453,8 +485,8 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 				IntervalDays:     r.IntervalDays,
 				SourceNotebookID: nbID,
 			}
-			// Seed/import path: lenient BatchCreate (see grammar log above) so a
-			// pre-auth row with user_id 0 is accepted and backfilled later.
+			// Seed/import path: attributed to the resolved owner at insert
+			// (user_id NOT NULL, migration 028).
 			if err := s.learningRepo.BatchCreate(ctx, []*learning.LearningLog{log}); err != nil {
 				return fmt.Errorf("insert etymology log: %w", err)
 			}

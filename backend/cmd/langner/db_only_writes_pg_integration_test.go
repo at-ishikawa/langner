@@ -169,8 +169,9 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 	cfg, err := loader.Load()
 	require.NoError(t, err)
 
+	importOwner := seedIntegrationUser(t, db, "dbonly-import-owner")
 	importer := newImporterFromConfig(cfg, db, io.Discard)
-	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{})
+	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{OwnerID: importOwner})
 	require.NoError(t, err)
 
 	ctx := context.Background()

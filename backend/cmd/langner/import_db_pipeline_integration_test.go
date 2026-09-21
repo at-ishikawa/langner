@@ -86,8 +86,9 @@ func TestImportDB_HomographsAndMultiNotebook_LivePostgres_Integration(t *testing
 	cfg, err := loader.Load()
 	require.NoError(t, err)
 
+	importOwner := seedIntegrationUser(t, db, "pipeline-import-owner")
 	importer := newImporterFromConfig(cfg, db, io.Discard)
-	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{})
+	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{OwnerID: importOwner})
 	require.NoError(t, err,
 		"import-db must not crash on homographs (duplicate key) or multi-notebook words")
 
@@ -163,8 +164,9 @@ func TestImportDB_SharedSenseAcrossNotebooks_LivePostgres_Integration(t *testing
 	cfg, err := loader.Load()
 	require.NoError(t, err)
 
+	importOwner := seedIntegrationUser(t, db, "pipeline-import-owner")
 	importer := newImporterFromConfig(cfg, db, io.Discard)
-	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{})
+	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{OwnerID: importOwner})
 	require.NoError(t, err,
 		"import-db must not crash with notes_sense_id_key (23505) when one sense_id is claimed by two notebooks with different surface entries")
 

@@ -40,6 +40,13 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 
 	ctx := context.Background()
 
+	// Every learning row is attributed to an owner (user_id NOT NULL, migration
+	// 028); this test's subject is NOTEBOOK scoping, not user scoping, so one
+	// seeded owner backs all the rows and every read is scoped to it.
+	var uid int64
+	require.NoError(t, db.QueryRowContext(ctx,
+		`INSERT INTO users (google_sub, username) VALUES ('scoped-parity-sub','scoped-parity') RETURNING id`).Scan(&uid))
+
 	// Generic, invented data (never the user's real notebooks): two Latin-root
 	// demo books, one word shared between them.
 	insNote := func(senseID, word string) int64 {
@@ -57,9 +64,9 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 	}
 	logFor := func(noteID int64, source string) {
 		_, err := db.ExecContext(ctx,
-			`INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
-			 VALUES ($1,'understood', now(), 4, 1200, 'notebook', 7, $2)`,
-			noteID, source)
+			`INSERT INTO learning_logs (user_id, note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
+			 VALUES ($1,$2,'understood', now(), 4, 1200, 'notebook', 7, $3)`,
+			uid, noteID, source)
 		require.NoError(t, err)
 	}
 
@@ -86,11 +93,11 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 		`INSERT INTO etymology_origins (notebook_id, session_title, sense, origin, type, language, meaning)
 		 VALUES ($1,'UNIT ONE','','aqua','root','Latin','water') RETURNING id`, nbA).Scan(&originID))
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO learning_logs (origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
-		 VALUES ($1,'understood', now(), 5, 900, 'etymology_origin', 7, $2)`, originID, nbA)
+		`INSERT INTO learning_logs (user_id, origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
+		 VALUES ($1,$2,'understood', now(), 5, 900, 'etymology_origin', 7, $3)`, uid, originID, nbA)
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO note_skip_flags (note_id, quiz_type, skipped_at) VALUES ($1,'notebook', now())`, a2)
+		`INSERT INTO note_skip_flags (user_id, note_id, quiz_type, skipped_at) VALUES ($1,$2,'notebook', now())`, uid, a2)
 	require.NoError(t, err)
 
 	noteRepo := notebook.NewDBNoteRepository(db)
@@ -99,9 +106,9 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 	skipFlagRepo := notebook.NewDBSkipFlagRepository(db)
 	store := NewDBHistoryStore(noteRepo, learningRepo, originRepo, skipFlagRepo, nil)
 
-	all, err := store.loadAllFallback(ctx, 0)
+	all, err := store.loadAllFallback(ctx, uid)
 	require.NoError(t, err)
-	scoped, err := store.LoadForNotebooks(ctx, []string{nbA}, 0)
+	scoped, err := store.LoadForNotebooks(ctx, []string{nbA}, uid)
 	require.NoError(t, err)
 
 	// Scoping: only the requested notebook is returned.
@@ -125,7 +132,7 @@ func TestDBHistoryStore_LoadForNotebooks_ParityAndScoping(t *testing.T) {
 	for _, n := range scopedNotes {
 		noteIDs = append(noteIDs, n.ID)
 	}
-	scopedLogs, err := learningRepo.FindByTargets(ctx, noteIDs, []int64{originID}, nil, 0)
+	scopedLogs, err := learningRepo.FindByTargets(ctx, noteIDs, []int64{originID}, nil, uid)
 	require.NoError(t, err)
 	assert.Less(t, len(scopedLogs), len(allLogs), "scoped log read must fetch fewer logs (book-b logs excluded)")
 	// Sanity: the shared word's book-b log is NOT in the scoped set for book-a.
@@ -153,6 +160,10 @@ func TestDBHistoryStore_LoadForNotebooks_OrphanOriginLogsScopedByUsage(t *testin
 	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
 	ctx := context.Background()
 
+	var uid int64
+	require.NoError(t, db.QueryRowContext(ctx,
+		`INSERT INTO users (google_sub, username) VALUES ('scoped-orphan-sub','scoped-orphan') RETURNING id`).Scan(&uid))
+
 	const nbA = "book-a"
 	// A linked note so book-a is non-empty, and an origin "aqua" in book-a.
 	var linked int64
@@ -173,8 +184,8 @@ func TestDBHistoryStore_LoadForNotebooks_OrphanOriginLogsScopedByUsage(t *testin
 		require.NoError(t, db.QueryRowContext(ctx,
 			`INSERT INTO notes (sense_id,"usage",entry,meaning) VALUES ('','' || $1,$1,'legacy') RETURNING id`, usage).Scan(&id))
 		_, err = db.ExecContext(ctx,
-			`INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
-			 VALUES ($1,'understood', now(), 5, 900, 'etymology_origin', 7, $2)`, id, nbA)
+			`INSERT INTO learning_logs (user_id, note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
+			 VALUES ($1,$2,'understood', now(), 5, 900, 'etymology_origin', 7, $3)`, uid, id, nbA)
 		require.NoError(t, err)
 		return id
 	}
@@ -194,9 +205,9 @@ func TestDBHistoryStore_LoadForNotebooks_OrphanOriginLogsScopedByUsage(t *testin
 	// Parity: scoped equals the whole-dataset load filtered to book-a. This
 	// proves the "aqua" orphan's log still re-attaches to the origin under the
 	// scoped path, and the "ignis" orphan (matching no origin) is absent in both.
-	all, err := store.loadAllFallback(ctx, 0)
+	all, err := store.loadAllFallback(ctx, uid)
 	require.NoError(t, err)
-	scoped, err := store.LoadForNotebooks(ctx, []string{nbA}, 0)
+	scoped, err := store.LoadForNotebooks(ctx, []string{nbA}, uid)
 	require.NoError(t, err)
 	assert.True(t, reflect.DeepEqual(all[nbA], scoped[nbA]),
 		"scoped LoadForNotebooks must equal the full load filtered to %q, orphan merge included", nbA)
@@ -234,6 +245,10 @@ func TestDBHistoryStore_LoadForDateRange_ScopesByDate(t *testing.T) {
 	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
 	ctx := context.Background()
 
+	var uid int64
+	require.NoError(t, db.QueryRowContext(ctx,
+		`INSERT INTO users (google_sub, username) VALUES ('scoped-daterange-sub','scoped-daterange') RETURNING id`).Scan(&uid))
+
 	var noteID int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		`INSERT INTO notes (sense_id,"usage",entry,meaning) VALUES ('s1','word','word','meaning') RETURNING id`).Scan(&noteID))
@@ -242,9 +257,9 @@ func TestDBHistoryStore_LoadForDateRange_ScopesByDate(t *testing.T) {
 	require.NoError(t, err)
 	// Two attempts: one recent (in a 30-day window), one old (outside it).
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO learning_logs (note_id,status,learned_at,quality,response_time_ms,quiz_type,interval_days,source_notebook_id)
-		 VALUES ($1,'understood', now() - interval '5 days', 4, 1000, 'notebook', 7, 'book'),
-		        ($1,'misunderstood', now() - interval '60 days', 1, 1000, 'notebook', 1, 'book')`, noteID)
+		`INSERT INTO learning_logs (user_id,note_id,status,learned_at,quality,response_time_ms,quiz_type,interval_days,source_notebook_id)
+		 VALUES ($1,$2,'understood', now() - interval '5 days', 4, 1000, 'notebook', 7, 'book'),
+		        ($1,$2,'misunderstood', now() - interval '60 days', 1, 1000, 'notebook', 1, 'book')`, uid, noteID)
 	require.NoError(t, err)
 
 	store := NewDBHistoryStore(notebook.NewDBNoteRepository(db), NewDBLearningRepository(db),
@@ -264,17 +279,17 @@ func TestDBHistoryStore_LoadForDateRange_ScopesByDate(t *testing.T) {
 		return n
 	}
 
-	all, err := store.loadAllFallback(ctx, 0)
+	all, err := store.loadAllFallback(ctx, uid)
 	require.NoError(t, err)
 	assert.Equal(t, 2, countAttempts(all), "both attempts present in the full load")
 
 	// Window: last 30 days → only the recent attempt.
-	scoped, err := store.LoadForDateRange(ctx, timeDaysAgo(30), time.Time{}, 0)
+	scoped, err := store.LoadForDateRange(ctx, timeDaysAgo(30), time.Time{}, uid)
 	require.NoError(t, err)
 	assert.Equal(t, 1, countAttempts(scoped), "only the in-window attempt is reconstructed")
 
 	// FindByDateRange fetches only the in-window row.
-	inWindow, err := NewDBLearningRepository(db).FindByDateRange(ctx, timeDaysAgo(30), time.Time{}, 0)
+	inWindow, err := NewDBLearningRepository(db).FindByDateRange(ctx, timeDaysAgo(30), time.Time{}, uid)
 	require.NoError(t, err)
 	assert.Len(t, inWindow, 1, "date-scoped log read fetches only the in-window row")
 }
