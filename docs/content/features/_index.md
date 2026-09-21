@@ -30,10 +30,15 @@ Check notebooks for errors and inconsistencies. Auto-fix available for common is
 
 ## Command Reference
 
+Quizzes and study materials live in the web app (`langner-server`). The CLI is
+split into two binaries: `langner` for end users and `langner-admin` for
+schema/data and account administration.
+
 | Command | Description |
 |---------|-------------|
-| `langner notebooks stories <name>` | Generate study materials from stories |
-| `langner quiz notebook` | Take a vocabulary quiz |
-| `langner quiz freeform` | Freeform recall quiz |
-| `langner dictionary lookup <word>` | Look up word definition |
-| `langner validate` | Check notebooks for errors |
+| `langner validate` | Check notebooks for errors (auto-fix with `--fix`) |
+| `langner ebook clone/list/remove` | Manage cloned Standard Ebooks repositories |
+| `langner-admin migrate import-db` | Import notebook data into the database |
+| `langner-admin migrate schema/rollback` | Apply or roll back schema migrations |
+| `langner-admin auth provision` | Upsert allowlist/admin accounts and notebook ownership |
+| `langner-admin notebooks set-owner` | Set a notebook's visibility and owner |

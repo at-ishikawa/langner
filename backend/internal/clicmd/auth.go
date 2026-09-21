@@ -1,4 +1,4 @@
-package main
+package clicmd
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-func newAuthCommand() *cobra.Command {
+func NewAuthCommand() *cobra.Command {
 	authCmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Authentication utilities",

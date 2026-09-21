@@ -1,4 +1,4 @@
-package main
+package clicmd
 
 import (
 	"context"
@@ -127,16 +127,12 @@ func newMigrateImportDBCommand() *cobra.Command {
 					fmt.Printf("  Grammar logs:         %d new\n", stateResult.GrammarLogsCreated)
 				}
 
-				// Provision auth accounts and backfill the just-imported/seeded
-				// (user_id NULL) learning history to the initial admin, so a fresh
-				// import is immediately usable by the admin and the e2e seed needs
-				// no separate provisioning step. No-op when auth is disabled.
-				if err := provisionAuth(ctx, cfg, db); err != nil {
-					return fmt.Errorf("provision auth: %w", err)
-				}
-				if cfg.Auth.Enabled() && cfg.Auth.InitialAdminEmail != "" {
-					fmt.Printf("\nProvisioned auth accounts; backfilled pre-auth history to %q\n", cfg.Auth.InitialAdminEmail)
-				}
+				// Auth provisioning is a SEPARATE, explicit step. Seeded/imported
+				// learning history is already attributed to the initial admin AT
+				// INSERT (resolveSeedOwnerID above, user_id NOT NULL), so import-db
+				// no longer runs provisionAuth implicitly. Run
+				// `langner-admin auth provision --config <cfg>` afterwards to upsert
+				// the allowlist/admin accounts and assign notebook ownership.
 			}
 
 			return nil
@@ -355,16 +351,12 @@ func newMigrateResetDBCommand() *cobra.Command {
 					return fmt.Errorf("seed db-only state: %w", err)
 				}
 			}
-			// Provision auth accounts and backfill the just-imported/seeded
-			// (user_id NULL) learning history to the initial admin — the SAME
-			// step import-db runs, so a scoped reset leaves the seeded history
-			// owned by the admin account (auth Phase 2). Without this a reset-db
-			// (e.g. the e2e per-scenario reset) would re-import history as
-			// user_id NULL, hiding it from every signed-in user. No-op when auth
-			// is disabled.
-			if err := provisionAuth(ctx, cfg, db); err != nil {
-				return fmt.Errorf("provision auth: %w", err)
-			}
+			// Auth provisioning is a SEPARATE, explicit step (see import-db).
+			// Seeded history is already attributed to the initial admin AT INSERT
+			// via resolveSeedOwnerID (user_id NOT NULL), so reset-db no longer runs
+			// provisionAuth implicitly. The e2e reset path runs
+			// `langner-admin auth provision` after reset-db to upsert accounts and
+			// assign notebook ownership.
 			return nil
 		},
 	}
@@ -503,7 +495,7 @@ func runRoundTripDiff(ctx context.Context, cfg *config.Config, db *sqlx.DB, out 
 }
 
 func openConfigAndDB() (*config.Config, *sqlx.DB, error) {
-	loader, err := config.NewConfigLoader(configFile)
+	loader, err := config.NewConfigLoader(ConfigFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load config loader: %w", err)
 	}

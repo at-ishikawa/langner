@@ -74,6 +74,6 @@ Get your RapidAPI key at: https://rapidapi.com/dpventures/api/wordsapi
 
 ## Next Steps
 
-- Generate study materials: `langner notebooks stories <name>`
-- Take a quiz: `langner quiz notebook`
-- Look up words: `langner dictionary lookup <word>`
+- Check your notebooks: `langner validate`
+- Import notebook data into the database: `langner-admin migrate import-db`
+- Start the web app to take quizzes and look up words: `make dev` (runs `langner-server`)

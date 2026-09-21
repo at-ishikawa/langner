@@ -82,10 +82,7 @@ The default algorithm is `modified_sm2` for backward compatibility.
 
 ## Recalculating Intervals
 
-If you change the algorithm or intervals, run the recalculate command to update all existing learning history:
-
-```bash
-langner migrate recalculate-intervals
-```
-
-This replays all review history through the configured algorithm and updates stored intervals.
+Intervals are derived from each word's review history by the configured
+algorithm whenever the history is read, so changing the algorithm or the
+`fixed_intervals` takes effect automatically on the next quiz — there is no
+separate recalculate step to run.

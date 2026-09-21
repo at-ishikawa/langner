@@ -9,14 +9,15 @@ import (
 	"github.com/at-ishikawa/langner/internal/clicmd"
 )
 
-// langner is the end-user CLI. It exposes only the commands a learner needs:
-// validating their notebooks and managing cloned ebook repositories. The admin
-// and e2e tooling (migrate, auth, notebooks set-owner) lives in the separate
-// langner-admin binary.
+// langner-admin is the admin + e2e CLI. It exposes the schema/data lifecycle
+// (migrate), auth account provisioning and test-cookie helpers (auth), and
+// notebook ownership (notebooks set-owner) — the operations an operator or the
+// e2e harness runs, kept out of the end-user langner binary.
 func main() {
 	var debugMode bool
 	rootCommand := cobra.Command{
-		Use:           "langner",
+		Use:           "langner-admin",
+		Short:         "Administrative and e2e tooling for langner (schema/data migrations, auth, notebook ownership)",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -27,9 +28,16 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&clicmd.ConfigFile, "config", "", "config file path")
 	rootCommand.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug mode")
 
+	notebooksCommand := &cobra.Command{
+		Use:   "notebooks",
+		Short: "Notebook administration",
+	}
+	notebooksCommand.AddCommand(clicmd.NewNotebooksSetOwnerCommand())
+
 	rootCommand.AddCommand(
-		clicmd.NewValidateCommand(),
-		clicmd.NewEbookCommand(),
+		clicmd.NewMigrateCommand(),
+		clicmd.NewAuthCommand(),
+		notebooksCommand,
 	)
 	if err := rootCommand.Execute(); err != nil {
 		if _, fprintfErr := fmt.Fprintf(os.Stderr, "failed to execute a command: %+v\n", err); fprintfErr != nil {

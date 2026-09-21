@@ -1,4 +1,4 @@
-package main
+package clicmd
 
 import (
 	"os"
@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setConfigFile sets the global configFile variable and registers a cleanup to restore it.
+// setConfigFile sets the global ConfigFile variable and registers a cleanup to restore it.
 func setConfigFile(t *testing.T, cfgPath string) {
 	t.Helper()
-	oldConfigFile := configFile
-	configFile = cfgPath
-	t.Cleanup(func() { configFile = oldConfigFile })
+	oldConfigFile := ConfigFile
+	ConfigFile = cfgPath
+	t.Cleanup(func() { ConfigFile = oldConfigFile })
 }
 
 // setupBrokenConfigFile creates a config file with invalid YAML that causes Load() to fail.
