@@ -108,13 +108,15 @@ func run(ctx context.Context) error {
 		}
 	})
 
-	// Open the database when one is configured. A nil db means YAML-only dev
-	// mode; a non-nil db switches the server to DB-only user-state storage.
+	// A database is REQUIRED: auth is always mounted and every RPC is gated, so
+	// users / per-user state / device-flow rows must live in Postgres. buildAuth
+	// fails fast when db is nil, so if the connection cannot be opened the server
+	// refuses to start (rather than silently running ungated).
 	var db *sqlx.DB
 	if cfg.Database.Host != "" && cfg.Database.Password != "" {
 		opened, err := database.Open(cfg.Database)
 		if err != nil {
-			slog.Warn("failed to open database, running with YAML-only storage", "error", err)
+			slog.Error("failed to open database", "error", err)
 		} else {
 			db = opened
 			app.AddShutdownHook(func(ctx context.Context) error {
@@ -123,34 +125,17 @@ func run(ctx context.Context) error {
 		}
 	}
 
-	// Google-OAuth sign-in. Enabled as soon as a session signing key is
-	// configured; then EVERY connect RPC is gated behind a valid session
-	// cookie and the /auth/* endpoints are served plainly. Without a signing
-	// key the server runs ungated (YAML-only dev), exactly as before.
-	var authSetup *authComponents
-	if cfg.Auth.Enabled() {
-		authSetup, err = buildAuth(cfg.Auth, db)
-		if err != nil {
-			return fmt.Errorf("set up auth: %w", err)
-		}
-		slog.Info("google-oauth sign-in enabled; all RPCs require a valid session cookie")
-	} else {
-		slog.Warn("auth disabled (no SESSION_SIGNING_KEY); RPCs are ungated")
+	// Always-on auth (design §2). Google-OAuth sign-in mints a langner access
+	// JWT for the web SPA (delivered in the URL fragment, no session cookie) and
+	// the RFC 8628 device flow mints one for the CLI; EVERY connect RPC is gated
+	// behind a valid `Authorization: Bearer` token. buildAuth fails fast if the
+	// database or TOKEN_SIGNING_KEY is missing, so the server never starts
+	// silently ungated.
+	authSetup, err := buildAuth(cfg, db)
+	if err != nil {
+		return fmt.Errorf("set up auth: %w", err)
 	}
-
-	// CLI device-flow / bearer auth. Additive and independent of the cookie: it
-	// mounts as soon as TOKEN_SIGNING_KEY is set (mirroring how the cookie mounts
-	// on SESSION_SIGNING_KEY). Bearer is accepted ALONGSIDE the cookie — it never
-	// weakens or replaces the cookie path. A DB is required (device/refresh rows
-	// live in Postgres).
-	var deviceSetup *deviceComponents
-	if cfg.Auth.TokenEnabled() {
-		deviceSetup, err = buildDeviceAuth(cfg.Auth, db)
-		if err != nil {
-			return fmt.Errorf("set up device auth: %w", err)
-		}
-		slog.Info("cli device-flow + bearer auth enabled; Authorization: Bearer accepted alongside the session cookie")
-	}
+	slog.Info("auth enabled; all RPCs require a valid bearer access token (web + CLI)")
 
 	// User-STATE repositories. When a database is configured, writes go to the
 	// DB ONLY — the runtime never rewrites the on-disk learning_notes YAML
@@ -254,13 +239,10 @@ func run(ctx context.Context) error {
 	handler.SetNoteRepository(noteRepo)
 	analyticsHandler := server.NewAnalyticsHandler(analyticsRepo)
 
-	// The auth interceptor rejects any RPC lacking a verified session
-	// (populated in request ctx by authCookieMiddleware). It is only added when
-	// auth is enabled so ungated YAML-only dev keeps working.
-	interceptors := []connect.Interceptor{loggingInterceptor}
-	if authSetup != nil || deviceSetup != nil {
-		interceptors = append(interceptors, server.NewAuthInterceptor())
-	}
+	// The auth interceptor rejects any RPC lacking a verified session (populated
+	// in request ctx by AuthBearerMiddleware). It is appended UNCONDITIONALLY —
+	// auth is always on (design §2).
+	interceptors := []connect.Interceptor{loggingInterceptor, server.NewAuthInterceptor()}
 	handlerOpts := connect.WithInterceptors(interceptors...)
 	path, h := apiv1connect.NewQuizServiceHandler(handler, handlerOpts)
 	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, handlerOpts)
@@ -271,39 +253,26 @@ func run(ctx context.Context) error {
 	mux.Handle(notebookPath, notebookH)
 	mux.Handle(analyticsPath, analyticsH)
 
-	// Auth endpoints are plain HTTP, registered OUTSIDE the connect
-	// interceptor so an unauthenticated user can sign in.
-	if authSetup != nil {
-		mux.HandleFunc("/auth/google/login", authSetup.handler.Login)
-		mux.HandleFunc("/auth/google/callback", authSetup.handler.Callback)
-		mux.HandleFunc("/auth/logout", authSetup.handler.Logout)
-		mux.HandleFunc("/auth/me", authSetup.handler.Me)
-	}
-	// Device-flow + refresh/revoke endpoints, plain HTTP outside the interceptor
-	// so an unauthenticated CLI can reach them.
-	if deviceSetup != nil {
-		mux.HandleFunc("/auth/device/code", deviceSetup.handler.RequestCode)
-		mux.HandleFunc("/auth/device/token", deviceSetup.handler.Token)
-		mux.HandleFunc("/auth/device/approve", deviceSetup.handler.Approve)
-		mux.HandleFunc("/auth/device/deny", deviceSetup.handler.Deny)
-		mux.HandleFunc("/auth/device", deviceSetup.handler.ShowApprovalPage)
-		mux.HandleFunc("/auth/token/refresh", deviceSetup.handler.Refresh)
-		mux.HandleFunc("/auth/token/revoke", deviceSetup.handler.Revoke)
-	}
+	// Auth endpoints are plain HTTP, registered OUTSIDE the connect interceptor
+	// so an unauthenticated user/CLI can sign in. The web sign-in mints a bearer
+	// (fragment redirect); the device endpoints drive the CLI flow. Device
+	// approval happens INSIDE /auth/google/callback (no /auth/device/approve).
+	mux.HandleFunc("/auth/google/login", authSetup.handler.Login)
+	mux.HandleFunc("/auth/google/callback", authSetup.handler.Callback)
+	mux.HandleFunc("/auth/logout", authSetup.handler.Logout)
+	mux.HandleFunc("/auth/me", authSetup.handler.Me)
+	mux.HandleFunc("/auth/device/code", authSetup.deviceHandler.RequestCode)
+	mux.HandleFunc("/auth/device/token", authSetup.deviceHandler.Token)
+	mux.HandleFunc("/auth/device/deny", authSetup.deviceHandler.Deny)
+	mux.HandleFunc("/auth/device", authSetup.deviceHandler.ShowApprovalPage)
+	mux.HandleFunc("/auth/token/refresh", authSetup.deviceHandler.Refresh)
+	mux.HandleFunc("/auth/token/revoke", authSetup.deviceHandler.Revoke)
 
 	rootHandler := h2c.NewHandler(mux, &http2.Server{})
-	// Bearer acceptance runs INSIDE (after) the cookie middleware so a valid
-	// cookie wins when both are present; bearer only fills the context when the
-	// cookie left it empty. Both never reject — the interceptor gates RPCs.
-	if deviceSetup != nil {
-		rootHandler = server.AuthBearerMiddleware(rootHandler, deviceSetup.tokens)
-	}
-	if authSetup != nil {
-		// Lifts a verified session cookie into the request context for both the
-		// connect interceptor and /auth/me. Does NOT reject — /auth/* and CORS
-		// preflight must pass through unauthenticated.
-		rootHandler = server.AuthCookieMiddleware(rootHandler, authSetup.sessions)
-	}
+	// The ONLY auth path: populate the request context from the bearer access
+	// token for both the connect interceptor and /auth/me. Never rejects —
+	// /auth/* and CORS preflight pass through; the interceptor gates RPCs.
+	rootHandler = server.AuthBearerMiddleware(rootHandler, authSetup.tokens)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
@@ -313,9 +282,7 @@ func run(ctx context.Context) error {
 
 	// Lightweight periodic sweep of expired device-authorization rows (design
 	// §5). Cheap: the expires_at index supports it. Stops with ctx.
-	if deviceSetup != nil {
-		go sweepExpiredDeviceCodes(ctx, deviceSetup.deviceCodes)
-	}
+	go sweepExpiredDeviceCodes(ctx, authSetup.deviceCodes)
 
 	return app.Run(ctx, func(ctx context.Context) error {
 		slog.Info("starting server", "addr", srv.Addr)
@@ -361,70 +328,58 @@ func loadDictionaryMap(cacheDir string) (map[string]rapidapi.Response, error) {
 	return rapidapi.FromResponsesToMap(responses), nil
 }
 
-// authComponents holds the pieces main wires when auth is enabled.
+// authComponents holds the pieces main wires for always-on bearer auth: the
+// OAuth/web-token handler, the device-flow handler, the shared access-token
+// signer, and the device-code repository (for the expiry sweeper).
 type authComponents struct {
-	handler  *server.AuthHandler
-	sessions *auth.SessionSigner
+	handler       *server.AuthHandler
+	deviceHandler *server.DeviceAuthHandler
+	tokens        *auth.TokenSigner
+	deviceCodes   *auth.CLIDeviceCodeRepository
 }
 
-// buildAuth constructs the OAuth handler and session signer. It fails fast when
-// a required secret is missing, so a misconfigured auth deployment never starts
-// silently ungated.
-func buildAuth(cfg config.AuthConfig, db *sqlx.DB) (*authComponents, error) {
+// buildAuth constructs the OAuth/web-token handler, the device-flow handler,
+// the single access-token signer (TOKEN_SIGNING_KEY, which also keys the OAuth
+// state signer), and the CLI repositories. It fails fast when the database or
+// TOKEN_SIGNING_KEY is missing, so a misconfigured deployment never starts
+// silently ungated (design §2).
+func buildAuth(cfg *config.Config, db *sqlx.DB) (*authComponents, error) {
 	if db == nil {
-		return nil, errors.New("auth is enabled but no database is configured (users are stored in Postgres)")
+		return nil, errors.New("auth requires a database (users / device-flow rows live in Postgres) — set database.* and DB_PASSWORD")
 	}
-	sessions, err := auth.NewSessionSigner(auth.DecodeKey(cfg.SessionSigningKey))
+	key := auth.DecodeKey(cfg.Auth.TokenSigningKey)
+	tokens, err := auth.NewTokenSigner(key)
 	if err != nil {
-		return nil, fmt.Errorf("session signing key: %w", err)
+		return nil, fmt.Errorf("TOKEN_SIGNING_KEY is required: %w", err)
 	}
-	state, err := auth.NewStateSigner(auth.DecodeKey(cfg.SessionSigningKey))
+	state, err := auth.NewStateSigner(key)
 	if err != nil {
 		return nil, fmt.Errorf("state signing key: %w", err)
 	}
 	users := auth.NewUserRepository(db)
-	authenticator := auth.NewOAuthClient(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.RedirectURL, nil)
-	handler := server.NewAuthHandler(server.AuthHandlerConfig{
-		Authenticator:  authenticator,
-		Sessions:       sessions,
-		State:          state,
-		Users:          users,
-		AllowedEmails:  cfg.AllowedEmails,
-		FrontendURL:    cfg.FrontendURL,
-		CookieSecure:   cfg.CookieSecure,
-		CookieSameSite: parseSameSite(cfg.CookieSameSite),
-	})
-	return &authComponents{handler: handler, sessions: sessions}, nil
-}
-
-// deviceComponents holds the pieces main wires when TOKEN_SIGNING_KEY is set.
-type deviceComponents struct {
-	handler     *server.DeviceAuthHandler
-	tokens      *auth.TokenSigner
-	deviceCodes *auth.CLIDeviceCodeRepository
-}
-
-// buildDeviceAuth constructs the device-flow handler, the access-token signer,
-// and the device/refresh repositories. It fails fast when the DB or key is
-// missing, so a misconfigured bearer deployment never starts silently.
-func buildDeviceAuth(cfg config.AuthConfig, db *sqlx.DB) (*deviceComponents, error) {
-	if db == nil {
-		return nil, errors.New("bearer auth is enabled but no database is configured (device/refresh rows live in Postgres)")
-	}
-	tokens, err := auth.NewTokenSigner(auth.DecodeKey(cfg.TokenSigningKey))
-	if err != nil {
-		return nil, fmt.Errorf("token signing key: %w", err)
-	}
 	deviceCodes := auth.NewCLIDeviceCodeRepository(db)
 	refreshTokens := auth.NewCLIRefreshTokenRepository(db)
-	handler := server.NewDeviceAuthHandler(server.DeviceAuthHandlerConfig{
+	authenticator := auth.NewOAuthClient(cfg.Auth.GoogleClientID, cfg.Auth.GoogleClientSecret, cfg.Auth.RedirectURL, nil)
+	handler := server.NewAuthHandler(server.AuthHandlerConfig{
+		Authenticator:  authenticator,
+		Tokens:         tokens,
+		State:          state,
+		Users:          users,
+		DeviceCodes:    deviceCodes,
+		AllowedEmails:  cfg.Auth.AllowedEmails,
+		FrontendURL:    cfg.Auth.FrontendURL,
+		AllowedOrigins: cfg.Server.CORS.AllowedOrigins,
+		CookieSecure:   cfg.Auth.CookieSecure,
+		CookieSameSite: parseSameSite(cfg.Auth.CookieSameSite),
+	})
+	deviceHandler := server.NewDeviceAuthHandler(server.DeviceAuthHandlerConfig{
 		DeviceCodes:     deviceCodes,
 		RefreshTokens:   refreshTokens,
 		Tokens:          tokens,
-		FrontendURL:     cfg.FrontendURL,
-		VerificationURI: deviceVerificationURI(cfg.RedirectURL),
+		FrontendURL:     cfg.Auth.FrontendURL,
+		VerificationURI: deviceVerificationURI(cfg.Auth.RedirectURL),
 	})
-	return &deviceComponents{handler: handler, tokens: tokens, deviceCodes: deviceCodes}, nil
+	return &authComponents{handler: handler, deviceHandler: deviceHandler, tokens: tokens, deviceCodes: deviceCodes}, nil
 }
 
 // deviceVerificationURI derives the browser approval URL (…/auth/device) from
@@ -450,11 +405,12 @@ func parseSameSite(s string) http.SameSite {
 	}
 }
 
-// corsMiddleware serves explicit, credentialed CORS. It reflects the request
-// Origin (never the literal "*", which is invalid with credentials) when the
-// Origin is configured or when "*" is configured as a wildcard, and always
-// sends Access-Control-Allow-Credentials so the session cookie is accepted
-// cross-origin (frontend 3100 ↔ backend 8080).
+// corsMiddleware serves explicit CORS for bearer-authenticated RPCs. Auth is a
+// header (`Authorization: Bearer`), not a cookie, so NO
+// Access-Control-Allow-Credentials is sent — the browser presents the bearer
+// from a different origin (frontend 3100 ↔ backend 8080). It reflects the
+// request Origin when it is configured (or when "*" is configured as a
+// wildcard) and always allows the Authorization header.
 func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 	allowAll := false
 	allowed := make(map[string]bool, len(allowedOrigins))
@@ -469,7 +425,6 @@ func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 		origin := r.Header.Get("Origin")
 		if origin != "" && (allowAll || allowed[origin]) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")

@@ -1,38 +1,36 @@
-// Playwright globalSetup: translate the e2e session cookie into Playwright
-// storage state so every spec runs authenticated.
+// Playwright globalSetup: wait for the backend seed to mint the e2e access
+// token before any spec runs.
+//
+// Auth is a bearer access token held in the SPA's memory — there is no cookie,
+// so nothing goes into Playwright `storageState`. Instead each scenario injects
+// the token into `window.__LANGNER_ACCESS_TOKEN__` before the app loads (see
+// e2e/steps/common.ts), the same seam the running app reads. This setup only
+// ensures the token file the backend webServer wrote exists (auth is enabled in
+// config.e2e.yml, so every RPC is gated behind a bearer).
 //
 // Playwright starts the webServers and awaits their readiness BEFORE running
-// this globalSetup, so we cannot provision the database here — the backend
-// server would already need it. Instead the backend webServer command
-// (playwright.config.ts) (re)creates the test DB, imports notebooks, upserts
-// the allowlisted e2e user and writes that user's signed session cookie to
-// cookie.txt, all before it binds its port. By the time this runs, the server
-// is ready, so the cookie file exists. We only read it and inject the cookie
-// via `use.storageState` (auth is enabled in config.e2e.yml, so all RPCs are
-// gated behind a session cookie).
+// this globalSetup; the backend webServer command (seed-and-serve.sh) mints the
+// token to access-token.txt before it binds its port, so by the time this runs
+// the file exists. The order between globalSetup and the webServer is
+// version-dependent, so we poll rather than assume.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// Cookie file written by the backend webServer command before it starts.
-const COOKIE_PATH = join(__dirname, ".auth", "cookie.txt");
-// Playwright storage state file written by this setup and consumed via
-// `use.storageState` in playwright.config.ts.
-export const STORAGE_STATE_PATH = join(__dirname, ".auth", "storageState.json");
+// Token file written by the backend webServer command; also read per-scenario
+// by e2e/steps/common.ts.
+export const TOKEN_PATH = join(__dirname, ".auth", "access-token.txt");
 
-// Give the backend command time to build, recreate the DB, import and seed
-// before it writes the cookie. Matches the backend webServer timeout headroom.
-const COOKIE_WAIT_MS = 180_000;
+const TOKEN_WAIT_MS = 180_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// readCookie returns the minted session cookie value, or "" if the file is not
-// present/complete yet. The backend command writes only the cookie to stdout,
-// but tolerate any stray leading log line: take the last non-empty line.
-function readCookie(): string {
+// readToken returns the minted access token, or "" if the file is not present
+// yet. Tolerate a stray leading log line: take the last non-empty line.
+export function readToken(): string {
   try {
     return (
-      readFileSync(COOKIE_PATH, "utf8")
+      readFileSync(TOKEN_PATH, "utf8")
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line !== "")
@@ -44,39 +42,16 @@ function readCookie(): string {
 }
 
 export default async function globalSetup() {
-  // The order between globalSetup and the webServer is version-dependent, so
-  // poll for the cookie file the backend command writes rather than assume it
-  // already exists.
-  let cookieValue = readCookie();
-  const deadline = Date.now() + COOKIE_WAIT_MS;
-  while (!cookieValue && Date.now() < deadline) {
+  let token = readToken();
+  const deadline = Date.now() + TOKEN_WAIT_MS;
+  while (!token && Date.now() < deadline) {
     await sleep(500);
-    cookieValue = readCookie();
+    token = readToken();
   }
 
-  if (!cookieValue) {
+  if (!token) {
     throw new Error(
-      `no e2e session cookie in ${COOKIE_PATH} after ${COOKIE_WAIT_MS}ms; the backend webServer seed step did not write it`,
+      `no e2e access token in ${TOKEN_PATH} after ${TOKEN_WAIT_MS}ms; the backend webServer seed step did not write it`,
     );
   }
-
-  const storageState = {
-    cookies: [
-      {
-        name: "langner_session",
-        value: cookieValue,
-        // Host-only "localhost" cookie: applies to both the frontend (3100)
-        // and backend (8080) since cookies ignore the port.
-        domain: "localhost",
-        path: "/",
-        expires: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-        httpOnly: true,
-        secure: false,
-        sameSite: "Lax" as const,
-      },
-    ],
-    origins: [],
-  };
-  mkdirSync(join(__dirname, ".auth"), { recursive: true });
-  writeFileSync(STORAGE_STATE_PATH, JSON.stringify(storageState, null, 2));
 }

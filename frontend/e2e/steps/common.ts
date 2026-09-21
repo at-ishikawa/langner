@@ -1,8 +1,25 @@
 import { expect, test } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
 import { resetState } from "../support/reset";
+import { readToken } from "../global-setup";
 
 const { Given, When, Then, BeforeScenario } = createBdd();
+
+// Seed the SPA's in-memory bearer BEFORE any navigation: auth is a bearer held
+// in memory (no cookie), so we inject the seed user's access token into
+// window.__LANGNER_ACCESS_TOKEN__ — the exact seam the running app reads on
+// load — via addInitScript, which re-runs on every full page load in the
+// scenario. The token was minted at seed time (its sub = user id, signed with
+// the fixed e2e key), so it stays valid across per-scenario DB rebuilds.
+BeforeScenario(async ({ page }) => {
+  const token = readToken();
+  if (!token) {
+    throw new Error("e2e access token not found; the seed step did not write it");
+  }
+  await page.addInitScript((t) => {
+    (window as unknown as { __LANGNER_ACCESS_TOKEN__?: string }).__LANGNER_ACCESS_TOKEN__ = t;
+  }, token);
+});
 
 // Restore the seeded learning-history baseline (DB + learning_notes YAML)
 // before every scenario. The stack shares one seeded DB with no reset between

@@ -2,13 +2,15 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
   type ReactNode,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { getMe, type AuthUser } from "@/lib/auth";
+import { usePathname } from "next/navigation";
+import { getMe, redirectToSignIn, type AuthUser } from "@/lib/auth";
+import { subscribeToken } from "@/lib/authToken";
 
 interface SessionState {
   user: AuthUser | null;
@@ -20,22 +22,28 @@ const SessionContext = createContext<SessionState>({
   loading: true,
 });
 
+// Routes that must render WITHOUT an authenticated session: the sign-in page
+// and the OAuth callback landing (which is mid-way through acquiring a token).
+const PUBLIC_PATHS = new Set(["/login", "/auth/callback"]);
+
 // useSession exposes the current authenticated user (or null) and whether the
 // initial /auth/me probe is still in flight.
 export function useSession(): SessionState {
   return useContext(SessionContext);
 }
 
-// SessionProvider probes /auth/me on mount and guards the app: once the probe
-// resolves with no user, every route except /login redirects to /login. The
-// cookie is HTTP-only so this guard is client-side only (no middleware.ts).
+// SessionProvider probes /auth/me (with the in-memory bearer) on mount and
+// whenever the token changes, and guards the app: once the probe resolves with
+// no user, every route except the public ones silently re-authenticates by
+// redirecting through Google (if the Google session is alive it returns with no
+// user interaction). Auth is a bearer held in memory, so this guard is
+// client-side only.
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
   const pathname = usePathname();
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     let active = true;
     getMe().then((u) => {
       if (active) {
@@ -48,11 +56,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Probe on mount and whenever the in-memory token changes (e.g. the OAuth
+  // callback stores a freshly minted token).
   useEffect(() => {
-    if (!loading && !user && pathname !== "/login") {
-      router.replace("/login");
+    const cancel = refresh();
+    const unsubscribe = subscribeToken(() => refresh());
+    return () => {
+      cancel();
+      unsubscribe();
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!loading && !user && !PUBLIC_PATHS.has(pathname)) {
+      redirectToSignIn(pathname);
     }
-  }, [loading, user, pathname, router]);
+  }, [loading, user, pathname]);
 
   return (
     <SessionContext.Provider value={{ user, loading }}>

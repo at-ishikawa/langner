@@ -1,6 +1,17 @@
 package auth
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// Session is the authenticated identity carried in the request context. It is
+// populated from a verified bearer access token (AuthBearerMiddleware) and
+// carries only the user id and the token's expiry — NO email or other PII.
+type Session struct {
+	UserID    int64
+	ExpiresAt time.Time
+}
 
 type contextKey int
 

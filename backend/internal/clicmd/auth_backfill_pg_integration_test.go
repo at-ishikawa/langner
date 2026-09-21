@@ -20,7 +20,7 @@ import (
 // TestAuthBackfill_ClaimsUnownedHistoryToRealAccount_LivePostgres_Integration
 // pins the per-user cutover claim, INCLUDING the bug it must not have: a real
 // Google sign-in keys on Google's own sub, but tooling (`auth provision` /
-// `issue-test-cookie` / a mistaken `--owner-email` run) mints a distinct
+// `issue-test-token` / a mistaken `--owner-email` run) mints a distinct
 // `e2e-test|…` account. So history can end up stuck on a tooling account the
 // owner never signs in as. `auth backfill --user-id <real id>` (claimHistory)
 // must reclaim tooling-owned rows to the real account, while never touching a

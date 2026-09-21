@@ -73,7 +73,7 @@ logged-in user. Omitting --user-id leaves the notebook unowned (public only).`,
 			defer func() { _ = db.Close() }()
 
 			if !cfg.Auth.Enabled() {
-				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
+				return fmt.Errorf("auth is not enabled in config (token_signing_key is unset)")
 			}
 			ctx := cmd.Context()
 

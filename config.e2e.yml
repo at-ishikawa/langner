@@ -4,10 +4,10 @@ server:
     allowed_origins:
       - "http://localhost:3100"
 
-# Auth is enabled in e2e with FIXED test keys (not secret — test-only) so the
-# harness can mint a session cookie deterministically via
-# `langner auth issue-test-cookie`. cookie_secure:false because e2e runs over
-# plain http.
+# Auth is always on. e2e uses a FIXED test key (not secret — test-only) so the
+# harness can mint a bearer access token deterministically via
+# `langner-admin auth issue-test-token`. cookie_secure:false because e2e runs
+# over plain http (the OAuth `state` cookie only).
 auth:
   google_client_id: "e2e-test-client-id"
   redirect_url: "http://localhost:8080/auth/google/callback"
@@ -17,9 +17,9 @@ auth:
   initial_admin_email: "e2e@example.com"
   cookie_secure: false
   cookie_samesite: lax
-  # Test-only fixed key. session_signing_key is an arbitrary HMAC key that both
-  # enables auth and signs the session cookie + OAuth CSRF state.
-  session_signing_key: "e2e-fixed-session-signing-key-do-not-use-in-prod"
+  # Test-only fixed key. token_signing_key is an arbitrary HMAC key that signs
+  # the access JWT (web + CLI) and keys the OAuth CSRF state.
+  token_signing_key: "e2e-fixed-token-signing-key-do-not-use-in-prod"
 
 database:
   host: 127.0.0.1

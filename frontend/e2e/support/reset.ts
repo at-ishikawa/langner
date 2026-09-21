@@ -22,12 +22,12 @@
 // the allowlist/admin accounts and re-assign notebook ownership from the config's
 // notebook_ownership block. `reset-db` drops + re-migrates the managed tables
 // (`users` among them, migration 024) and re-imports the YAML, which wipes those
-// rows and would leave the pre-minted session cookie (see global-setup.ts)
+// rows and would leave the pre-minted access token (see global-setup.ts)
 // pointing at a nonexistent user — so `/auth/me` 401s and every authenticated
-// page redirects to /login. We therefore re-provision and re-mint the same
+// page redirects to sign-in. We therefore re-provision and re-mint the same
 // allowlisted user after every reset. The scoped rebuild restarts the BIGSERIAL
-// sequence, so the re-inserted user reclaims id=1 and the fixed storageState
-// cookie keeps resolving.
+// sequence, so the re-inserted user reclaims id=1 and the seed-time access token
+// (its `sub` = user id, signed with the fixed test key) keeps resolving.
 
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -36,7 +36,7 @@ import { join } from "node:path";
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const CONFIG_PATH = process.env.LANGNER_TEST_CONFIG ?? "config.e2e.yml";
 const DB_PASSWORD = process.env.LANGNER_TEST_DB_PASSWORD ?? "password";
-// Must match the email seed-and-serve.sh mints the session cookie for.
+// Must match the email seed-and-serve.sh mints the access token for.
 const E2E_EMAIL = process.env.E2E_EMAIL ?? "e2e@example.com";
 const LEARNING_NOTES = "frontend/e2e/fixtures/learning_notes";
 
@@ -71,12 +71,12 @@ export function resetState(): void {
   });
 
   // 4. Re-mint the allowlisted auth user the rebuild just wiped, so the
-  //    pre-minted session cookie keeps resolving (upsert is idempotent; the
+  //    seed-time access token keeps resolving (upsert is idempotent; the
   //    re-inserted user reclaims id=1 after the sequence restart). We only need
-  //    the user row — the printed cookie is discarded.
+  //    the user row — the printed token is discarded.
   execFileSync(
     "./langner-admin",
-    ["auth", "issue-test-cookie", "--email", E2E_EMAIL, "--config", CONFIG_PATH],
+    ["auth", "issue-test-token", "--email", E2E_EMAIL, "--config", CONFIG_PATH],
     { cwd: REPO_ROOT, stdio: "pipe", env: { ...process.env, DB_PASSWORD } },
   );
 }

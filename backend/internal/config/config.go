@@ -53,11 +53,13 @@ type NotebookOwnership struct {
 	Visibility string `mapstructure:"visibility"`
 }
 
-// AuthConfig configures Google-OAuth sign-in. Non-secret settings come from the
-// config file; the two secret fields (GoogleClientSecret, SessionSigningKey)
-// are usually provided via environment variables and must never be committed.
-// Auth is enabled when SessionSigningKey is set; otherwise the server runs
-// ungated (YAML-only dev). No user PII is stored, so there is no encryption key.
+// AuthConfig configures Google-OAuth sign-in and the langner bearer access
+// token. Non-secret settings come from the config file; the secret fields
+// (GoogleClientSecret, TokenSigningKey) are usually provided via environment
+// variables and must never be committed. Auth is ALWAYS required — the server
+// fails fast at startup if TokenSigningKey is unset. No user PII is stored, so
+// there is no encryption key. CookieSecure/CookieSameSite apply only to the
+// short-lived OAuth CSRF `state` cookie (the only browser cookie left).
 type AuthConfig struct {
 	GoogleClientID    string   `mapstructure:"google_client_id"`
 	RedirectURL       string   `mapstructure:"redirect_url"`
@@ -67,26 +69,19 @@ type AuthConfig struct {
 	CookieSecure      bool     `mapstructure:"cookie_secure"`
 	CookieSameSite    string   `mapstructure:"cookie_samesite"`
 
-	// Secrets — SessionSigningKey signs the session cookie + OAuth CSRF state;
-	// TokenSigningKey signs the CLI/bearer access JWT (HS256); GoogleClientSecret
-	// is the OAuth client secret. Provide privately (env or an uncommitted
-	// config); never commit real values.
+	// Secrets — TokenSigningKey signs the access JWT (HS256) for BOTH the web SPA
+	// and the CLI, and keys the OAuth CSRF `state` signer; GoogleClientSecret is
+	// the OAuth client secret. Provide privately (env or an uncommitted config);
+	// never commit real values. There is no session signing key anymore.
 	GoogleClientSecret string `mapstructure:"google_client_secret"`
-	SessionSigningKey  string `mapstructure:"session_signing_key"`
 	TokenSigningKey    string `mapstructure:"token_signing_key"`
 }
 
-// Enabled reports whether Google-OAuth sign-in is active. Auth turns on as soon
-// as a session signing key is configured.
+// Enabled reports whether auth is configured — i.e. the required token signing
+// key is present. The server always requires it (it fails fast otherwise); this
+// helper guards the admin CLI commands (provision/backfill/issue-test-token)
+// that need a configured key.
 func (a AuthConfig) Enabled() bool {
-	return a.SessionSigningKey != ""
-}
-
-// TokenEnabled reports whether the bearer-token device-flow endpoints and
-// bearer acceptance should mount. Like the cookie's Enabled(), the token path
-// turns on as soon as its signing key is configured; it is additive and does
-// not require or replace the cookie path (that consolidation is a later PR).
-func (a AuthConfig) TokenEnabled() bool {
 	return a.TokenSigningKey != ""
 }
 
@@ -280,7 +275,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("database.database", "local")
 	v.SetDefault("database.username", "user")
 	v.SetDefault("server.port", 8080)
-	v.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000"})
+	v.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3100"})
 	v.SetDefault("quiz.algorithm", "modified_sm2")
 	v.SetDefault("quiz.fixed_intervals", []int{1, 7, 30, 90, 365, 1095, 1825})
 	v.SetDefault("auth.frontend_url", "http://localhost:3100")
@@ -326,9 +321,6 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	// Auth secrets are env-bound only, never persisted in YAML/source.
 	if err := v.BindEnv("auth.google_client_secret", "GOOGLE_CLIENT_SECRET"); err != nil {
 		return nil, fmt.Errorf("failed to bind GOOGLE_CLIENT_SECRET environment variable: %w", err)
-	}
-	if err := v.BindEnv("auth.session_signing_key", "SESSION_SIGNING_KEY"); err != nil {
-		return nil, fmt.Errorf("failed to bind SESSION_SIGNING_KEY environment variable: %w", err)
 	}
 	if err := v.BindEnv("auth.token_signing_key", "TOKEN_SIGNING_KEY"); err != nil {
 		return nil, fmt.Errorf("failed to bind TOKEN_SIGNING_KEY environment variable: %w", err)

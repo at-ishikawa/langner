@@ -66,12 +66,12 @@ jobs:
     name: Validate example configurations
     runs-on: ubuntu-latest
     # The `auth provision` step below requires auth to be ENABLED (its command
-    # errors when session auth is off). A non-secret throwaway signing key
-    # enables auth for this CI job (AuthConfig.Enabled() only checks the key is
-    # non-empty). import-db / sync-db do NOT need it — they attribute seeded
+    # errors when the token signing key is unset). A non-secret throwaway signing
+    # key enables auth for this CI job (AuthConfig.Enabled() only checks the key
+    # is non-empty). import-db / sync-db do NOT need it — they attribute seeded
     # history to the configured initial_admin_email at insert regardless.
     env:
-      SESSION_SIGNING_KEY: ci0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
+      TOKEN_SIGNING_KEY: ci0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
     services:
       postgres:
         image: postgres:16

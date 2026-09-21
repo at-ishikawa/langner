@@ -3,15 +3,18 @@
 server:
   port: 8080
   cors:
-    # Explicit, credentialed origins (the session cookie requires credentials,
-    # which forbids a "*" wildcard). List every frontend origin that calls the
-    # API. The dev frontend runs on port 3100.
+    # List every frontend origin that calls the API. Auth is a bearer header
+    # (`Authorization: Bearer`), not a cookie, so no credentials are sent and no
+    # "*"-with-credentials restriction applies. The dev frontend runs on 3100.
     allowed_origins:
       - "http://localhost:3100"
 
-# Google-OAuth sign-in. Auth turns ON as soon as a session signing key is set
-# (via the SESSION_SIGNING_KEY env var); leave the secrets unset to run the
-# server ungated for local YAML-only development.
+# Auth is ALWAYS ON. The server signs a langner access JWT for BOTH the web SPA
+# (delivered in the OAuth-callback URL fragment, held in memory) and the CLI
+# (RFC 8628 device flow), and every RPC requires `Authorization: Bearer`. The
+# server FAILS FAST at startup if TOKEN_SIGNING_KEY is unset, and a database is
+# required (users / device-flow rows live in Postgres). There is no session
+# cookie and no ungated / YAML-only mode.
 auth:
   # Non-secret settings (safe to commit).
   google_client_id: "REPLACE_WITH_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com"
@@ -26,18 +29,17 @@ auth:
   # with no flag to list ids) — nothing here is needed. The server never reads
   # this field.
   initial_admin_email: "admin@example.com"
+  # cookie_secure / cookie_samesite apply ONLY to the short-lived OAuth CSRF
+  # `state` cookie (the sole browser cookie left — same-site to the API host).
   cookie_secure: true
   cookie_samesite: lax
   # SECRETS — keep out of committed files; env var or a private/uncommitted config:
   #   GOOGLE_CLIENT_SECRET   the OAuth client secret
-  #   SESSION_SIGNING_KEY    key that signs the session cookie + OAuth CSRF state
-  #                          (e.g. `openssl rand -hex 32`)
-  #   TOKEN_SIGNING_KEY      key that signs the CLI/bearer access JWT (HS256).
-  #                          Set this to enable `langner login`/`logout`/`whoami`
-  #                          (the RFC 8628 device flow) and to accept
-  #                          `Authorization: Bearer` ALONGSIDE the session cookie.
-  #                          Its own secret (e.g. `openssl rand -hex 32`); no
-  #                          fallback to SESSION_SIGNING_KEY.
+  #   TOKEN_SIGNING_KEY      REQUIRED. Signs the langner access JWT (HS256) for
+  #                          BOTH web and CLI, and keys the OAuth CSRF `state`.
+  #                          The server refuses to start without it. Generate a
+  #                          secret, e.g. `openssl rand -hex 32`. (This replaces
+  #                          the removed SESSION_SIGNING_KEY / session cookie.)
   # No email/name is stored, so there is no credential-encryption key.
 
 # Notebook ownership + public/private visibility (auth Phase 3). Content stays a

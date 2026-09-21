@@ -21,15 +21,15 @@ func NewAuthCommand() *cobra.Command {
 		Use:   "auth",
 		Short: "Authentication utilities",
 	}
-	authCmd.AddCommand(newAuthIssueTestCookieCommand())
+	authCmd.AddCommand(newAuthIssueTestTokenCommand())
 	authCmd.AddCommand(newAuthProvisionCommand())
 	authCmd.AddCommand(newAuthBackfillCommand())
 	return authCmd
 }
 
 // syntheticSub derives the deterministic, PII-free google_sub for an account
-// created by tooling (auth provision / issue-test-cookie) rather than a real
-// Google sign-in. provision and issue-test-cookie derive it identically, so a
+// created by tooling (auth provision / issue-test-token) rather than a real
+// Google sign-in. provision and issue-test-token derive it identically, so a
 // provisioned account and the e2e cookie for the same email resolve to the SAME
 // user row — the pre-auth history provision backfills therefore belongs to the
 // cookie'd user. The email only seeds a stable, opaque subject; nothing PII is
@@ -38,7 +38,7 @@ func NewAuthCommand() *cobra.Command {
 // (An account created here does NOT unify with a later REAL Google sign-in for
 // the same person — that yields a distinct row keyed by Google's own sub — since
 // the no-PII schema stores no email to match on. This matters only to the e2e
-// harness, which authenticates via issue-test-cookie, not a real round-trip.)
+// harness, which authenticates via issue-test-token, not a real round-trip.)
 func syntheticSub(email string) string {
 	return "e2e-test|" + auth.NormalizeEmail(email)
 }
@@ -61,8 +61,8 @@ func ensureUser(ctx context.Context, users *auth.UserRepository, email string) (
 // provisionAuth used to backfill NULL rows to, only stamped up front instead.
 //
 // Attribution keys off whether an OWNER is configured (initial_admin_email), NOT
-// on whether the server's session auth is running (Auth.Enabled() /
-// SESSION_SIGNING_KEY) — those are orthogonal. import-db attributes imported
+// on whether the server's session auth is running (Auth.Enabled() =
+// TOKEN_SIGNING_KEY) — those are orthogonal. import-db attributes imported
 // history to the designated owner even when the HTTP auth server is off, which
 // is exactly how the seed/validate steps run it (import-db with only DB_PASSWORD
 // set, no signing key). Returns (0, nil) only when NO owner is configured; the
@@ -170,7 +170,7 @@ func backfillOwner(ctx context.Context, db *sqlx.DB, ownerID int64) (int64, erro
 }
 
 // toolingSubPrefix marks accounts minted by tooling (auth provision /
-// issue-test-cookie / the e2e seed) rather than a real Google sign-in — their
+// issue-test-token / the e2e seed) rather than a real Google sign-in — their
 // google_sub is syntheticSub(email) = "e2e-test|<email>". A real sign-in keys on
 // Google's own opaque sub, so such rows never carry this prefix. claimHistory
 // treats tooling-owned history as unowned so it can be reclaimed to a real
@@ -256,7 +256,7 @@ different real account is never touched.`,
 			defer func() { _ = db.Close() }()
 
 			if !cfg.Auth.Enabled() {
-				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
+				return fmt.Errorf("auth is not enabled in config (token_signing_key is unset)")
 			}
 
 			if userID == 0 {
@@ -302,7 +302,7 @@ func newAuthProvisionCommand() *cobra.Command {
 			defer func() { _ = db.Close() }()
 
 			if !cfg.Auth.Enabled() {
-				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
+				return fmt.Errorf("auth is not enabled in config (token_signing_key is unset)")
 			}
 			if cfg.Auth.InitialAdminEmail == "" {
 				return fmt.Errorf("auth.initial_admin_email is required to provision")
@@ -316,17 +316,18 @@ func newAuthProvisionCommand() *cobra.Command {
 	}
 }
 
-// newAuthIssueTestCookieCommand mints a signed session cookie for an
-// allowlisted email and prints its value to stdout. It is a TEST/e2e helper:
-// the e2e harness runs it after import-db to authenticate every spec without a
-// real Google round-trip. It upserts the user row (so the cookie's user id
-// resolves) using the config's credential encryption key, then signs the
-// cookie with the config's session signing key.
-func newAuthIssueTestCookieCommand() *cobra.Command {
+// newAuthIssueTestTokenCommand mints a langner access JWT for an allowlisted
+// email and prints it to stdout. It is a TEST/e2e helper: the e2e harness runs
+// it after import-db to authenticate every spec without a real Google
+// round-trip, seeding the SPA's in-memory access token the same way the app
+// receives it (there is no session cookie anymore). It upserts the user row (so
+// the token's `sub` resolves) then signs a 24h access token with the config's
+// TOKEN_SIGNING_KEY.
+func newAuthIssueTestTokenCommand() *cobra.Command {
 	var email string
 	cmd := &cobra.Command{
-		Use:   "issue-test-cookie",
-		Short: "Print a signed session cookie value for an allowlisted email (test/e2e only)",
+		Use:   "issue-test-token",
+		Short: "Print a langner access JWT for an allowlisted email (test/e2e only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if email == "" {
 				return fmt.Errorf("--email is required")
@@ -338,11 +339,11 @@ func newAuthIssueTestCookieCommand() *cobra.Command {
 			defer func() { _ = db.Close() }()
 
 			if !cfg.Auth.Enabled() {
-				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
+				return fmt.Errorf("auth is not enabled in config (token_signing_key is unset)")
 			}
 			users := auth.NewUserRepository(db)
 			// Reuse the SAME row `auth provision`/import-db created for this email
-			// (find-or-create by the deterministic synthetic sub), so a cookie
+			// (find-or-create by the deterministic synthetic sub), so a token
 			// issued after provisioning resolves to the account that owns the
 			// backfilled pre-auth history. No email is stored (migration 024 keeps
 			// only google_sub + username — no PII).
@@ -351,21 +352,18 @@ func newAuthIssueTestCookieCommand() *cobra.Command {
 				return fmt.Errorf("upsert test user: %w", err)
 			}
 
-			sessions, err := auth.NewSessionSigner(auth.DecodeKey(cfg.Auth.SessionSigningKey))
+			tokens, err := auth.NewTokenSigner(auth.DecodeKey(cfg.Auth.TokenSigningKey))
 			if err != nil {
-				return fmt.Errorf("session signing key: %w", err)
+				return fmt.Errorf("token signing key: %w", err)
 			}
-			value, err := sessions.Sign(auth.Session{
-				UserID:    userID,
-				ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
-			})
+			value, err := tokens.Sign(userID, time.Now())
 			if err != nil {
-				return fmt.Errorf("sign session: %w", err)
+				return fmt.Errorf("sign access token: %w", err)
 			}
 			fmt.Println(value)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&email, "email", "", "allowlisted email to mint a cookie for")
+	cmd.Flags().StringVar(&email, "email", "", "allowlisted email to mint an access token for")
 	return cmd
 }

@@ -15,11 +15,13 @@ const TEST_CONFIG_PATH = process.env.LANGNER_TEST_CONFIG ?? "config.e2e.yml";
 // globalSetup. So the backend server must provision its own database — nothing
 // globalSetup does is available yet. The backend webServer command therefore
 // (re)creates the test DB, imports notebooks, upserts the allowlisted e2e user
-// and writes that user's signed session cookie to a file, all BEFORE binding
-// its port. This makes the seed a hard prerequisite of "server ready": the
-// server can never serve `/auth/me` before the user exists, which is the race
-// that redirected every authenticated page to /login. globalSetup then only
-// turns the cookie file into Playwright storage state (see global-setup.ts).
+// and writes that user's bearer access token to a file, all BEFORE binding its
+// port. This makes the seed a hard prerequisite of "server ready": the server
+// can never serve `/auth/me` before the user exists, which is the race that
+// redirected every authenticated page to /login. Auth is a bearer held in the
+// SPA's memory (no cookie), so each scenario injects the token into
+// `window.__LANGNER_ACCESS_TOKEN__` before the app loads (e2e/steps/common.ts);
+// globalSetup only waits for the token file to exist (see global-setup.ts).
 // DB coords come from the LANGNER_TEST_DB_* env (config.e2e.yml in CI).
 const DB_HOST = process.env.LANGNER_TEST_DB_HOST ?? "127.0.0.1";
 const DB_PORT = process.env.LANGNER_TEST_DB_PORT ?? "5432";
@@ -27,10 +29,10 @@ const DB_USER = process.env.LANGNER_TEST_DB_USER ?? "postgres";
 const DB_PASSWORD = process.env.LANGNER_TEST_DB_PASSWORD ?? "password";
 const DB_NAME = process.env.LANGNER_TEST_DB_NAME ?? "langner_e2e";
 const E2E_EMAIL = "e2e@example.com";
-// Cookie file the backend command writes and global-setup.ts reads. Kept next
-// to the storage state under frontend/e2e/.auth/.
-const COOKIE_FILE = "frontend/e2e/.auth/cookie.txt";
-// Recreate the DB, seed it, mint the cookie, verify the user persisted, then
+// Access-token file the backend command writes and common.ts reads. Kept under
+// frontend/e2e/.auth/.
+const TOKEN_FILE = "frontend/e2e/.auth/access-token.txt";
+// Recreate the DB, seed it, mint the token, verify the user persisted, then
 // exec the server — all in a committed script (e2e/seed-and-serve.sh) rather
 // than a long `&&`-joined string here. The script runs `set -euo pipefail`
 // (any failed step fails the webServer, surfaced by Playwright, instead of
@@ -46,7 +48,7 @@ const seedEnv: Record<string, string> = {
   DB_NAME,
   E2E_EMAIL,
   TEST_CONFIG_PATH,
-  COOKIE_FILE,
+  TOKEN_FILE,
 };
 
 export default defineConfig({
@@ -63,9 +65,10 @@ export default defineConfig({
     baseURL: `http://localhost:${FRONTEND_PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    // Authenticate every spec with the session cookie minted in global-setup
-    // (auth is enabled in config.e2e.yml, so all RPCs are gated).
-    storageState: "e2e/.auth/storageState.json",
+    // No storageState: auth is a bearer held in the SPA's memory, seeded per
+    // scenario by injecting window.__LANGNER_ACCESS_TOKEN__ (e2e/steps/common.ts)
+    // before the app loads. auth is enabled in config.e2e.yml, so all RPCs are
+    // gated behind that bearer.
   },
   projects: [
     {

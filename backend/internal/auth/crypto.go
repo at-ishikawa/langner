@@ -1,7 +1,8 @@
-// Package auth provides Google-OAuth sign-in: a stateless signed session
-// cookie, an email allowlist, CSRF state, and request-context helpers. No user
-// PII (email, name) is stored — the allowlist is checked against the live email
-// Google returns at callback time — so there is no encryption-at-rest here.
+// Package auth provides Google-OAuth sign-in and langner bearer tokens: a
+// signed access JWT (the only auth credential for both web and CLI), an email
+// allowlist, CSRF state, and request-context helpers. No user PII (email, name)
+// is stored — the allowlist is checked against the live email Google returns at
+// callback time — so there is no encryption-at-rest here.
 package auth
 
 import (
@@ -18,7 +19,7 @@ func NormalizeEmail(email string) string {
 
 // DecodeKey decodes a key string that may be hex- or base64-encoded, falling
 // back to the raw bytes of the string. Used to turn the configured
-// SESSION_SIGNING_KEY string into key bytes.
+// TOKEN_SIGNING_KEY string into key bytes.
 func DecodeKey(s string) []byte {
 	if b, err := hex.DecodeString(s); err == nil && len(b) > 0 {
 		return b
