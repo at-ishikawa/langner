@@ -32,6 +32,12 @@ auth:
   #   GOOGLE_CLIENT_SECRET   the OAuth client secret
   #   SESSION_SIGNING_KEY    key that signs the session cookie + OAuth CSRF state
   #                          (e.g. `openssl rand -hex 32`)
+  #   TOKEN_SIGNING_KEY      key that signs the CLI/bearer access JWT (HS256).
+  #                          Set this to enable `langner login`/`logout`/`whoami`
+  #                          (the RFC 8628 device flow) and to accept
+  #                          `Authorization: Bearer` ALONGSIDE the session cookie.
+  #                          Its own secret (e.g. `openssl rand -hex 32`); no
+  #                          fallback to SESSION_SIGNING_KEY.
   # No email/name is stored, so there is no credential-encryption key.
 
 # Notebook ownership + public/private visibility (auth Phase 3). Content stays a

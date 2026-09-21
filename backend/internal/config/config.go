@@ -68,16 +68,26 @@ type AuthConfig struct {
 	CookieSameSite    string   `mapstructure:"cookie_samesite"`
 
 	// Secrets — SessionSigningKey signs the session cookie + OAuth CSRF state;
-	// GoogleClientSecret is the OAuth client secret. Provide privately (env or
-	// an uncommitted config); never commit real values.
+	// TokenSigningKey signs the CLI/bearer access JWT (HS256); GoogleClientSecret
+	// is the OAuth client secret. Provide privately (env or an uncommitted
+	// config); never commit real values.
 	GoogleClientSecret string `mapstructure:"google_client_secret"`
 	SessionSigningKey  string `mapstructure:"session_signing_key"`
+	TokenSigningKey    string `mapstructure:"token_signing_key"`
 }
 
 // Enabled reports whether Google-OAuth sign-in is active. Auth turns on as soon
 // as a session signing key is configured.
 func (a AuthConfig) Enabled() bool {
 	return a.SessionSigningKey != ""
+}
+
+// TokenEnabled reports whether the bearer-token device-flow endpoints and
+// bearer acceptance should mount. Like the cookie's Enabled(), the token path
+// turns on as soon as its signing key is configured; it is additive and does
+// not require or replace the cookie path (that consolidation is a later PR).
+func (a AuthConfig) TokenEnabled() bool {
+	return a.TokenSigningKey != ""
 }
 
 type QuizConfig struct {
@@ -319,6 +329,9 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	}
 	if err := v.BindEnv("auth.session_signing_key", "SESSION_SIGNING_KEY"); err != nil {
 		return nil, fmt.Errorf("failed to bind SESSION_SIGNING_KEY environment variable: %w", err)
+	}
+	if err := v.BindEnv("auth.token_signing_key", "TOKEN_SIGNING_KEY"); err != nil {
+		return nil, fmt.Errorf("failed to bind TOKEN_SIGNING_KEY environment variable: %w", err)
 	}
 
 	if err := v.ReadInConfig(); err != nil {
