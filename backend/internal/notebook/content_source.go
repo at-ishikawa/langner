@@ -72,13 +72,16 @@ func familyDir(kind string) string {
 	}
 }
 
-// DBContentSource materializes every source='user' notebook's stored blobs to a
-// temp directory tree so the SAME filesystem walkers/parsers parse them. It
-// enumerates ALL user notebooks (visibility is enforced downstream by the same
-// VisibleNotebookIDs predicate shipped notebooks use — the lower-risk default
-// from design §5.5). Materialization is cached and refreshed only when the set
-// of user notebooks changes (by content fingerprint), so a repeated reader
-// build is cheap.
+// DBContentSource materializes every stored notebook's blobs to a temp
+// directory tree so the SAME filesystem walkers/parsers parse them. It
+// enumerates ALL notebooks that have blobs — both 'shipped' (the filesystem
+// catalog imported id-for-id, design §13.3) and 'user' (CLI pushes); visibility
+// is enforced downstream by the same VisibleNotebookIDs predicate (the
+// lower-risk default from design §5.5). Each file is placed under ITS OWN
+// family, so a composite id with files in several families registers in each
+// reader family map exactly like the filesystem walk (§13.2). Materialization
+// is cached and refreshed only when stored content changes (by fingerprint), so
+// a repeated reader build is cheap.
 type DBContentSource struct {
 	repo *NotebookFileRepository
 
@@ -121,10 +124,11 @@ func (s *DBContentSource) Dirs(ctx context.Context) (ContentDirs, error) {
 	return dirs, nil
 }
 
-// materialize writes every user notebook's blobs under
-// <tmp>/<family>/<notebook_id>/<path> and returns the family roots that exist.
+// materialize writes every stored blob under <tmp>/<family>/<notebook_id>/<path>
+// — keyed by the file's OWN family, so one composite id fans out across the
+// family roots it belongs to — and returns the family roots that exist.
 func (s *DBContentSource) materialize(ctx context.Context) (string, ContentDirs, error) {
-	notebooks, err := s.repo.ListAllUserNotebooks(ctx)
+	ids, err := s.repo.ListContentNotebookIDs(ctx)
 	if err != nil {
 		return "", ContentDirs{}, err
 	}
@@ -134,26 +138,28 @@ func (s *DBContentSource) materialize(ctx context.Context) (string, ContentDirs,
 	}
 
 	used := make(map[string]bool)
-	for _, nb := range notebooks {
-		files, err := s.repo.ListFiles(ctx, nb.NotebookID)
+	for _, id := range ids {
+		files, err := s.repo.ListFiles(ctx, id)
 		if err != nil {
 			_ = os.RemoveAll(root)
 			return "", ContentDirs{}, err
 		}
-		family := familyDir(nb.Kind)
-		nbDir := filepath.Join(root, family, nb.NotebookID)
 		for _, f := range files {
-			dest := filepath.Join(nbDir, filepath.Clean("/"+f.Path))
+			family := strings.TrimSpace(f.Family)
+			if family == "" {
+				family = "flashcards"
+			}
+			dest := filepath.Join(root, family, id, filepath.Clean("/"+f.Path))
 			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 				_ = os.RemoveAll(root)
-				return "", ContentDirs{}, fmt.Errorf("mkdir for blob %s: %w", f.Path, err)
+				return "", ContentDirs{}, fmt.Errorf("mkdir for blob %s/%s: %w", family, f.Path, err)
 			}
 			if err := os.WriteFile(dest, f.Content, 0o644); err != nil {
 				_ = os.RemoveAll(root)
-				return "", ContentDirs{}, fmt.Errorf("write blob %s: %w", f.Path, err)
+				return "", ContentDirs{}, fmt.Errorf("write blob %s/%s: %w", family, f.Path, err)
 			}
+			used[family] = true
 		}
-		used[family] = true
 	}
 
 	dirs := ContentDirs{}

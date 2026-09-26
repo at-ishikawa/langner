@@ -348,3 +348,85 @@ Because the DB path only runs against Postgres, the browser/PG-only portions are
 6. **Deletion.** `langner notebooks delete <nb_id>` (owner-only) must cascade: `notebook_files`, the `notebooks` row, and the content rows keyed by the id — plus a decision on whether to delete or tombstone the owner's learning history for that notebook.
 7. **What `kind`s are accepted from users initially.** Recommend starting with story + definitions + flashcard + etymology; defer grammar/journal until their author ergonomics are validated.
 8. **Validation parity.** Confirm `NewValidator` can run over a single ad-hoc path without the full config (§8.1) and that its consistency checks (orphan learning notes, duplicate expressions, missing scenes) are meaningful for a standalone bundle with no learning history yet.
+
+---
+
+## 13. Amendment: composite multi-family notebooks + id-preserving filesystem import
+
+*Added after implementing §1–§12. This section supersedes the parts of §5, §6, and §10 it touches; where they disagree, §13 wins. It closes open questions §12.1 (partially) and resolves the composite-notebook gap the original design overlooked.*
+
+### 13.1 The gap: a langner notebook id spans multiple families
+
+§2.1 modeled a notebook as one directory with one `index.yml` under one family. That is wrong for the real catalog. In langner a **single notebook id is registered under several family folders at once**, and the reader keys each family's map by that shared id — this is *how* a word's definition (definitions family) and its origin (etymology family) are linked, and how a story carries a parallel grammar notebook. The shipped examples make it concrete:
+
+| notebook id | families it appears in (folders) |
+|---|---|
+| `latin-roots-book` | `examples/definitions/latin-roots-book/` **and** `examples/etymology/latin-roots-book/` |
+| `roots-untyped` | `examples/definitions/roots-untyped/` **and** `examples/etymology/roots-untyped/` |
+| `frankenstein` | `examples/definitions/stories/frankenstein/` **and** `examples/books/frankenstein/` |
+| `journal` | `examples/journals/journal/` **and** `examples/grammars/journal/` |
+
+So "composite" is the **norm**, not an edge case. The filesystem reader handles it for free: `walkIndexFiles` registers `indexMap[id]` per family, and `NewDefinitionsMap` / `walkEtymologyIndexFiles` register the same id in the definitions/etymology maps independently. Cross-family linkage (origin grouping) then falls out of the **global** `originMap` the reader builds over *all* loaded words, regardless of which notebook they came from.
+
+**Why §5's storage model can't represent it:** `notebook_files` was `UNIQUE (notebook_id, path)`, so `latin-roots-book`'s two `index.yml`s (one in definitions, one in etymology) **collide on path**. And the `notebooks` row carries one `kind`, and `DBContentSource.materialize` places the whole notebook under one `familyDir(kind)`. A composite notebook therefore cannot round-trip through the DB path as designed.
+
+### 13.2 Fix: add a `family` dimension to the blob store
+
+The stored form must preserve *which family each file belongs to*, mirroring the filesystem layout exactly.
+
+**Migration 032** (`032_notebook_files_family`, additive; 031 already shipped on this branch and may be applied — 032 avoids rewriting it):
+
+```sql
+ALTER TABLE notebook_files ADD COLUMN family VARCHAR(32) NOT NULL DEFAULT 'flashcards';
+-- backfill existing (source='user', single-family) rows from their notebook's kind
+UPDATE notebook_files f SET family = CASE lower(coalesce((SELECT n.kind FROM notebooks n WHERE n.notebook_id = f.notebook_id), ''))
+    WHEN 'story' THEN 'stories'  WHEN 'journal' THEN 'journals'  WHEN 'grammar' THEN 'grammars'
+    WHEN 'book' THEN 'books'     WHEN 'definitions' THEN 'definitions'  WHEN 'definition' THEN 'definitions'
+    WHEN 'etymology' THEN 'etymology'  ELSE 'flashcards' END;
+ALTER TABLE notebook_files DROP CONSTRAINT notebook_files_notebook_id_path_key;
+ALTER TABLE notebook_files ADD  CONSTRAINT notebook_files_notebook_id_family_path_key UNIQUE (notebook_id, family, path);
+```
+
+`family` is the canonical `ContentDirs` bucket name (`stories|flashcards|books|definitions|etymology|journals|grammars`), i.e. the value `familyDir()` already returns.
+
+- `NotebookFile` gains `Family`; `PushBundle`/`ListFiles` carry it. A single-`kind` push writes every file with `family = familyDir(kind)` — **behavior unchanged** for user pushes.
+- `DBContentSource.materialize` writes `<tmp>/<family>/<notebook_id>/<path>` grouped by the file's **`family`** (not the notebook's `kind`), and adds each family root that has files. One id with files in two families therefore materializes under two family roots and registers in both reader maps — byte-identical to the filesystem walk.
+- `notebooks.kind` is demoted to **primary/display metadata** (badge, `list` output); it no longer decides family placement. `DBContentSource` enumerates by the presence of `notebook_files` rows and their `family`, not by `kind`.
+
+### 13.3 Id-preserving filesystem → Postgres import (the operator/seed path)
+
+This is the mechanism that lets the operator's own catalog live in Postgres for a serverless/Vercel deploy **without a writable filesystem**, while keeping every learning history intact.
+
+**Hard requirement — ids are never rewritten.** `learning_logs.source_notebook_id`, `notebook_notes.notebook_id`, and the analytics/relearn read paths all key on the existing id. The importer stores blobs under the **existing** id (contrast §6, which mints `nb_` ids for *user* pushes). No history migration, no re-key.
+
+**New command** `langner-admin notebooks import-filesystem` (admin binary; operators only):
+
+1. Build the `notebook.Reader` from the configured `*_directories` (the same discovery the server uses today), enumerating every `(family, notebook_id, index.yml + referenced files)` triple.
+2. For each triple, write the raw file bytes to `notebook_files` under `(notebook_id, family, path)` — the **existing** id, tagged with the discovered family. A composite id contributes rows under each of its families.
+3. Upsert the `notebooks` registry row with `source='shipped'`, the existing id, a primary `kind`/`display_name` from the index, and **do not clobber an existing ownership row** — if a `notebooks` row already exists (e.g. a private-visibility row from `set-owner`), preserve its `owner_user_id`/`visibility`; only fill provenance columns. New rows default `visibility='public'` (the legacy unlisted=public rule).
+4. Structured rows (`notes`, `notebook_notes`, `definitions_*`, `etymology_*`) continue to come from **`import-db`** (unchanged) — this command adds only the blob + registry layer. Running `import-db` then `import-filesystem` (or folding the latter into the former) yields a fully DB-served, id-stable catalog.
+
+Idempotent: re-running replaces a notebook's blobs (delete-by-`notebook_id` then insert) and re-upserts the registry row, preserving ownership.
+
+### 13.4 Serving standardization (resolves the "why two ways" tension)
+
+The standard is **one read path, two byte-sources** (§5.1) — not two behaviors:
+
+- **Deployed (Vercel/container):** the backend runs with **empty `*_directories`**; the filesystem source contributes nothing and `DBContentSource` serves the entire catalog (shipped + user) from Postgres. This is the single serve path in production.
+- **Local/dev:** `*_directories` may point at `examples/`; if the same ids also exist in the DB, `contentDirs()` appends the DB dirs **after** the filesystem dirs (`dirs.Merge(dbDirs)`), so the reader's `indexMap[id] = …` last-write makes **DB win on id collision**. A notebook is thus served from exactly one source; the operator can import-then-serve on one box without duplicates.
+- `DBContentSource` enumeration widens from `source='user'` to **every notebook that has `notebook_files` rows** (both `shipped` and `user`); `VisibleNotebookIDs` still gates who sees what, unchanged.
+
+### 13.5 Verification (reuses the composite examples as real fixtures)
+
+The `examples/` catalog **already contains** the awkward composite shapes (`latin-roots-book`, `roots-untyped` = definitions+etymology under one id; `frankenstein`, `journal`), so the real-config integration test needs no new bespoke fixtures for the composite case:
+
+1. Load `config.example.yml`, run `import-db` + `import-filesystem` into a test Postgres.
+2. Rebuild the `Service` with **empty** `*_directories` + `DBContentSource` and assert `latin-roots-book` still quizzes as **both** a definitions book and an etymology notebook, and that a missed word folds into the origin family card under the right root (origin grouping survives the DB round-trip — the exact path-divergence the repo rule targets).
+3. Seed a `learning_logs` row under `latin-roots-book` **before** the import and assert it still resolves after (id unchanged ⇒ history preserved).
+4. Assert a pre-existing private `set-owner` row on an imported id is **not** clobbered.
+5. Live-PG only: per `no-unverified-main-merges`, drive the above against a real Postgres (port 5433+) before any merge.
+
+### 13.6 Open questions this closes / updates
+
+- **§12.1 (reader scoping):** confirmed — stay process-wide, enumerate all DB notebooks, gate with `VisibleNotebookIDs`. Composite import does not change this.
+- **Composite user *push* (not import):** still one `kind` per pushed bundle. A user uploading a composite notebook (their own definitions+etymology under one id) is deferred — the import path above covers the operator catalog, which is the immediate need. When user composite push is built, `index.yml` should declare per-file/per-subdir families and `PushNotebook` should write the `family` column accordingly; the storage model (§13.2) already supports it.

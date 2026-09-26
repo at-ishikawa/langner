@@ -11,12 +11,16 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// NotebookFile is one raw YAML file of a user-pushed notebook bundle. Path is
-// relative to the pushed directory root (e.g. "index.yml", "cards.yml") so the
-// stored layout resolves index.yml's `notebooks:` references against sibling
-// blobs exactly as the filesystem walk resolves them against a directory.
+// NotebookFile is one raw YAML file of a stored notebook bundle. Path is
+// relative to the notebook's directory root within its family (e.g. "index.yml",
+// "cards.yml") so the stored layout resolves index.yml's `notebooks:` references
+// against sibling blobs exactly as the filesystem walk resolves them against a
+// directory. Family is the ContentDirs bucket the file belongs under
+// (stories|flashcards|books|definitions|etymology|journals|grammars) — a single
+// composite notebook id carries files under several families (design §13).
 type NotebookFile struct {
 	NotebookID    string `db:"notebook_id"`
+	Family        string `db:"family"`
 	Path          string `db:"path"`
 	Content       []byte `db:"content"`
 	ContentSHA256 string `db:"content_sha256"`
@@ -38,20 +42,21 @@ type UserNotebook struct {
 }
 
 // HashBundle returns the sha256 of a bundle's files, order-independent (each
-// file's path + bytes folded into a sorted digest) so the same bundle hashes
-// the same regardless of upload order. Used for content_hash on the notebooks
-// row and to gate no-op re-pushes.
+// file's family + path + bytes folded into a sorted digest) so the same bundle
+// hashes the same regardless of upload order. Family is part of the key so a
+// composite notebook (same path under two families) hashes distinctly. Used for
+// content_hash on the notebooks row and to gate no-op re-pushes.
 func HashBundle(files []NotebookFile) string {
-	type ph struct{ path, hash string }
+	type ph struct{ key, hash string }
 	phs := make([]ph, 0, len(files))
 	for _, f := range files {
 		sum := sha256.Sum256(f.Content)
-		phs = append(phs, ph{f.Path, hex.EncodeToString(sum[:])})
+		phs = append(phs, ph{f.Family + "/" + f.Path, hex.EncodeToString(sum[:])})
 	}
-	sort.Slice(phs, func(i, j int) bool { return phs[i].path < phs[j].path })
+	sort.Slice(phs, func(i, j int) bool { return phs[i].key < phs[j].key })
 	h := sha256.New()
 	for _, p := range phs {
-		h.Write([]byte(p.path))
+		h.Write([]byte(p.key))
 		h.Write([]byte{0})
 		h.Write([]byte(p.hash))
 		h.Write([]byte{0})
@@ -110,10 +115,14 @@ func (r *NotebookFileRepository) PushBundle(ctx context.Context, nb UserNotebook
 		return fmt.Errorf("clear old notebook_files: %w", err)
 	}
 	for _, f := range files {
+		family := f.Family
+		if strings.TrimSpace(family) == "" {
+			family = familyDir(nb.Kind) // single-kind push: every file in the notebook's one family
+		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO notebook_files (notebook_id, path, content, content_sha256, byte_size)
-			 VALUES ($1, $2, $3, $4, $5)`,
-			nb.NotebookID, f.Path, f.Content, FileSHA256(f.Content), len(f.Content),
+			`INSERT INTO notebook_files (notebook_id, family, path, content, content_sha256, byte_size)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			nb.NotebookID, family, f.Path, f.Content, FileSHA256(f.Content), len(f.Content),
 		); err != nil {
 			return fmt.Errorf("insert notebook_file %s: %w", f.Path, err)
 		}
@@ -124,15 +133,79 @@ func (r *NotebookFileRepository) PushBundle(ctx context.Context, nb UserNotebook
 	return nil
 }
 
-// ListFiles returns every stored file for a notebook id, ordered by path.
+// ImportShippedBundle stores a filesystem-catalog notebook under its EXISTING
+// id (no nb_ minting) so learning histories keyed by that id survive (design
+// §13.3). It upserts the notebooks registry row with source='shipped' and the
+// given primary kind/display_name/content_hash, but PRESERVES any existing
+// owner_user_id/visibility — a prior `set-owner` (e.g. a private row) is never
+// clobbered by an import; a brand-new row defaults to public. Blobs for the id
+// are replaced wholesale (all families at once), so the caller MUST pass every
+// family's files for the id in one call.
+func (r *NotebookFileRepository) ImportShippedBundle(ctx context.Context, notebookID, kind, displayName, contentHash string, files []NotebookFile) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO notebooks (notebook_id, owner_user_id, visibility, source, kind, display_name, content_hash)
+		 VALUES ($1, NULL, 'public', 'shipped', $2, $3, $4)
+		 ON CONFLICT (notebook_id) DO UPDATE SET
+		   source        = 'shipped',
+		   kind          = EXCLUDED.kind,
+		   display_name  = EXCLUDED.display_name,
+		   content_hash  = EXCLUDED.content_hash`,
+		notebookID, kind, displayName, contentHash,
+	); err != nil {
+		return fmt.Errorf("upsert shipped notebooks row: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM notebook_files WHERE notebook_id = $1`, notebookID); err != nil {
+		return fmt.Errorf("clear old notebook_files: %w", err)
+	}
+	for _, f := range files {
+		family := f.Family
+		if strings.TrimSpace(family) == "" {
+			family = familyDir(kind)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO notebook_files (notebook_id, family, path, content, content_sha256, byte_size)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			notebookID, family, f.Path, f.Content, FileSHA256(f.Content), len(f.Content),
+		); err != nil {
+			return fmt.Errorf("insert notebook_file %s/%s: %w", family, f.Path, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit import: %w", err)
+	}
+	return nil
+}
+
+// ListFiles returns every stored file for a notebook id (across all its
+// families), ordered by family then path.
 func (r *NotebookFileRepository) ListFiles(ctx context.Context, notebookID string) ([]NotebookFile, error) {
 	var files []NotebookFile
 	if err := r.db.SelectContext(ctx, &files,
-		`SELECT notebook_id, path, content, content_sha256, byte_size
-		 FROM notebook_files WHERE notebook_id = $1 ORDER BY path`, notebookID); err != nil {
+		`SELECT notebook_id, family, path, content, content_sha256, byte_size
+		 FROM notebook_files WHERE notebook_id = $1 ORDER BY family, path`, notebookID); err != nil {
 		return nil, fmt.Errorf("list notebook_files: %w", err)
 	}
 	return files, nil
+}
+
+// ListContentNotebookIDs returns every notebook id that has stored blobs,
+// regardless of source ('shipped' imported catalog + 'user' pushes). This is
+// the enumeration DBContentSource materializes — presence of blobs, not the
+// notebooks.kind, decides what the DB serves (design §13.4).
+func (r *NotebookFileRepository) ListContentNotebookIDs(ctx context.Context) ([]string, error) {
+	var ids []string
+	if err := r.db.SelectContext(ctx, &ids,
+		`SELECT DISTINCT notebook_id FROM notebook_files ORDER BY notebook_id`); err != nil {
+		return nil, fmt.Errorf("list content notebook ids: %w", err)
+	}
+	return ids, nil
 }
 
 // ListUserNotebooks returns every source='user' notebook owned by ownerUserID,
@@ -194,19 +267,33 @@ func (r *NotebookFileRepository) GetUserNotebook(ctx context.Context, notebookID
 	return rows[0], true, nil
 }
 
-// Fingerprint returns a stable digest of the current set of user notebooks
-// (id + content_hash), so DBContentSource can cheaply detect when a re-push
-// changed the materialized content and needs a refresh.
+// Fingerprint returns a stable digest of ALL stored notebook content (every
+// blob's id + family + path + per-file hash), so DBContentSource can cheaply
+// detect when a push OR a filesystem re-import changed the materialized content
+// and needs a refresh. Computed straight from notebook_files so it covers both
+// 'shipped' and 'user' notebooks.
 func (r *NotebookFileRepository) Fingerprint(ctx context.Context) (string, error) {
-	rows, err := r.ListAllUserNotebooks(ctx)
-	if err != nil {
-		return "", err
+	type fp struct {
+		NotebookID    string `db:"notebook_id"`
+		Family        string `db:"family"`
+		Path          string `db:"path"`
+		ContentSHA256 string `db:"content_sha256"`
+	}
+	var rows []fp
+	if err := r.db.SelectContext(ctx, &rows,
+		`SELECT notebook_id, family, path, content_sha256
+		 FROM notebook_files ORDER BY notebook_id, family, path`); err != nil {
+		return "", fmt.Errorf("fingerprint notebook_files: %w", err)
 	}
 	var b strings.Builder
-	for _, nb := range rows {
-		b.WriteString(nb.NotebookID)
+	for _, r := range rows {
+		b.WriteString(r.NotebookID)
 		b.WriteByte('\n')
-		b.WriteString(nb.ContentHash)
+		b.WriteString(r.Family)
+		b.WriteByte('\n')
+		b.WriteString(r.Path)
+		b.WriteByte('\n')
+		b.WriteString(r.ContentSHA256)
 		b.WriteByte('\n')
 	}
 	sum := sha256.Sum256([]byte(b.String()))
