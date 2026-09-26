@@ -166,6 +166,17 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		 SELECT (SELECT id FROM users WHERE google_sub='roundtrip-seed-sub'), MIN(id), 'understood', CURRENT_TIMESTAMP, 'grammar', 'roundtrip-seed' FROM grammar_corrections`)
 	require.NoError(t, err)
 
+	// CLI device-flow tables (migrations 029/030), attributed to the seeded user
+	// so user_id + the hashed secrets dump and restore through the round trip.
+	seedIfEmpty(ctx, t, db, "cli_device_codes",
+		`INSERT INTO cli_device_codes (device_code_hash, user_code, user_id, status, approved_at, expires_at)
+		 SELECT 'roundtrip-seed-device-hash', 'WDJB-MJHT', id, 'approved', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '15 minutes'
+		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
+	seedIfEmpty(ctx, t, db, "cli_refresh_tokens",
+		`INSERT INTO cli_refresh_tokens (user_id, token_hash, expires_at)
+		 SELECT id, 'roundtrip-seed-refresh-hash', CURRENT_TIMESTAMP + INTERVAL '30 days'
+		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
+
 	// Every table must actually carry rows so the round trip is meaningful —
 	// especially the tables the notebook-shaped ExportAll never exported.
 	for _, table := range datasync.DataTablesInDependencyOrder() {
