@@ -154,20 +154,21 @@ var devicePageTmpl = template.Must(template.New("device").Parse(`<!doctype html>
 <body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;">
 {{if .Signed}}
   <h1>Approve CLI access?</h1>
-  <p>A device is requesting access for code <strong>{{.UserCode}}</strong>.</p>
-  <p>Only approve if you just started <code>langner login</code>.</p>
-  <form method="post" action="/auth/device/approve" style="display:inline;">
-    <input type="hidden" name="user_code" value="{{.UserCode}}">
-    <button type="submit">Approve</button>
-  </form>
-  <form method="post" action="/auth/device/deny" style="display:inline;margin-left:1rem;">
-    <input type="hidden" name="user_code" value="{{.UserCode}}">
-    <button type="submit">Deny</button>
+  <p>Enter the code shown in your terminal by <code>langner login</code>, then Approve.
+     Only approve a code you started yourself.</p>
+  <form method="post">
+    <input type="text" name="user_code" value="{{.UserCode}}" placeholder="XXXX-XXXX"
+      autocomplete="off" autocapitalize="characters" spellcheck="false" required
+      style="font-size:1.25rem;letter-spacing:0.15em;text-transform:uppercase;padding:0.4rem 0.6rem;width:9rem;">
+    <div style="margin-top:1rem;">
+      <button type="submit" formaction="/auth/device/approve">Approve</button>
+      <button type="submit" formaction="/auth/device/deny" style="margin-left:1rem;">Deny</button>
+    </div>
   </form>
 {{else}}
   <h1>Sign in to approve CLI access</h1>
-  <p>You need to sign in before approving code <strong>{{.UserCode}}</strong>.</p>
-  <p><a href="/auth/google/login">Sign in with Google</a>, then reopen this page.</p>
+  <p>Sign in, then enter the code shown in your terminal by <code>langner login</code>.</p>
+  <p><a href="/auth/google/login">Sign in with Google</a></p>
 {{end}}
 </body></html>`))
 
