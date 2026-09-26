@@ -70,7 +70,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				Server: ServerConfig{
 					Port: 8080,
 					CORS: CORSConfig{
-						AllowedOrigins: []string{"http://localhost:3000"},
+						AllowedOrigins: []string{"http://localhost:3100"},
 					},
 				},
 				Notebooks: NotebooksConfig{
@@ -137,7 +137,7 @@ outputs:
 				Server: ServerConfig{
 					Port: 8080,
 					CORS: CORSConfig{
-						AllowedOrigins: []string{"http://localhost:3000"},
+						AllowedOrigins: []string{"http://localhost:3100"},
 					},
 				},
 				Notebooks: NotebooksConfig{
@@ -198,7 +198,7 @@ outputs:
 				Server: ServerConfig{
 					Port: 8080,
 					CORS: CORSConfig{
-						AllowedOrigins: []string{"http://localhost:3000"},
+						AllowedOrigins: []string{"http://localhost:3100"},
 					},
 				},
 				Notebooks: NotebooksConfig{

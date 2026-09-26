@@ -149,16 +149,18 @@ Edit `config.yml` to set your directories for notebooks, dictionaries, templates
 | `RAPID_API_HOST` | Dictionary lookup | Set to `wordsapiv1.p.rapidapi.com` |
 | `RAPID_API_KEY` | Dictionary lookup | Get at [RapidAPI](https://rapidapi.com/dpventures/api/wordsapi) |
 | `GOOGLE_CLIENT_SECRET` | Sign in with Google | OAuth client secret from Google Cloud Console |
-| `SESSION_SIGNING_KEY` | Sign in with Google | Secret key that signs the login session cookie |
-| `CREDENTIAL_ENCRYPTION_KEY` | Sign in with Google | 32-byte key (hex or base64) that encrypts stored emails/names — must differ from `SESSION_SIGNING_KEY` |
+| `TOKEN_SIGNING_KEY` | **Always required** | Secret key (e.g. `openssl rand -hex 32`) that signs the langner access token for both the web app and the CLI. The server refuses to start without it. |
 
 ### Sign in with Google
 
-The web app can require every user to sign in with a Google account. Sign-in is
-enabled as soon as `SESSION_SIGNING_KEY` is set; leave it unset to run the app
-without login (single-user local development).
+Authentication is **always on**: every request is authenticated with a langner
+access token (`Authorization: Bearer …`), and the server requires a database
+plus `TOKEN_SIGNING_KEY` to start. The web app signs in through Google and holds
+its 24h access token in memory (no cookie); the CLI signs in with
+`langner login` (browser device flow). There is no unauthenticated / single-user
+mode.
 
-To enable it:
+To set it up:
 
 1. Create an OAuth 2.0 Client ID (type "Web application") in the Google Cloud
    Console. Add `http://localhost:8080/auth/google/callback` as an authorized
@@ -166,10 +168,12 @@ To enable it:
 2. In the `auth:` block of `config.yml`, set `google_client_id`, `redirect_url`,
    `frontend_url`, and the `allowed_emails` list — only those Google accounts may
    sign in. The first successful sign-in creates the account automatically.
-3. Provide the three secrets above via environment variables (never in
-   `config.yml`).
+3. Provide `GOOGLE_CLIENT_SECRET` and `TOKEN_SIGNING_KEY` via environment
+   variables (never in `config.yml`).
 
-Emails and names are encrypted before they are stored in the database.
+No email or name is stored — only an opaque Google subject id and an
+auto-generated username (data minimisation), so there is nothing to encrypt at
+rest.
 
 Quiz grading uses OpenAI by default. To use Google Gemini instead, set `inference.mode: gemini` in `config.yml` (or `INFERENCE_MODE=gemini` in the environment) and export `GEMINI_API_KEY` (see `config.example.yml`).
 

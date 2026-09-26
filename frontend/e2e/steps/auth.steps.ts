@@ -4,8 +4,8 @@ import { createBdd } from "playwright-bdd";
 const { Given, Then } = createBdd();
 
 // covers route: /login — the Google sign-in entry point. The SessionProvider
-// guard only redirects *away* from other routes to /login; it never redirects
-// away from /login itself, so this renders under the injected session cookie.
+// guard treats /login as public: it never silently re-authenticates away from
+// /login, so this renders even under the injected access token.
 Given("I am on the login page", async ({ page }) => {
   await page.goto("/login");
 });

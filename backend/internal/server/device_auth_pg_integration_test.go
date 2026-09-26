@@ -31,7 +31,7 @@ import (
 )
 
 // headerRoundTripper attaches fixed headers to every outgoing request so a
-// Connect client can present a bearer or a cookie.
+// Connect client can present a bearer.
 type headerRoundTripper struct {
 	base    http.RoundTripper
 	headers map[string]string
@@ -51,17 +51,18 @@ func quizClientWithHeaders(baseURL string, headers map[string]string) apiv1conne
 	)
 }
 
-// TestDeviceFlow_RealConfig_LivePostgres drives the whole CLI device-flow bearer
+// TestDeviceFlow_RealConfig_LivePostgres drives the whole always-on bearer-auth
 // feature end-to-end against a real Postgres, constructing the server the way
-// cmd/langner-server/main.go does: config loaded from config.example.yml (auth
-// + token signing keys set via env, exactly as production supplies them), the
-// SAME exported constructors (NewSessionSigner / NewTokenSigner / the CLI repos
-// / NewDeviceAuthHandler), a real gated Connect RPC guarded by the real
-// NewAuthInterceptor, and the real AuthCookieMiddleware(AuthBearerMiddleware(…))
-// stack. It proves: (1) the device flow mints a bearer that authenticates a
-// gated RPC; (2) an anonymous RPC still 401s; (3) bearer does NOT weaken the
-// cookie (a cookie'd RPC still authenticates); (4) refresh rotates and reusing
-// the rotated token revokes the family; (5) revoke makes a later refresh fail.
+// cmd/langner-server/main.go does: config loaded from config.example.yml (the
+// token signing key set via env, exactly as production supplies it), the SAME
+// exported constructors (NewTokenSigner / NewStateSigner / the CLI repos /
+// NewDeviceAuthHandler / NewAuthHandler), a real gated Connect RPC guarded by
+// the real NewAuthInterceptor, and the real AuthBearerMiddleware. It proves:
+// (1) device approval happens INSIDE /auth/google/callback (M3) and the minted
+// bearer authenticates a gated RPC; (2) an anonymous RPC still 401s; (3) the
+// web callback (no user_code) mints a token in the fragment and sets NO session
+// cookie; (4) refresh rotates and reusing the rotated token revokes the family;
+// (5) revoke makes a later refresh fail.
 func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 	dsn := os.Getenv(integrationDBEnv)
 	if dsn == "" {
@@ -77,22 +78,21 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
 
 	// --- Load config the way the server does, from config.example.yml, with the
-	// signing keys supplied via env exactly as production/dev provides them. ---
-	t.Setenv("SESSION_SIGNING_KEY", "test-session-signing-key")
+	// token signing key supplied via env exactly as production/dev provides it. ---
 	t.Setenv("TOKEN_SIGNING_KEY", "test-token-signing-key")
 	repoRoot := repoRootDir(t)
 	loader, err := config.NewConfigLoader(filepath.Join(repoRoot, "config.example.yml"))
 	require.NoError(t, err)
 	cfg, err := loader.Load()
 	require.NoError(t, err)
-	require.True(t, cfg.Auth.Enabled(), "cookie auth must be enabled by SESSION_SIGNING_KEY")
-	require.True(t, cfg.Auth.TokenEnabled(), "bearer auth must be enabled by TOKEN_SIGNING_KEY")
+	require.True(t, cfg.Auth.Enabled(), "auth must be enabled by TOKEN_SIGNING_KEY")
 
 	// --- Build the auth/device components with the SAME constructors main.go
-	// uses in buildAuth/buildDeviceAuth. ---
-	sessions, err := auth.NewSessionSigner(auth.DecodeKey(cfg.Auth.SessionSigningKey))
+	// uses in buildAuth. The token signing key ALSO keys the state signer. ---
+	key := auth.DecodeKey(cfg.Auth.TokenSigningKey)
+	tokens, err := auth.NewTokenSigner(key)
 	require.NoError(t, err)
-	tokens, err := auth.NewTokenSigner(auth.DecodeKey(cfg.Auth.TokenSigningKey))
+	state, err := auth.NewStateSigner(key)
 	require.NoError(t, err)
 	deviceCodes := auth.NewCLIDeviceCodeRepository(db)
 	refreshTokens := auth.NewCLIRefreshTokenRepository(db)
@@ -104,9 +104,24 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 		FrontendURL:     cfg.Auth.FrontendURL,
 		VerificationURI: "http://example/auth/device",
 	})
+	// The web/OAuth handler approves the device row inside the callback (M3) and
+	// mints web tokens. A fake authenticator stands in for Google, returning an
+	// allowlisted identity so the callback reaches approval / token mint.
+	authHandler := NewAuthHandler(AuthHandlerConfig{
+		Authenticator:  fakeAuthenticator{info: auth.UserInfo{Sub: "device-flow-user", Email: cfg.Auth.AllowedEmails[0]}},
+		Tokens:         tokens,
+		State:          state,
+		Users:          users,
+		DeviceCodes:    deviceCodes,
+		AllowedEmails:  cfg.Auth.AllowedEmails,
+		FrontendURL:    cfg.Auth.FrontendURL,
+		AllowedOrigins: cfg.Server.CORS.AllowedOrigins,
+		CookieSecure:   false,
+		CookieSameSite: http.SameSiteLaxMode,
+	})
 
 	// --- A real gated Connect RPC (QuizService), interceptor identical to
-	// main.go's, so the bearer/cookie must clear the SAME gate the app uses. ---
+	// main.go's, so the bearer must clear the SAME gate the app uses. ---
 	quizSvc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		FlashcardsDirectories:  []string{t.TempDir()},
@@ -121,25 +136,44 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 	mux.Handle(quizPath, quizH)
 	mux.HandleFunc("/auth/device/code", deviceHandler.RequestCode)
 	mux.HandleFunc("/auth/device/token", deviceHandler.Token)
-	mux.HandleFunc("/auth/device/approve", deviceHandler.Approve)
 	mux.HandleFunc("/auth/device", deviceHandler.ShowApprovalPage)
 	mux.HandleFunc("/auth/token/refresh", deviceHandler.Refresh)
 	mux.HandleFunc("/auth/token/revoke", deviceHandler.Revoke)
+	mux.HandleFunc("/auth/google/callback", authHandler.Callback)
 
-	// The exact main.go middleware stack: cookie OUTSIDE, bearer INSIDE.
-	root := AuthCookieMiddleware(AuthBearerMiddleware(mux, tokens), sessions)
+	// The exact main.go middleware: bearer is the only auth path.
+	root := AuthBearerMiddleware(mux, tokens)
 	srv := httptest.NewServer(root)
 	t.Cleanup(srv.Close)
 
-	// Seed the approving user (the identity a real Google sign-in would resolve).
-	user, err := users.Upsert(context.Background(), "device-flow-user")
-	require.NoError(t, err)
-
 	httpClient := &http.Client{Timeout: 10 * time.Second}
+	// noRedirectClient inspects a 302 (Location + Set-Cookie) without following it.
+	noRedirectClient := &http.Client{
+		Timeout:       10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 
-	// runDeviceFlow requests a code, approves it with a synthesized session
-	// cookie (standing in for the browser Google sign-in, exactly like the
-	// issue-test-cookie e2e helper), polls once, and returns the token pair.
+	// approveViaCallback simulates the browser approval: the approval page links
+	// to /auth/google/login?user_code=… which folds user_code into the signed
+	// state; the callback then binds the just-verified identity to the device
+	// row. We synthesize that signed state directly (standing in for the Google
+	// round-trip) and drive the callback with the matching state cookie.
+	approveViaCallback := func(t *testing.T, userCode string) {
+		t.Helper()
+		stateVal, err := state.Issue(stateTTL, auth.StateClaims{UserCode: userCode})
+		require.NoError(t, err)
+		req, err := http.NewRequest(http.MethodGet, srv.URL+"/auth/google/callback?state="+url.QueryEscape(stateVal)+"&code=any", nil)
+		require.NoError(t, err)
+		req.AddCookie(&http.Cookie{Name: stateCookieName, Value: stateVal})
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		body := readClose(t, resp)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Contains(t, body, "Approved")
+	}
+
+	// runDeviceFlow requests a code, approves it via the OAuth callback (M3),
+	// polls once, and returns the token pair.
 	runDeviceFlow := func(t *testing.T) (access, refresh string) {
 		t.Helper()
 		var dc struct {
@@ -150,21 +184,8 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 		require.NotEmpty(t, dc.DeviceCode)
 		require.NotEmpty(t, dc.UserCode)
 
-		// Approve: sign a session cookie for the seeded user and POST the form.
-		cookieVal, err := sessions.Sign(auth.Session{UserID: user.ID, ExpiresAt: time.Now().Add(time.Hour)})
-		require.NoError(t, err)
-		form := url.Values{"user_code": {dc.UserCode}}
-		req, err := http.NewRequest(http.MethodPost, srv.URL+"/auth/device/approve", strings.NewReader(form.Encode()))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: cookieVal})
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		body := readClose(t, resp)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Contains(t, body, "Approved")
+		approveViaCallback(t, dc.UserCode)
 
-		// Poll → success.
 		var tok struct {
 			AccessToken  string `json:"access_token"`
 			RefreshToken string `json:"refresh_token"`
@@ -179,7 +200,6 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 	}
 
 	t.Run("pending before approval, then bearer authenticates a gated RPC", func(t *testing.T) {
-		// A code that is requested but not yet approved polls as pending.
 		var dc struct {
 			DeviceCode string `json:"device_code"`
 			UserCode   string `json:"user_code"`
@@ -205,18 +225,37 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "anonymous RPC must 401")
 	})
 
-	t.Run("bearer does not weaken cookie auth", func(t *testing.T) {
-		cookieVal, err := sessions.Sign(auth.Session{UserID: user.ID, ExpiresAt: time.Now().Add(time.Hour)})
+	t.Run("web callback mints a token in the fragment and sets NO session cookie", func(t *testing.T) {
+		stateVal, err := state.Issue(stateTTL, auth.StateClaims{Next: cfg.Auth.FrontendURL + "/learn"})
 		require.NoError(t, err)
-		cookieClient := quizClientWithHeaders(srv.URL, map[string]string{"Cookie": SessionCookieName + "=" + cookieVal})
-		_, err = cookieClient.GetQuizOptions(context.Background(), connect.NewRequest(&apiv1.GetQuizOptionsRequest{}))
-		assert.NotEqual(t, connect.CodeUnauthenticated, connect.CodeOf(err), "a cookie'd RPC must still authenticate; got %v", err)
+		req, err := http.NewRequest(http.MethodGet, srv.URL+"/auth/google/callback?state="+url.QueryEscape(stateVal)+"&code=any", nil)
+		require.NoError(t, err)
+		req.AddCookie(&http.Cookie{Name: stateCookieName, Value: stateVal})
+		resp, err := noRedirectClient.Do(req)
+		require.NoError(t, err)
+		_ = readClose(t, resp)
+
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+		loc := resp.Header.Get("Location")
+		frontendOrigin := "http://localhost:3100"
+		assert.True(t, strings.HasPrefix(loc, frontendOrigin+"/auth/callback#access_token="),
+			"callback must deliver the token in the fragment; got %q", loc)
+		// The access token must be in the fragment, never the query.
+		before, frag, _ := strings.Cut(loc, "#")
+		assert.NotContains(t, before, "access_token")
+		assert.Contains(t, frag, "access_token=")
+		// No session cookie may be set (only the state cookie is cleared).
+		for _, c := range resp.Cookies() {
+			if c.Name == stateCookieName {
+				continue
+			}
+			assert.Emptyf(t, c.Value, "no session cookie may be set; saw %s=%s", c.Name, c.Value)
+		}
 	})
 
 	t.Run("refresh rotates; reusing the rotated token revokes the family", func(t *testing.T) {
 		_, refresh0 := runDeviceFlow(t)
 
-		// Rotate: refresh0 → (access1, refresh1). refresh0 is now revoked.
 		var pair1 struct {
 			AccessToken  string `json:"access_token"`
 			RefreshToken string `json:"refresh_token"`
@@ -225,23 +264,19 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 		require.NotEmpty(t, pair1.RefreshToken)
 		assert.NotEqual(t, refresh0, pair1.RefreshToken, "refresh must rotate the token")
 
-		// Reuse refresh0 (already rotated away) → invalid_grant AND family revoke.
 		var oe struct {
 			Error string `json:"error"`
 		}
 		postJSON(t, httpClient, srv.URL+"/auth/token/refresh", `{"grant_type":"refresh_token","refresh_token":"`+refresh0+`"}`, http.StatusBadRequest, &oe)
 		assert.Equal(t, "invalid_grant", oe.Error)
 
-		// The rotated-to refresh1 is now dead too (whole family revoked).
 		postJSON(t, httpClient, srv.URL+"/auth/token/refresh", `{"grant_type":"refresh_token","refresh_token":"`+pair1.RefreshToken+`"}`, http.StatusBadRequest, &oe)
 		assert.Equal(t, "invalid_grant", oe.Error, "family revocation must kill the rotated token too")
 	})
 
 	t.Run("revoke makes a later refresh fail", func(t *testing.T) {
 		_, refresh := runDeviceFlow(t)
-		// Revoke (logout) always 200.
 		postJSON(t, httpClient, srv.URL+"/auth/token/revoke", `{"refresh_token":"`+refresh+`"}`, http.StatusOK, nil)
-		// A subsequent refresh with the revoked token fails.
 		var oe struct {
 			Error string `json:"error"`
 		}

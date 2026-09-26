@@ -38,30 +38,26 @@ check-api-key:
 			fi ;; \
 	esac
 
-# `make dev` runs with Google auth ENABLED by default. Auth turns on when
-# SESSION_SIGNING_KEY is set, so we generate a DEV-ONLY key into a GITIGNORED
-# file (this repo is public — never commit keys) and source it for the server.
-# Set AUTH=0 to run ungated.
+# `make dev` runs with auth ALWAYS ON (there is no ungated mode). The server
+# fails fast without TOKEN_SIGNING_KEY and requires Postgres, so we start the
+# database and generate a DEV-ONLY signing key into a GITIGNORED file (this repo
+# is public — never commit keys) and source it for the server.
 #
 # To actually SIGN IN you must also supply your own Google OAuth credentials:
 # google_client_id, redirect_url, frontend_url, and allowed_emails in your
 # config file (see the auth: block in config.example.yml), plus
 # GOOGLE_CLIENT_SECRET exported in your environment.
-AUTH ?= 1
 AUTH_DEV_ENV := .dev-auth.env
 
 .PHONY: dev-backend
 dev-backend: check-api-key
+	docker compose up -d --wait
 	$(MAKE) -C backend build
-	@if [ "$(AUTH)" = "1" ]; then \
-		if [ ! -f $(AUTH_DEV_ENV) ]; then \
-			printf 'SESSION_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)" > $(AUTH_DEV_ENV); \
-			echo "Generated DEV-ONLY SESSION_SIGNING_KEY -> $(AUTH_DEV_ENV) (gitignored). Google sign-in also needs google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET in the env."; \
-		fi; \
-		set -a; . ./$(AUTH_DEV_ENV); set +a; ./langner-server; \
-	else \
-		./langner-server; \
+	@if [ ! -f $(AUTH_DEV_ENV) ]; then \
+		printf 'TOKEN_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)" > $(AUTH_DEV_ENV); \
+		echo "Generated DEV-ONLY TOKEN_SIGNING_KEY -> $(AUTH_DEV_ENV) (gitignored). Google sign-in also needs google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET in the env."; \
 	fi
+	set -a; . ./$(AUTH_DEV_ENV); set +a; ./langner-server
 
 .PHONY: dev-frontend
 dev-frontend:

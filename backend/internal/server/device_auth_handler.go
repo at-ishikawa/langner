@@ -27,8 +27,10 @@ const (
 // DeviceAuthHandler serves the RFC 8628 device-authorization endpoints and the
 // refresh/revoke endpoints for the CLI bearer-token flow. They are plain HTTP,
 // mounted OUTSIDE the connect interceptor so an unauthenticated CLI can reach
-// them. Approval reuses the EXISTING langner_session cookie sign-in (this
-// additive PR); the approve-inside-OAuth-callback form is a later PR.
+// them. There is no session cookie: the approval page routes the browser
+// through a one-shot Google sign-in (/auth/google/login?user_code=…), and the
+// OAuth callback binds the just-verified identity to the device row (M3, see
+// AuthHandler.Callback).
 type DeviceAuthHandler struct {
 	deviceCodes   *auth.CLIDeviceCodeRepository
 	refreshTokens *auth.CLIRefreshTokenRepository
@@ -152,63 +154,31 @@ func (h *DeviceAuthHandler) RequestCode(w http.ResponseWriter, r *http.Request) 
 var devicePageTmpl = template.Must(template.New("device").Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Approve CLI access</title></head>
 <body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;">
-{{if .Signed}}
   <h1>Approve CLI access?</h1>
-  <p>Enter the code shown in your terminal by <code>langner login</code>, then Approve.
-     Only approve a code you started yourself.</p>
-  <form method="post">
+  <p>Enter the code shown in your terminal by <code>langner login</code>, then approve.
+     Approving takes you through a one-time Google sign-in; the account you sign in as is
+     the account the CLI will act as. Only approve a code you started yourself.</p>
+  <form method="get" action="/auth/google/login">
     <input type="text" name="user_code" value="{{.UserCode}}" placeholder="XXXX-XXXX"
       autocomplete="off" autocapitalize="characters" spellcheck="false" required
       style="font-size:1.25rem;letter-spacing:0.15em;text-transform:uppercase;padding:0.4rem 0.6rem;width:9rem;">
     <div style="margin-top:1rem;">
-      <button type="submit" formaction="/auth/device/approve">Approve</button>
-      <button type="submit" formaction="/auth/device/deny" style="margin-left:1rem;">Deny</button>
+      <button type="submit">Approve &amp; sign in with Google</button>
+      <button type="submit" formmethod="post" formaction="/auth/device/deny" style="margin-left:1rem;">Deny</button>
     </div>
   </form>
-{{else}}
-  <h1>Sign in to approve CLI access</h1>
-  <p>Sign in, then enter the code shown in your terminal by <code>langner login</code>.</p>
-  <p><a href="/auth/google/login">Sign in with Google</a></p>
-{{end}}
 </body></html>`))
 
 // ShowApprovalPage handles GET /auth/device: it renders the confirmation page.
-// The user must be signed in (langner_session cookie, lifted into the request
-// context by the cookie middleware) to see the Approve/Deny controls.
+// There is no session cookie, so the Approve action routes the browser through
+// a one-shot Google sign-in (/auth/google/login?user_code=…); the OAuth
+// callback binds the verified identity to the device row (M3).
 func (h *DeviceAuthHandler) ShowApprovalPage(w http.ResponseWriter, r *http.Request) {
 	userCode := auth.NormalizeUserCode(r.URL.Query().Get("user_code"))
-	_, signedIn := auth.SessionFromContext(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = devicePageTmpl.Execute(w, struct {
-		Signed   bool
 		UserCode string
-	}{Signed: signedIn, UserCode: userCode})
-}
-
-// Approve handles POST /auth/device/approve. It binds the signed-in user
-// (from the session cookie) to the device row for the submitted user_code.
-func (h *DeviceAuthHandler) Approve(w http.ResponseWriter, r *http.Request) {
-	sess, ok := auth.SessionFromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/auth/device?user_code="+auth.NormalizeUserCode(r.FormValue("user_code")), http.StatusFound)
-		return
-	}
-	userCode := auth.NormalizeUserCode(r.FormValue("user_code"))
-	if !h.limiter.allow(clientIP(r)) {
-		h.writeApprovalResult(w, "Too many attempts. Please wait and try again.")
-		return
-	}
-	row, err := h.deviceCodes.FindByUserCode(r.Context(), userCode)
-	if err != nil || row.Status != auth.DeviceStatusPending || !h.now().Before(row.ExpiresAt) {
-		// Generic message — no enumeration signal for bad/expired/consumed codes.
-		h.writeApprovalResult(w, "That code is invalid or has expired. Return to your terminal and try again.")
-		return
-	}
-	if err := h.deviceCodes.Approve(r.Context(), row.ID, sess.UserID, h.now()); err != nil {
-		h.writeApprovalResult(w, "That code is invalid or has expired. Return to your terminal and try again.")
-		return
-	}
-	h.writeApprovalResult(w, "Approved. You can return to your terminal.")
+	}{UserCode: userCode})
 }
 
 // Deny handles POST /auth/device/deny. No identity is needed to deny.

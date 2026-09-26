@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Provision the e2e database, seed notebooks, mint the allowlisted user's signed
-# session cookie, then exec the backend server — all BEFORE the port opens, so
+# Provision the e2e database, seed notebooks, mint the allowlisted user's bearer
+# access token, then exec the backend server — all BEFORE the port opens, so
 # Playwright's "webServer ready" implies the seed is committed and the server
 # can never serve /auth/me against an empty users table (the race that
 # redirected every authenticated page to /login).
@@ -21,7 +21,7 @@ set -x
 : "${DB_NAME:=langner_e2e}"
 : "${E2E_EMAIL:=e2e@example.com}"
 : "${TEST_CONFIG_PATH:=config.e2e.yml}"
-: "${COOKIE_FILE:=frontend/e2e/.auth/cookie.txt}"
+: "${TOKEN_FILE:=frontend/e2e/.auth/access-token.txt}"
 
 # Run from the repo root (this script lives in frontend/e2e).
 cd "$(dirname "$0")/../.."
@@ -53,9 +53,9 @@ if [ "${existing}" -lt 1 ]; then
   echo "[seed] provisioning auth accounts (auth provision)"
   DB_PASSWORD="${DB_PASSWORD}" ./langner-admin auth provision --config "${TEST_CONFIG_PATH}"
 
-  echo "[seed] minting e2e session cookie for ${E2E_EMAIL}"
-  mkdir -p "$(dirname "${COOKIE_FILE}")"
-  DB_PASSWORD="${DB_PASSWORD}" ./langner-admin auth issue-test-cookie --email "${E2E_EMAIL}" --config "${TEST_CONFIG_PATH}" >"${COOKIE_FILE}"
+  echo "[seed] minting e2e access token for ${E2E_EMAIL}"
+  mkdir -p "$(dirname "${TOKEN_FILE}")"
+  DB_PASSWORD="${DB_PASSWORD}" ./langner-admin auth issue-test-token --email "${E2E_EMAIL}" --config "${TEST_CONFIG_PATH}" >"${TOKEN_FILE}"
 fi
 
 # Hard guard: the server must NOT start unless the user row is really present.
@@ -65,9 +65,9 @@ if [ "${count}" -lt 1 ]; then
   echo "[seed] FATAL: users table is empty after seeding — refusing to start an unseeded server"
   exit 1
 fi
-# Also require the cookie file so globalSetup can build storage state.
-if [ ! -s "${COOKIE_FILE}" ]; then
-  echo "[seed] FATAL: cookie file ${COOKIE_FILE} is missing/empty"
+# Also require the token file so the harness can seed the SPA's in-memory token.
+if [ ! -s "${TOKEN_FILE}" ]; then
+  echo "[seed] FATAL: token file ${TOKEN_FILE} is missing/empty"
   exit 1
 fi
 

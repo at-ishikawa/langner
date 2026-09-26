@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -43,43 +41,5 @@ func TestNewAuthInterceptor(t *testing.T) {
 		assert.True(t, called)
 		assert.True(t, sawUserOK)
 		assert.Equal(t, int64(7), sawUserID)
-	})
-}
-
-func TestAuthCookieMiddleware(t *testing.T) {
-	signer, err := auth.NewSessionSigner([]byte("mw-key"))
-	require.NoError(t, err)
-
-	var gotSession auth.Session
-	var gotOK bool
-	inner := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		gotSession, gotOK = auth.SessionFromContext(r.Context())
-	})
-	mw := AuthCookieMiddleware(inner, signer)
-
-	t.Run("valid cookie stows session", func(t *testing.T) {
-		gotOK = false
-		value, err := signer.Sign(auth.Session{UserID: 9, ExpiresAt: time.Now().Add(time.Hour)})
-		require.NoError(t, err)
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: value})
-		mw.ServeHTTP(httptest.NewRecorder(), req)
-		assert.True(t, gotOK)
-		assert.Equal(t, int64(9), gotSession.UserID)
-	})
-
-	t.Run("missing cookie leaves context empty but passes through", func(t *testing.T) {
-		gotOK = false
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		mw.ServeHTTP(httptest.NewRecorder(), req)
-		assert.False(t, gotOK)
-	})
-
-	t.Run("invalid cookie leaves context empty but passes through", func(t *testing.T) {
-		gotOK = false
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "tampered.value"})
-		mw.ServeHTTP(httptest.NewRecorder(), req)
-		assert.False(t, gotOK)
 	})
 }
