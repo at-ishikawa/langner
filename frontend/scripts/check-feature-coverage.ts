@@ -54,8 +54,16 @@ function routeMatchesText(route: string, text: string): boolean {
   return new RegExp(`(^|\\b|"|/)\\/?${pattern.replace(/^\\\//, "")}(\\b|"|$|/|\\?)`).test(text);
 }
 
+// Routes with no .feature scenario BY DESIGN: OAuth-redirect landings that are
+// never navigated to directly — they only do anything with provider-supplied
+// fragment/query params, and the e2e seeds the access token directly (it does
+// not perform a real Google round-trip), so nothing visits them.
+const EXCLUDED_ROUTES = new Set<string>([
+  "/auth/callback", // token-mint redirect target: reads #access_token, then bounces
+]);
+
 const pages = walk(APP_DIR);
-const routes = pages.map(routeFromPagePath);
+const routes = pages.map(routeFromPagePath).filter((r) => !EXCLUDED_ROUTES.has(r));
 const featureText = readSources();
 
 const uncovered = routes.filter((route) => !routeMatchesText(route, featureText));
