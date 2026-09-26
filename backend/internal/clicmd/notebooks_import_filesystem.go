@@ -47,7 +47,7 @@ func NewNotebooksImportFilesystemCommand() *cobra.Command {
 				return err
 			}
 			if n == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No filesystem notebooks found in the configured directories — nothing to import.")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No filesystem notebooks found in the configured directories — nothing to import.")
 			}
 			return nil
 		},
@@ -132,10 +132,10 @@ func ImportFilesystemNotebooks(ctx context.Context, cfg *config.Config, repo *no
 		if err := repo.ImportShippedBundle(ctx, id, kind, b.name, hash, b.files); err != nil {
 			return 0, fmt.Errorf("import %q: %w", id, err)
 		}
-		fmt.Fprintf(w, "Imported %-40s %d file(s) across %s\n", id, len(b.files), familiesOf(b.files))
+		_, _ = fmt.Fprintf(w, "Imported %-40s %d file(s) across %s\n", id, len(b.files), familiesOf(b.files))
 	}
 	if len(order) > 0 {
-		fmt.Fprintf(w, "\nImported %d filesystem notebook(s) into Postgres (ids preserved; learning histories intact).\n", len(order))
+		_, _ = fmt.Fprintf(w, "\nImported %d filesystem notebook(s) into Postgres (ids preserved; learning histories intact).\n", len(order))
 	}
 	return len(order), nil
 }
