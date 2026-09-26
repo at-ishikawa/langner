@@ -78,7 +78,19 @@ There are two ways to build vocabulary notebooks:
 - `examples/stories/` - Story notebooks with conversations and scenes
 - `examples/flashcards/` - Simple vocabulary card lists
 
-Saved words from both sources appear in the Learn section and are available for quizzes.
+**Push your own notebooks from the command line** - Author a notebook as YAML on your own machine and upload it to your account with the `langner` CLI. Your pushed notebooks are private to you and become quizzable immediately.
+
+```sh
+langner login                          # sign in to your server (once)
+langner validate ./my-notebook/        # check the bundle before uploading
+langner notebooks push ./my-notebook/  # upload it (prints a notebook id)
+langner notebooks list                 # see your notebooks
+langner notebooks pull <notebook-id>   # download it again to edit
+```
+
+A bundle is a directory with an `index.yml` and the files it references (see `examples/user-notebooks/idioms/`).
+
+Saved words from all sources appear in the Learn section and are available for quizzes.
 
 ## Features
 

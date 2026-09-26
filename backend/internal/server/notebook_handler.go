@@ -11,6 +11,7 @@ import (
 	"log/slog"
 
 	"connectrpc.com/connect"
+	"github.com/jmoiron/sqlx"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
@@ -46,6 +47,14 @@ type NotebookHandler struct {
 	// 404 that doesn't disclose the notebook exists). Nil in YAML-only / no-DB
 	// dev, where every notebook is visible.
 	aclRepo notebook.NotebookVisibility
+	// db / fileRepo / contentSource are the DB-mode per-user-notebook seams
+	// (per-user notebooks feature). db + fileRepo back PushNotebook / PullNotebook
+	// / ListMyNotebooks; contentSource contributes user-notebook content to the
+	// reader so GetNotebookDetail can serve a pushed notebook. All nil in
+	// YAML-only / no-DB dev, where those RPCs return Unimplemented/empty.
+	db            *sqlx.DB
+	fileRepo      *notebook.NotebookFileRepository
+	contentSource notebook.ContentSource
 }
 
 // SetNotebookACL installs the notebook visibility resolver (auth Phase 3).
@@ -117,13 +126,38 @@ func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig 
 	}
 }
 
+// SetPushDeps installs the DB-mode per-user-notebook dependencies: the raw DB
+// handle (to build the push-time importer over stored blobs), the notebook-file
+// repository, and the content source that surfaces user notebooks to the
+// reader. Called from bootstrap only when a database is configured.
+func (h *NotebookHandler) SetPushDeps(db *sqlx.DB, fileRepo *notebook.NotebookFileRepository, contentSource notebook.ContentSource) {
+	h.db = db
+	h.fileRepo = fileRepo
+	h.contentSource = contentSource
+}
+
 func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
+	dirs := notebook.ContentDirs{
+		Stories:     h.notebooksConfig.StoriesDirectories,
+		Flashcards:  h.notebooksConfig.FlashcardsDirectories,
+		Books:       h.notebooksConfig.BooksDirectories,
+		Definitions: h.notebooksConfig.DefinitionsDirectories,
+		Etymology:   h.notebooksConfig.EtymologyDirectories,
+		Journals:    h.notebooksConfig.JournalsDirectories,
+	}
+	if h.contentSource != nil {
+		dbDirs, err := h.contentSource.Dirs(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("resolve user-notebook content dirs: %w", err)
+		}
+		dirs = dirs.Merge(dbDirs)
+	}
 	reader, err := notebook.NewReader(
-		h.notebooksConfig.StoriesDirectories,
-		h.notebooksConfig.FlashcardsDirectories,
-		h.notebooksConfig.BooksDirectories,
-		h.notebooksConfig.DefinitionsDirectories,
-		h.notebooksConfig.EtymologyDirectories,
+		dirs.Stories,
+		dirs.Flashcards,
+		dirs.Books,
+		dirs.Definitions,
+		dirs.Etymology,
 		h.dictionaryMap,
 	)
 	if err != nil {
@@ -131,7 +165,7 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 	}
 	// Register journals (stored in the story format) so GetNotebookDetail can
 	// load a journal's prose, mirroring the quiz service reader.
-	if err := reader.LoadJournals(h.notebooksConfig.JournalsDirectories); err != nil {
+	if err := reader.LoadJournals(dirs.Journals); err != nil {
 		return nil, fmt.Errorf("load journals: %w", err)
 	}
 	return reader, nil

@@ -235,6 +235,18 @@ func run(ctx context.Context) error {
 	// notebook visible (no DB).
 	notebookHandler.SetNotebookACL(repos.ACL)
 
+	// Per-user notebooks (DB mode only): surface user-pushed content to the quiz
+	// service + notebook-detail reader through the DB content source, and give
+	// the notebook handler the push/pull/list dependencies. YAML-only mode leaves
+	// these nil, so those RPCs return Unimplemented and the reader sees only the
+	// shipped catalog.
+	if db != nil {
+		fileRepo := notebook.NewNotebookFileRepository(db)
+		contentSource := notebook.NewDBContentSource(fileRepo)
+		svc.SetContentSource(contentSource)
+		notebookHandler.SetPushDeps(db, fileRepo, contentSource)
+	}
+
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
 	analyticsHandler := server.NewAnalyticsHandler(analyticsRepo)
