@@ -19,9 +19,29 @@ func NewValidateCommand() *cobra.Command {
 	var fix bool
 
 	command := &cobra.Command{
-		Use:   "validate",
-		Short: "Validate learning notes and story notebooks for consistency and correctness",
+		Use:   "validate [file|dir]",
+		Short: "Validate notebooks for consistency and correctness",
+		Long: "Validate notebooks. With no argument, validates every notebook the " +
+			"config file names (and checks DB consistency when a database is " +
+			"configured). With a file/dir argument, validates just that single " +
+			"notebook bundle (an index.yml + the files it references) through the " +
+			"same parser the server uses — no config or database required, so an " +
+			"author can check a notebook before `langner notebooks push`.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// File-mode: validate a single bundle without a full config.
+			if len(args) == 1 {
+				files, meta, err := resolveBundle(args[0])
+				if err != nil {
+					return err
+				}
+				if err := validateBundleLocally(files, meta); err != nil {
+					return fmt.Errorf("validation failed: %w", err)
+				}
+				fmt.Printf("✓ %s notebook %q parses cleanly (%d file(s))\n", meta.Kind, meta.ID, len(files))
+				return nil
+			}
+
 			cfg, err := loadConfig()
 			if err != nil {
 				return err

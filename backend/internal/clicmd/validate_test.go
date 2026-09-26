@@ -51,7 +51,7 @@ func TestIsDBConfigured(t *testing.T) {
 func TestNewValidateCommand(t *testing.T) {
 	cmd := NewValidateCommand()
 
-	assert.Equal(t, "validate", cmd.Use)
+	assert.Equal(t, "validate [file|dir]", cmd.Use)
 	assert.NotNil(t, cmd.RunE)
 
 	// Verify fix flag
