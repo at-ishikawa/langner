@@ -44,8 +44,8 @@ if [ "${existing}" -lt 1 ]; then
     -c "DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE)" \
     -c "CREATE DATABASE ${DB_NAME} ENCODING 'UTF8'"
 
-  echo "[seed] importing notebooks (migrate import-db)"
-  DB_PASSWORD="${DB_PASSWORD}" ./langner-admin migrate import-db --config "${TEST_CONFIG_PATH}"
+  echo "[seed] seeding notebooks (migrate reset-db = scoped rebuild + import + seed)"
+  DB_PASSWORD="${DB_PASSWORD}" ./langner-admin migrate reset-db --config "${TEST_CONFIG_PATH}"
 
   # Auth provisioning is decoupled from import-db (it no longer runs
   # implicitly): upsert the allowlist/admin accounts + notebook ownership so
