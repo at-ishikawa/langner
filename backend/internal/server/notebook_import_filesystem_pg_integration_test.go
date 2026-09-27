@@ -104,6 +104,17 @@ func TestImportFilesystem_ServesCompositeCatalogFromDB_Integration(t *testing.T)
 	require.NoError(t, db.Get(&minted, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id LIKE 'nb\_%'`))
 	assert.Equal(t, 0, minted, "the filesystem import must never mint nb_ ids")
 
+	// "My notebooks" = everything I own: a source='shipped' notebook the owner
+	// claimed must appear in ListUserNotebooks, not only source='user' pushes.
+	owned, err := fileRepo.ListUserNotebooks(ctx, userID)
+	require.NoError(t, err)
+	var ownedIDs []string
+	for _, n := range owned {
+		ownedIDs = append(ownedIDs, n.NotebookID)
+	}
+	assert.Contains(t, ownedIDs, "latin-roots-book",
+		"an owned source='shipped' notebook must be listed among the owner's notebooks")
+
 	// --- Serve phase: EMPTY filesystem catalog + DBContentSource (Vercel shape) ---
 	serveCfg := config.NotebooksConfig{LearningNotesDirectory: t.TempDir()} // every family dir empty
 	quizCfg := config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true}

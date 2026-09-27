@@ -208,8 +208,11 @@ func (r *NotebookFileRepository) ListContentNotebookIDs(ctx context.Context) ([]
 	return ids, nil
 }
 
-// ListUserNotebooks returns every source='user' notebook owned by ownerUserID,
-// with a byte_size summed from its files and an updated_at unix timestamp.
+// ListUserNotebooks returns every notebook owned by ownerUserID — regardless of
+// source ('user' pushes AND 'shipped' catalog notebooks the owner imported and
+// claimed) — with a byte_size summed from its files and an updated_at unix
+// timestamp. "My notebooks" means everything I own, not only what I pushed; the
+// source split is an ingestion detail, not an ownership one.
 func (r *NotebookFileRepository) ListUserNotebooks(ctx context.Context, ownerUserID int64) ([]UserNotebook, error) {
 	var rows []UserNotebook
 	if err := r.db.SelectContext(ctx, &rows,
@@ -220,7 +223,7 @@ func (r *NotebookFileRepository) ListUserNotebooks(ctx context.Context, ownerUse
 		        COALESCE((SELECT SUM(byte_size) FROM notebook_files f WHERE f.notebook_id = n.notebook_id), 0) AS byte_size,
 		        CAST(EXTRACT(EPOCH FROM n.updated_at) AS BIGINT) AS updated_at_unix
 		 FROM notebooks n
-		 WHERE n.source = 'user' AND n.owner_user_id = $1
+		 WHERE n.owner_user_id = $1
 		 ORDER BY n.updated_at DESC`, ownerUserID); err != nil {
 		return nil, fmt.Errorf("list user notebooks: %w", err)
 	}
