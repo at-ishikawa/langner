@@ -482,15 +482,24 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		order := reader.GetDefinitionsSessionOrder(nbID)
 		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false, includeUnstudied, conceptHeads)
 		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true, includeUnstudied, conceptHeads)
-		if reviewCount == 0 && reverseCount == 0 {
+		vocabularyCount := countDefinitionEntries(defs, conceptHeads)
+		// Only skip genuinely-empty books. A fully-studied book (nothing due
+		// right now) MUST still be listed — story/flashcard notebooks list
+		// unconditionally, so definitions books must too, or a learner's own
+		// finished notebook silently disappears from the Learn/quiz list.
+		if vocabularyCount == 0 {
 			continue
 		}
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:         nbID,
-			Name:               nbID,
+			NotebookID: nbID,
+			// A definitions book's index.yml carries no name in the reader, so
+			// resolve it from a sibling family index (a composite notebook shares
+			// its id across families and its name often lives on the etymology/
+			// story side); fall back to the id only when no name exists anywhere.
+			Name:               notebookDisplayName(reader, nbID),
 			ReviewCount:        reviewCount,
 			ReverseReviewCount: reverseCount,
-			VocabularyCount:    countDefinitionEntries(defs, conceptHeads),
+			VocabularyCount:    vocabularyCount,
 			Kind:               "Books",
 			LatestDate:         reader.GetDefinitionsLatestDate(nbID),
 			Sections:           definitionsSectionSummaries(defs, order, learningHistories[nbID], includeUnstudied, conceptHeads),
@@ -527,6 +536,24 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 	summaries = append(summaries, grammarSummaries...)
 
 	return summaries, nil
+}
+
+// notebookDisplayName resolves the human name for a notebook id. Definitions
+// books don't retain a name in the reader, so for a composite notebook (one id
+// shared across families) the name typically lives on a sibling family index
+// (etymology / story / flashcard). Falls back to the id when no family carries a
+// name — matching the pre-existing behavior for a nameless definitions-only book.
+func notebookDisplayName(reader *notebook.Reader, id string) string {
+	if idx, ok := reader.GetStoryIndexes()[id]; ok && strings.TrimSpace(idx.Name) != "" {
+		return idx.Name
+	}
+	if idx, ok := reader.GetFlashcardIndexes()[id]; ok && strings.TrimSpace(idx.Name) != "" {
+		return idx.Name
+	}
+	if idx, ok := reader.GetEtymologyIndexes()[id]; ok && strings.TrimSpace(idx.Name) != "" {
+		return idx.Name
+	}
+	return id
 }
 
 // buildOriginMap builds a map of origin|language -> EtymologyOrigin from all etymology notebooks.

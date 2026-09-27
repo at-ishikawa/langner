@@ -136,6 +136,28 @@ func TestImportFilesystem_ServesCompositeCatalogFromDB_Integration(t *testing.T)
 	require.NotEmpty(t, originMeaning,
 		"a latin-roots-book word must carry an etymology-sourced origin meaning — proving the definitions+etymology composite round-tripped through the DB")
 
+	// --- Listing regressions (bugs the user hit after import-filesystem) ---
+	// includeUnstudied=false → nothing is "due" for a fresh import, which used to
+	// make the definitions-book summary SKIP the notebook entirely (it vanished
+	// from the Learn/quiz list). And the definitions-book summary used the id as
+	// the display name. Assert the owner still sees it, named from its etymology
+	// sibling index rather than the raw id.
+	summaries, err := svc.LoadNotebookSummaries(userID, false)
+	require.NoError(t, err)
+	// Target the DEFINITIONS-book ("Books") summary specifically — the composite
+	// also emits an Etymology-kind summary for the same id, which was never
+	// buggy, so matching by id alone would mask the defect.
+	var defsSummary *quiz.NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "latin-roots-book" && summaries[i].Kind == "Books" {
+			defsSummary = &summaries[i]
+			break
+		}
+	}
+	require.NotNil(t, defsSummary, "a fully-unstudied (0-due) owned definitions book must still be listed, not skipped")
+	assert.NotEqual(t, "latin-roots-book", defsSummary.Name, "the definitions summary must not display the raw id as the name")
+	assert.Contains(t, defsSummary.Name, "Latin Roots Book", "the name must resolve from the etymology sibling index")
+
 	// A non-owner cannot see this private notebook (visibility still enforced).
 	var otherID int64
 	require.NoError(t, db.Get(&otherID,
