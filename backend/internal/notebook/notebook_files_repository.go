@@ -3,7 +3,9 @@ package notebook
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -34,6 +36,10 @@ type UserNotebook struct {
 	NotebookID  string `db:"notebook_id"`
 	OwnerUserID *int64 `db:"owner_user_id"`
 	Visibility  string `db:"visibility"`
+	// Source is 'user' (CLI push) or 'shipped' (filesystem catalog imported
+	// id-for-id). PushBundle preserves it on update so re-pushing a shipped
+	// notebook doesn't silently reclassify it. Empty defaults to 'user'.
+	Source      string `db:"source"`
 	Kind        string `db:"kind"`
 	DisplayName string `db:"display_name"`
 	ContentHash string `db:"content_hash"`
@@ -96,17 +102,21 @@ func (r *NotebookFileRepository) PushBundle(ctx context.Context, nb UserNotebook
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	source := strings.TrimSpace(nb.Source)
+	if source == "" {
+		source = "user"
+	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO notebooks (notebook_id, owner_user_id, visibility, source, kind, display_name, content_hash)
-		 VALUES ($1, $2, $3, 'user', $4, $5, $6)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (notebook_id) DO UPDATE SET
 		   owner_user_id = EXCLUDED.owner_user_id,
 		   visibility    = EXCLUDED.visibility,
-		   source        = 'user',
+		   source        = EXCLUDED.source,
 		   kind          = EXCLUDED.kind,
 		   display_name  = EXCLUDED.display_name,
 		   content_hash  = EXCLUDED.content_hash`,
-		nb.NotebookID, nb.OwnerUserID, nb.Visibility, nb.Kind, nb.DisplayName, nb.ContentHash,
+		nb.NotebookID, nb.OwnerUserID, nb.Visibility, source, nb.Kind, nb.DisplayName, nb.ContentHash,
 	); err != nil {
 		return fmt.Errorf("upsert notebooks row: %w", err)
 	}
@@ -268,6 +278,28 @@ func (r *NotebookFileRepository) GetUserNotebook(ctx context.Context, notebookID
 		return UserNotebook{}, false, nil
 	}
 	return rows[0], true, nil
+}
+
+// GetNotebookOwnership returns a notebook's owner, source, and visibility
+// regardless of source ('shipped' or 'user'), or found=false when the id has no
+// registry row. The push create-or-update path uses it to decide whether a
+// declared id is an existing notebook the caller owns (→ update in place,
+// preserving source) versus absent / someone else's (→ mint a new id).
+func (r *NotebookFileRepository) GetNotebookOwnership(ctx context.Context, notebookID string) (owner *int64, source, visibility string, found bool, err error) {
+	var row struct {
+		OwnerUserID *int64 `db:"owner_user_id"`
+		Source      string `db:"source"`
+		Visibility  string `db:"visibility"`
+	}
+	if gerr := r.db.GetContext(ctx, &row,
+		`SELECT owner_user_id, COALESCE(source, '') AS source, visibility
+		 FROM notebooks WHERE notebook_id = $1`, notebookID); gerr != nil {
+		if errors.Is(gerr, sql.ErrNoRows) {
+			return nil, "", "", false, nil
+		}
+		return nil, "", "", false, fmt.Errorf("get notebook ownership: %w", gerr)
+	}
+	return row.OwnerUserID, row.Source, row.Visibility, true, nil
 }
 
 // Fingerprint returns a stable digest of ALL stored notebook content (every

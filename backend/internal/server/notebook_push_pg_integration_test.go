@@ -275,3 +275,51 @@ func TestPushNotebook_Composite_LivePostgres_Integration(t *testing.T) {
 	_, err = f.svc.LoadCards(f.nonOwnerID, []string{nbID}, true, nil)
 	require.Error(t, err, "a composite push is private to its owner")
 }
+
+// TestPushNotebook_UpdatesExistingOwnedId_LivePostgres_Integration pins the
+// create-or-update policy: a fresh push mints a new nb_ id, but when the bundle
+// declares an id that ALREADY EXISTS and the caller OWNS it, push updates it in
+// place — preserving the id (so learning history stays attached) and its source
+// ('shipped' stays 'shipped'), not minting a new notebook.
+func TestPushNotebook_UpdatesExistingOwnedId_LivePostgres_Integration(t *testing.T) {
+	f := newPushFixture(t)
+	ctx := context.Background()
+	ownerCtx := testutil.WithTestUser(ctx, f.ownerID)
+
+	// Simulate a prior filesystem import: a shipped notebook under a human id
+	// the owner claimed (private, source='shipped').
+	_, err := f.db.Exec(
+		`INSERT INTO notebooks (notebook_id, owner_user_id, visibility, source) VALUES ('roots-mini', $1, 'private', 'shipped')`,
+		f.ownerID)
+	require.NoError(t, err)
+
+	// Push the composite roots-mini bundle (its index.yml declares id roots-mini).
+	resp, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind:  "composite",
+		Name:  "Roots Mini",
+		Files: compositeRootsBundle(t),
+	}))
+	require.NoError(t, err)
+
+	// Updated in place under the SAME human id — NOT minted as a new nb_.
+	assert.Equal(t, "roots-mini", resp.Msg.NotebookId, "an owned declared id updates in place, not minting a new nb_")
+	assert.False(t, strings.HasPrefix(resp.Msg.NotebookId, notebook.NotebookIDPrefix), "must not mint an nb_ id when updating an existing owned notebook")
+
+	// Source preserved: a re-pushed shipped notebook stays 'shipped'.
+	var source string
+	require.NoError(t, f.db.Get(&source, `SELECT source FROM notebooks WHERE notebook_id = 'roots-mini'`))
+	assert.Equal(t, "shipped", source, "updating a shipped notebook must not reclassify it as user")
+
+	// Blobs were (re)written under the preserved id.
+	var blobs int
+	require.NoError(t, f.db.Get(&blobs, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = 'roots-mini'`))
+	assert.Greater(t, blobs, 0, "the push stored blobs under the preserved id")
+
+	// A different user pushing that same declared id is rejected (ownership).
+	_, err = f.notebookHandler.PushNotebook(testutil.WithTestUser(ctx, f.nonOwnerID), connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind:  "composite",
+		Name:  "Roots Mini",
+		Files: compositeRootsBundle(t),
+	}))
+	require.Error(t, err, "a non-owner cannot update someone else's notebook by declaring its id")
+}
