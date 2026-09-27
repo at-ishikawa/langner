@@ -33,6 +33,7 @@ func main() {
 		clicmd.NewLoginCommand(),
 		clicmd.NewLogoutCommand(),
 		clicmd.NewWhoamiCommand(),
+		clicmd.NewNotebooksCommand(),
 	)
 	if err := rootCommand.Execute(); err != nil {
 		if _, fprintfErr := fmt.Fprintf(os.Stderr, "failed to execute a command: %+v\n", err); fprintfErr != nil {

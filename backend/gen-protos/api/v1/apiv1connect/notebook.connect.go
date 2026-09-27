@@ -51,6 +51,15 @@ const (
 	// NotebookServiceGetEtymologyNotebookProcedure is the fully-qualified name of the NotebookService's
 	// GetEtymologyNotebook RPC.
 	NotebookServiceGetEtymologyNotebookProcedure = "/api.v1.NotebookService/GetEtymologyNotebook"
+	// NotebookServicePushNotebookProcedure is the fully-qualified name of the NotebookService's
+	// PushNotebook RPC.
+	NotebookServicePushNotebookProcedure = "/api.v1.NotebookService/PushNotebook"
+	// NotebookServicePullNotebookProcedure is the fully-qualified name of the NotebookService's
+	// PullNotebook RPC.
+	NotebookServicePullNotebookProcedure = "/api.v1.NotebookService/PullNotebook"
+	// NotebookServiceListMyNotebooksProcedure is the fully-qualified name of the NotebookService's
+	// ListMyNotebooks RPC.
+	NotebookServiceListMyNotebooksProcedure = "/api.v1.NotebookService/ListMyNotebooks"
 )
 
 // NotebookServiceClient is a client for the api.v1.NotebookService service.
@@ -61,6 +70,14 @@ type NotebookServiceClient interface {
 	RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error)
 	DeleteDefinition(context.Context, *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error)
 	GetEtymologyNotebook(context.Context, *connect.Request[v1.GetEtymologyNotebookRequest]) (*connect.Response[v1.GetEtymologyNotebookResponse], error)
+	// Per-user notebooks (auth-gated). PushNotebook uploads a validated YAML
+	// bundle, mints an nb_ id, stores the raw blobs, and imports them so the
+	// notebook is immediately quizzable by the caller (private by default).
+	// PullNotebook streams the stored blobs back (owner-only). ListMyNotebooks
+	// lists the caller's own user notebooks.
+	PushNotebook(context.Context, *connect.Request[v1.PushNotebookRequest]) (*connect.Response[v1.PushNotebookResponse], error)
+	PullNotebook(context.Context, *connect.Request[v1.PullNotebookRequest]) (*connect.Response[v1.PullNotebookResponse], error)
+	ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error)
 }
 
 // NewNotebookServiceClient constructs a client for the api.v1.NotebookService service. By default,
@@ -110,6 +127,24 @@ func NewNotebookServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(notebookServiceMethods.ByName("GetEtymologyNotebook")),
 			connect.WithClientOptions(opts...),
 		),
+		pushNotebook: connect.NewClient[v1.PushNotebookRequest, v1.PushNotebookResponse](
+			httpClient,
+			baseURL+NotebookServicePushNotebookProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("PushNotebook")),
+			connect.WithClientOptions(opts...),
+		),
+		pullNotebook: connect.NewClient[v1.PullNotebookRequest, v1.PullNotebookResponse](
+			httpClient,
+			baseURL+NotebookServicePullNotebookProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("PullNotebook")),
+			connect.WithClientOptions(opts...),
+		),
+		listMyNotebooks: connect.NewClient[v1.ListMyNotebooksRequest, v1.ListMyNotebooksResponse](
+			httpClient,
+			baseURL+NotebookServiceListMyNotebooksProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("ListMyNotebooks")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -121,6 +156,9 @@ type notebookServiceClient struct {
 	registerDefinition   *connect.Client[v1.RegisterDefinitionRequest, v1.RegisterDefinitionResponse]
 	deleteDefinition     *connect.Client[v1.DeleteDefinitionRequest, v1.DeleteDefinitionResponse]
 	getEtymologyNotebook *connect.Client[v1.GetEtymologyNotebookRequest, v1.GetEtymologyNotebookResponse]
+	pushNotebook         *connect.Client[v1.PushNotebookRequest, v1.PushNotebookResponse]
+	pullNotebook         *connect.Client[v1.PullNotebookRequest, v1.PullNotebookResponse]
+	listMyNotebooks      *connect.Client[v1.ListMyNotebooksRequest, v1.ListMyNotebooksResponse]
 }
 
 // GetNotebookDetail calls api.v1.NotebookService.GetNotebookDetail.
@@ -153,6 +191,21 @@ func (c *notebookServiceClient) GetEtymologyNotebook(ctx context.Context, req *c
 	return c.getEtymologyNotebook.CallUnary(ctx, req)
 }
 
+// PushNotebook calls api.v1.NotebookService.PushNotebook.
+func (c *notebookServiceClient) PushNotebook(ctx context.Context, req *connect.Request[v1.PushNotebookRequest]) (*connect.Response[v1.PushNotebookResponse], error) {
+	return c.pushNotebook.CallUnary(ctx, req)
+}
+
+// PullNotebook calls api.v1.NotebookService.PullNotebook.
+func (c *notebookServiceClient) PullNotebook(ctx context.Context, req *connect.Request[v1.PullNotebookRequest]) (*connect.Response[v1.PullNotebookResponse], error) {
+	return c.pullNotebook.CallUnary(ctx, req)
+}
+
+// ListMyNotebooks calls api.v1.NotebookService.ListMyNotebooks.
+func (c *notebookServiceClient) ListMyNotebooks(ctx context.Context, req *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error) {
+	return c.listMyNotebooks.CallUnary(ctx, req)
+}
+
 // NotebookServiceHandler is an implementation of the api.v1.NotebookService service.
 type NotebookServiceHandler interface {
 	GetNotebookDetail(context.Context, *connect.Request[v1.GetNotebookDetailRequest]) (*connect.Response[v1.GetNotebookDetailResponse], error)
@@ -161,6 +214,14 @@ type NotebookServiceHandler interface {
 	RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error)
 	DeleteDefinition(context.Context, *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error)
 	GetEtymologyNotebook(context.Context, *connect.Request[v1.GetEtymologyNotebookRequest]) (*connect.Response[v1.GetEtymologyNotebookResponse], error)
+	// Per-user notebooks (auth-gated). PushNotebook uploads a validated YAML
+	// bundle, mints an nb_ id, stores the raw blobs, and imports them so the
+	// notebook is immediately quizzable by the caller (private by default).
+	// PullNotebook streams the stored blobs back (owner-only). ListMyNotebooks
+	// lists the caller's own user notebooks.
+	PushNotebook(context.Context, *connect.Request[v1.PushNotebookRequest]) (*connect.Response[v1.PushNotebookResponse], error)
+	PullNotebook(context.Context, *connect.Request[v1.PullNotebookRequest]) (*connect.Response[v1.PullNotebookResponse], error)
+	ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error)
 }
 
 // NewNotebookServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -206,6 +267,24 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 		connect.WithSchema(notebookServiceMethods.ByName("GetEtymologyNotebook")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notebookServicePushNotebookHandler := connect.NewUnaryHandler(
+		NotebookServicePushNotebookProcedure,
+		svc.PushNotebook,
+		connect.WithSchema(notebookServiceMethods.ByName("PushNotebook")),
+		connect.WithHandlerOptions(opts...),
+	)
+	notebookServicePullNotebookHandler := connect.NewUnaryHandler(
+		NotebookServicePullNotebookProcedure,
+		svc.PullNotebook,
+		connect.WithSchema(notebookServiceMethods.ByName("PullNotebook")),
+		connect.WithHandlerOptions(opts...),
+	)
+	notebookServiceListMyNotebooksHandler := connect.NewUnaryHandler(
+		NotebookServiceListMyNotebooksProcedure,
+		svc.ListMyNotebooks,
+		connect.WithSchema(notebookServiceMethods.ByName("ListMyNotebooks")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.NotebookService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NotebookServiceGetNotebookDetailProcedure:
@@ -220,6 +299,12 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 			notebookServiceDeleteDefinitionHandler.ServeHTTP(w, r)
 		case NotebookServiceGetEtymologyNotebookProcedure:
 			notebookServiceGetEtymologyNotebookHandler.ServeHTTP(w, r)
+		case NotebookServicePushNotebookProcedure:
+			notebookServicePushNotebookHandler.ServeHTTP(w, r)
+		case NotebookServicePullNotebookProcedure:
+			notebookServicePullNotebookHandler.ServeHTTP(w, r)
+		case NotebookServiceListMyNotebooksProcedure:
+			notebookServiceListMyNotebooksHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -251,4 +336,16 @@ func (UnimplementedNotebookServiceHandler) DeleteDefinition(context.Context, *co
 
 func (UnimplementedNotebookServiceHandler) GetEtymologyNotebook(context.Context, *connect.Request[v1.GetEtymologyNotebookRequest]) (*connect.Response[v1.GetEtymologyNotebookResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.GetEtymologyNotebook is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) PushNotebook(context.Context, *connect.Request[v1.PushNotebookRequest]) (*connect.Response[v1.PushNotebookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.PushNotebook is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) PullNotebook(context.Context, *connect.Request[v1.PullNotebookRequest]) (*connect.Response[v1.PullNotebookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.PullNotebook is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.ListMyNotebooks is not implemented"))
 }

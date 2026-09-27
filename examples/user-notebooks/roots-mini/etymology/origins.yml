@@ -1,0 +1,14 @@
+# Etymology family of the composite `roots-mini` notebook (same id as the sibling
+# definitions family). Public Latin root; the definitions word `portable` pins to
+# `portare` here and inherits this meaning.
+- event: "UNIT ONE"
+  scenes:
+    - scene: "port (to carry)"
+      origins:
+        - origin: portare
+          type: root
+          language: Latin
+          meaning: "to carry, bring"
+          english_forms: [port, portat]
+          forms:
+            - { form: portare, role: present_active_infinitive }

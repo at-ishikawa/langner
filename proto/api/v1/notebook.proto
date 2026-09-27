@@ -13,6 +13,60 @@ service NotebookService {
   rpc RegisterDefinition(RegisterDefinitionRequest) returns (RegisterDefinitionResponse);
   rpc DeleteDefinition(DeleteDefinitionRequest) returns (DeleteDefinitionResponse);
   rpc GetEtymologyNotebook(GetEtymologyNotebookRequest) returns (GetEtymologyNotebookResponse);
+
+  // Per-user notebooks (auth-gated). PushNotebook uploads a validated YAML
+  // bundle, mints an nb_ id, stores the raw blobs, and imports them so the
+  // notebook is immediately quizzable by the caller (private by default).
+  // PullNotebook streams the stored blobs back (owner-only). ListMyNotebooks
+  // lists the caller's own user notebooks.
+  rpc PushNotebook(PushNotebookRequest) returns (PushNotebookResponse);
+  rpc PullNotebook(PullNotebookRequest) returns (PullNotebookResponse);
+  rpc ListMyNotebooks(ListMyNotebooksRequest) returns (ListMyNotebooksResponse);
+}
+
+// NotebookFile is one raw YAML file of a pushed bundle. path is relative to the
+// bundle root (e.g. "index.yml", "cards.yml").
+message NotebookFile {
+  string path = 1;
+  bytes content = 2;
+}
+
+message PushNotebookRequest {
+  // notebook_id empty = create (server mints an nb_ id); set = update an
+  // existing nb_ notebook the caller owns.
+  string notebook_id = 1;
+  string kind = 2;   // from index.yml `kind:` (Flashcard|Story|Definitions|Etymology|Journal|Grammar|Book)
+  string name = 3;   // from index.yml `name:`
+  repeated NotebookFile files = 4 [(buf.validate.field).repeated.min_items = 1];
+  string content_hash = 5; // client-computed bundle hash; server re-verifies
+}
+
+message PushNotebookResponse {
+  string notebook_id = 1;                // the minted / confirmed nb_ id
+  map<string, int32> imported_rows = 2;  // per-table counts from the importer
+}
+
+message PullNotebookRequest {
+  string notebook_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message PullNotebookResponse {
+  repeated NotebookFile files = 1;
+  string content_hash = 2;
+}
+
+message ListMyNotebooksRequest {}
+
+message ListMyNotebooksResponse {
+  message Entry {
+    string notebook_id = 1;
+    string name = 2;
+    string kind = 3;
+    string visibility = 4;
+    int32 byte_size = 5;
+    int64 updated_at = 6;
+  }
+  repeated Entry notebooks = 1;
 }
 
 message GetNotebookDetailRequest {

@@ -1,0 +1,33 @@
+- title: "Common English Idioms"
+  description: "Everyday idiomatic expressions, a generic push example"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "break the ice"
+      meaning: "to do or say something to relieve tension or start a conversation"
+      part_of_speech: "idiom"
+      examples:
+        - "He told a joke to break the ice at the meeting."
+
+    - expression: "lose one's temper"
+      meaning: "to suddenly become very angry"
+      part_of_speech: "idiom"
+      examples:
+        - "She lost her temper when the train was cancelled again."
+
+    - expression: "hit the nail on the head"
+      meaning: "to describe exactly what is causing a situation or problem"
+      part_of_speech: "idiom"
+      examples:
+        - "You hit the nail on the head with that explanation."
+
+    - expression: "under the weather"
+      meaning: "feeling slightly ill"
+      part_of_speech: "idiom"
+      examples:
+        - "I'm feeling a bit under the weather today."
+
+    - expression: "piece of cake"
+      meaning: "something very easy to do"
+      part_of_speech: "idiom"
+      examples:
+        - "The exam was a piece of cake."

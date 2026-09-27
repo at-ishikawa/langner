@@ -1,0 +1,15 @@
+# Example user-authored notebook bundle for `langner notebooks push`.
+#
+# It is NOT wired into config.example.yml's shipped catalog directories on
+# purpose: a user notebook is delivered by an authenticated CLI push and then
+# stored in the database, not read from the shipped filesystem tree. The push
+# flow validates this bundle, mints an nb_ id (the `id:` below is ignored for
+# identity), stores the raw files, and imports them so the notebook is
+# immediately quizzable by its owner (private by default).
+#
+# Generic, public content only (common English idioms) — never personal data.
+kind: Flashcard
+id: example-idioms
+name: "Common English Idioms"
+notebooks:
+  - ./cards.yml

@@ -1,0 +1,5 @@
+id: roots-mini
+kind: Etymology
+name: "Roots Mini (composite push demo)"
+notebooks:
+  - ./origins.yml

@@ -128,6 +128,12 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	// populates it on a data-only import — seed one unowned public row.
 	seedIfEmpty(ctx, t, db, "notebooks",
 		`INSERT INTO notebooks (notebook_id, visibility) VALUES ('roundtrip-seed', 'public')`)
+	// notebook_files: raw user-notebook content blobs (migration 031). Empty on
+	// the example config (only a CLI push populates it), so seed one blob so the
+	// bytea column round-trips through dump -> restore -> dump.
+	seedIfEmpty(ctx, t, db, "notebook_files",
+		`INSERT INTO notebook_files (notebook_id, path, content, content_sha256, byte_size)
+		 VALUES ('roundtrip-seed', 'index.yml', '\x6b696e643a20466c6173686361726400'::bytea, 'da39a3ee5e6b4b0d3255bfef95601890afd80709', 16)`)
 	seedIfEmpty(ctx, t, db, "note_images",
 		`INSERT INTO note_images (note_id, url, sort_order) SELECT MIN(id), 'https://example.com/ice.png', 0 FROM notes`)
 	seedIfEmpty(ctx, t, db, "note_references",

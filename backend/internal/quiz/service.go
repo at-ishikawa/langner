@@ -62,6 +62,11 @@ type Service struct {
 	// each notebook id. Nil in YAML-only / no-DB dev, where every notebook is
 	// visible.
 	aclRepo notebook.NotebookVisibility
+	// contentSource, when set (DB mode), contributes user-notebook content
+	// (source='user' rows) to the reader alongside the shipped filesystem
+	// catalog. It materializes stored blobs and the SAME parsers read them, so
+	// user notebooks are quizzed through one code path. Nil in YAML-only mode.
+	contentSource notebook.ContentSource
 }
 
 // NoteEnsurer additively creates any notes a notebook's YAML declares but the
@@ -131,6 +136,38 @@ func (s *Service) ensureNotes(notebookIDs []string) {
 // dev) means every notebook is visible.
 func (s *Service) SetNotebookACL(aclRepo notebook.NotebookVisibility) {
 	s.aclRepo = aclRepo
+}
+
+// SetContentSource installs the DB-backed user-notebook content source (auth
+// Phase 3 / per-user notebooks). Called from bootstrap once the database is
+// connected; nil (YAML-only / no-DB dev) means the reader sees only the shipped
+// filesystem catalog.
+func (s *Service) SetContentSource(cs notebook.ContentSource) {
+	s.contentSource = cs
+}
+
+// contentDirs merges the configured filesystem directories with any DB content
+// source's directories. It is the ONE place the reader's directory set is
+// assembled, so the quiz service and any other reader builder union the same
+// two sources.
+func (s *Service) contentDirs() (notebook.ContentDirs, error) {
+	dirs := notebook.ContentDirs{
+		Stories:     s.notebooksConfig.StoriesDirectories,
+		Flashcards:  s.notebooksConfig.FlashcardsDirectories,
+		Books:       s.notebooksConfig.BooksDirectories,
+		Definitions: s.notebooksConfig.DefinitionsDirectories,
+		Etymology:   s.notebooksConfig.EtymologyDirectories,
+		Journals:    s.notebooksConfig.JournalsDirectories,
+		Grammars:    s.notebooksConfig.GrammarsDirectories,
+	}
+	if s.contentSource == nil {
+		return dirs, nil
+	}
+	dbDirs, err := s.contentSource.Dirs(context.Background())
+	if err != nil {
+		return notebook.ContentDirs{}, fmt.Errorf("resolve user-notebook content dirs: %w", err)
+	}
+	return dirs.Merge(dbDirs), nil
 }
 
 // visibleNotebooks returns a predicate reporting whether a notebook is visible
@@ -253,12 +290,16 @@ func (s *Service) PreloadHistoriesForNotebooks(userID int64, notebookIDs ...stri
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
+	dirs, err := s.contentDirs()
+	if err != nil {
+		return nil, err
+	}
 	reader, err := notebook.NewReader(
-		s.notebooksConfig.StoriesDirectories,
-		s.notebooksConfig.FlashcardsDirectories,
-		s.notebooksConfig.BooksDirectories,
-		s.notebooksConfig.DefinitionsDirectories,
-		s.notebooksConfig.EtymologyDirectories,
+		dirs.Stories,
+		dirs.Flashcards,
+		dirs.Books,
+		dirs.Definitions,
+		dirs.Etymology,
 		s.dictionaryMap,
 	)
 	if err != nil {
@@ -267,10 +308,10 @@ func (s *Service) newReader() (*notebook.Reader, error) {
 	// Journals are stored in the story format but kept in their own directory;
 	// register them so the grammar quiz can read them and IsJournal can tag
 	// them apart from plain vocabulary stories.
-	if err := reader.LoadJournals(s.notebooksConfig.JournalsDirectories); err != nil {
+	if err := reader.LoadJournals(dirs.Journals); err != nil {
 		return nil, fmt.Errorf("reader.LoadJournals() > %w", err)
 	}
-	if err := reader.LoadGrammars(s.notebooksConfig.GrammarsDirectories); err != nil {
+	if err := reader.LoadGrammars(dirs.Grammars); err != nil {
 		return nil, fmt.Errorf("reader.LoadGrammars() > %w", err)
 	}
 	return reader, nil

@@ -32,7 +32,10 @@ func main() {
 		Use:   "notebooks",
 		Short: "Notebook administration",
 	}
-	notebooksCommand.AddCommand(clicmd.NewNotebooksSetOwnerCommand())
+	notebooksCommand.AddCommand(
+		clicmd.NewNotebooksSetOwnerCommand(),
+		clicmd.NewNotebooksImportFilesystemCommand(),
+	)
 
 	rootCommand.AddCommand(
 		clicmd.NewMigrateCommand(),
