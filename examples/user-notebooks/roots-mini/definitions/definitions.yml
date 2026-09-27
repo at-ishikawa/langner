@@ -1,0 +1,22 @@
+# A composite user notebook: this definitions family is JOINED to the sibling
+# etymology family under examples/user-notebooks/roots-mini/etymology by the SAME
+# id (roots-mini). The word references a public Latin root declared there; the
+# origin MEANING resolves only from that etymology family, so it proves the two
+# families load together under one id. All sentences are invented demo prose.
+- metadata:
+    title: "UNIT ONE"
+  scenes:
+    - metadata:
+        index: 0
+        title: "port (to carry)"
+      expressions:
+        - expression: portable
+          id: portable-roots-mini
+          meaning: "able to be carried or moved easily"
+          part_of_speech: adjective
+          note: 'from portare "to carry"'
+          examples:
+            - text: "The portable stove folded into a bag she could sling over one shoulder."
+              highlight: portable
+          origin_parts:
+            - { origin: portare, language: Latin, from_form: port }

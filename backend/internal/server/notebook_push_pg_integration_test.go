@@ -206,3 +206,72 @@ func TestPushNotebook_EndToEnd_LivePostgres_Integration(t *testing.T) {
 	_, err = f.notebookHandler.PullNotebook(testutil.WithTestUser(ctx, f.nonOwnerID), connect.NewRequest(&apiv1.PullNotebookRequest{NotebookId: nbID}))
 	require.Error(t, err, "a non-owner must not be able to pull a private notebook")
 }
+
+// compositeRootsBundle reads the shipped composite example user notebook
+// (examples/user-notebooks/roots-mini: a definitions family + an etymology
+// family under one id) as a composite push request carries it — each file's
+// path family-prefixed ("definitions/index.yml", "etymology/origins.yml").
+func compositeRootsBundle(t *testing.T) []*apiv1.NotebookFile {
+	t.Helper()
+	root := repoRootForVisibilityTest(t)
+	base := filepath.Join(root, "examples", "user-notebooks", "roots-mini")
+	rels := []string{
+		"definitions/index.yml", "definitions/definitions.yml",
+		"etymology/index.yml", "etymology/origins.yml",
+	}
+	var files []*apiv1.NotebookFile
+	for _, rel := range rels {
+		content, err := os.ReadFile(filepath.Join(base, filepath.FromSlash(rel)))
+		require.NoError(t, err)
+		files = append(files, &apiv1.NotebookFile{Path: rel, Content: content})
+	}
+	return files
+}
+
+// TestPushNotebook_Composite_LivePostgres_Integration drives a COMPOSITE push —
+// one notebook id spanning the definitions AND etymology families — end to end
+// against a live Postgres, then serves it from the DB and proves the two
+// families round-trip under a single minted id: the definitions word resolves an
+// origin meaning that lives ONLY in the etymology family (§13.6).
+func TestPushNotebook_Composite_LivePostgres_Integration(t *testing.T) {
+	f := newPushFixture(t)
+	ctx := context.Background()
+	ownerCtx := testutil.WithTestUser(ctx, f.ownerID)
+
+	pushResp, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind:  "composite", // the reserved sentinel: files carry family-prefixed paths
+		Name:  "Roots Mini",
+		Files: compositeRootsBundle(t),
+	}))
+	require.NoError(t, err)
+	nbID := pushResp.Msg.NotebookId
+	require.True(t, strings.HasPrefix(nbID, notebook.NotebookIDPrefix), "server mints an nb_ id, got %q", nbID)
+
+	// Blobs stored under BOTH families for the one minted id.
+	var fams []string
+	require.NoError(t, f.db.Select(&fams,
+		`SELECT DISTINCT family FROM notebook_files WHERE notebook_id = $1 ORDER BY family`, nbID))
+	assert.Equal(t, []string{"definitions", "etymology"}, fams,
+		"a composite push stores its definitions and etymology files under distinct families of one id")
+
+	// Served from the DB: the definitions word loads and resolves an origin whose
+	// meaning comes ONLY from the etymology family of the same id.
+	cards, err := f.svc.LoadCards(f.ownerID, []string{nbID}, true, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, cards, "the composite notebook is quizzable from the DB")
+
+	var originMeaning string
+	for _, c := range cards {
+		for _, p := range c.WordDetail.OriginParts {
+			if p.Meaning != "" {
+				originMeaning = p.Meaning
+			}
+		}
+	}
+	require.NotEmpty(t, originMeaning,
+		"a composite-pushed definitions word must carry an etymology-sourced origin meaning — proving both families round-tripped under one minted id")
+
+	// Private by default: a non-owner cannot load it.
+	_, err = f.svc.LoadCards(f.nonOwnerID, []string{nbID}, true, nil)
+	require.Error(t, err, "a composite push is private to its owner")
+}

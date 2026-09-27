@@ -86,9 +86,26 @@ func (h *NotebookHandler) PushNotebook(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("no files in push"))
 	}
 
+	// A composite push (kind == compositeKind) carries files whose path is
+	// prefixed with their family bucket ("definitions/index.yml",
+	// "etymology/origins.yml"), so one notebook id can span several families
+	// exactly like the filesystem catalog (design §13). A single-family push
+	// leaves paths unprefixed and derives the family from kind at storage time.
+	composite := strings.TrimSpace(msg.Kind) == compositeKind
 	files := make([]notebook.NotebookFile, 0, len(msg.Files))
 	for _, f := range msg.Files {
-		files = append(files, notebook.NotebookFile{Path: filepath.ToSlash(f.Path), Content: f.Content})
+		p := filepath.ToSlash(f.Path)
+		nf := notebook.NotebookFile{Path: p, Content: f.Content}
+		if composite {
+			seg, rest, ok := strings.Cut(p, "/")
+			if !ok || !knownFamily(seg) {
+				return nil, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("composite push file %q must live under a family dir (definitions/, etymology/, stories/, …)", p))
+			}
+			nf.Family = seg
+			nf.Path = rest
+		}
+		files = append(files, nf)
 	}
 	indexFile, ok := findIndexFile(files)
 	if !ok {
@@ -130,6 +147,11 @@ func (h *NotebookHandler) PushNotebook(
 	kind := meta.Kind
 	if strings.TrimSpace(kind) == "" {
 		kind = strings.TrimSpace(msg.Kind)
+	}
+	if composite {
+		// Family placement is per-file for a composite notebook; the single
+		// `kind` column would mislabel it, so leave it empty (display only).
+		kind = ""
 	}
 	name := meta.Name
 	if strings.TrimSpace(name) == "" {
@@ -173,32 +195,38 @@ func (h *NotebookHandler) importPushedNotebook(ctx context.Context, notebookID, 
 	}
 	defer func() { _ = os.RemoveAll(root) }()
 
-	nbDir := filepath.Join(root, notebookID)
+	// Materialize each file under <root>/<family>/<notebookID>/<path>, keyed by
+	// the file's OWN family (falling back to the notebook kind for a
+	// single-family push), so a composite notebook's several families each land
+	// under their own root — the same layout DBContentSource uses, so the reader
+	// registers one id across several family maps with no divergence (§13.2).
+	dirs := notebook.ContentDirs{}
+	used := map[string]bool{}
 	for _, f := range files {
-		dest := filepath.Join(nbDir, filepath.Clean("/"+f.Path))
+		family := strings.TrimSpace(f.Family)
+		if family == "" {
+			family = familyForKind(kind)
+		}
+		dest := filepath.Join(root, family, notebookID, filepath.Clean("/"+f.Path))
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return 0, fmt.Errorf("mkdir: %w", err)
 		}
 		if err := os.WriteFile(dest, f.Content, 0o644); err != nil {
 			return 0, fmt.Errorf("write: %w", err)
 		}
+		used[family] = true
 	}
-
-	dirs := notebook.ContentDirs{}
-	target := &dirs.Flashcards
-	switch familyForKind(kind) {
-	case "stories":
-		target = &dirs.Stories
-	case "journals":
-		target = &dirs.Journals
-	case "books":
-		target = &dirs.Books
-	case "definitions":
-		target = &dirs.Definitions
-	case "etymology":
-		target = &dirs.Etymology
+	add := func(family string, target *[]string) {
+		if used[family] {
+			*target = append(*target, filepath.Join(root, family))
+		}
 	}
-	*target = append(*target, root)
+	add("stories", &dirs.Stories)
+	add("journals", &dirs.Journals)
+	add("flashcards", &dirs.Flashcards)
+	add("books", &dirs.Books)
+	add("definitions", &dirs.Definitions)
+	add("etymology", &dirs.Etymology)
 
 	reader, err := notebook.NewReader(dirs.Stories, dirs.Flashcards, dirs.Books, dirs.Definitions, dirs.Etymology, nil)
 	if err != nil {
@@ -208,6 +236,21 @@ func (h *NotebookHandler) importPushedNotebook(ctx context.Context, notebookID, 
 	noteRepo := notebook.NewDBNoteRepository(h.db)
 	importer := datasync.NewImporter(noteRepo, nil, noteSource, nil, nil, nil, io.Discard)
 	return importer.EnsureNotesForNotebook(ctx, notebookID)
+}
+
+// compositeKind is the reserved PushNotebookRequest.kind sentinel signaling a
+// multi-family bundle whose file paths are family-prefixed (design §13.6). It is
+// not a real notebook kind.
+const compositeKind = "composite"
+
+// knownFamily reports whether seg is a ContentDirs family bucket name — the set
+// a composite push's path prefix must name.
+func knownFamily(seg string) bool {
+	switch seg {
+	case "stories", "journals", "flashcards", "books", "definitions", "etymology", "grammars":
+		return true
+	}
+	return false
 }
 
 // familyForKind mirrors notebook.familyDir for the push-time reader assembly.

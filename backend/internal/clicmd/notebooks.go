@@ -19,10 +19,45 @@ import (
 )
 
 // bundleFile is one resolved file of a notebook bundle, keyed by its path
-// relative to the bundle root (e.g. "index.yml", "cards.yml").
+// relative to the bundle root (e.g. "index.yml", "cards.yml"). For a composite
+// bundle RelPath is family-prefixed ("definitions/index.yml") and Family names
+// the bucket, so the server can route one id across several families (§13.6).
 type bundleFile struct {
+	Family  string
 	RelPath string
 	Content []byte
+}
+
+// compositeBundleKind is the reserved PushNotebookRequest.kind the CLI sends for
+// a multi-family bundle (must match server.compositeKind). Family is then read
+// from each file's path prefix, not from this field.
+const compositeBundleKind = "composite"
+
+// clientKnownFamily reports whether name is a notebook family bucket dir.
+func clientKnownFamily(name string) bool {
+	switch name {
+	case "stories", "journals", "flashcards", "books", "definitions", "etymology", "grammars":
+		return true
+	}
+	return false
+}
+
+// kindForFamily returns the index.yml `kind:` a family's bundle validates as, so
+// a family subdir (whose own index.yml may omit kind, e.g. definitions) is
+// checked through the right reader.
+func kindForFamily(family string) string {
+	switch family {
+	case "stories":
+		return "story"
+	case "books":
+		return "book"
+	case "definitions":
+		return "definitions"
+	case "etymology":
+		return "etymology"
+	default: // flashcards / journals / grammars validate via the flashcard/story readers
+		return ""
+	}
 }
 
 // bundleMeta is the index.yml metadata the CLI reads to describe a bundle.
@@ -81,6 +116,81 @@ func resolveBundle(path string) ([]bundleFile, bundleMeta, error) {
 	return files, meta, nil
 }
 
+// resolveNotebookBundle resolves either a single-family bundle (a dir with an
+// index.yml, or an index.yml file) or a COMPOSITE bundle (a parent dir with no
+// top-level index.yml whose subdirs are family buckets — definitions/,
+// etymology/, … — that share one id). It is the entry point `push` uses so a
+// user hands a composite notebook the same way it lives on disk (§13.6).
+func resolveNotebookBundle(path string) ([]bundleFile, bundleMeta, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, bundleMeta{}, fmt.Errorf("stat %s: %w", path, err)
+	}
+	if info.IsDir() {
+		if _, e := os.Stat(filepath.Join(path, "index.yml")); e != nil {
+			return resolveCompositeBundle(path) // no top-level index.yml → family subdirs
+		}
+	}
+	return resolveBundle(path)
+}
+
+// resolveCompositeBundle reads a parent dir whose subdirs are family buckets
+// (each a single-family bundle) sharing one id, validates each through its
+// family's reader, and returns the union with family-prefixed paths + a
+// compositeBundleKind meta. The server splits the prefix back into per-file
+// families so the one id registers across several family maps (§13.2).
+func resolveCompositeBundle(dir string) ([]bundleFile, bundleMeta, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, bundleMeta{}, fmt.Errorf("read %s: %w", dir, err)
+	}
+	var files []bundleFile
+	var id, name string
+	families := 0
+	for _, e := range entries {
+		family := e.Name()
+		if !e.IsDir() || !clientKnownFamily(family) {
+			continue
+		}
+		sub := filepath.Join(dir, family)
+		if _, err := os.Stat(filepath.Join(sub, "index.yml")); err != nil {
+			continue
+		}
+		subFiles, subMeta, err := resolveBundle(sub)
+		if err != nil {
+			return nil, bundleMeta{}, fmt.Errorf("family %s: %w", family, err)
+		}
+		// Validate each family through the reader its family expects.
+		vMeta := subMeta
+		if k := kindForFamily(family); k != "" {
+			vMeta.Kind = k
+		}
+		if err := validateBundleLocally(subFiles, vMeta); err != nil {
+			return nil, bundleMeta{}, fmt.Errorf("family %s: %w", family, err)
+		}
+		sid := strings.TrimSpace(subMeta.ID)
+		if id == "" {
+			id = sid
+		} else if sid != id {
+			return nil, bundleMeta{}, fmt.Errorf("composite families must share one id: %s declares %q but expected %q", family, sid, id)
+		}
+		if name == "" {
+			name = subMeta.Name
+		}
+		for _, sf := range subFiles {
+			files = append(files, bundleFile{Family: family, RelPath: family + "/" + sf.RelPath, Content: sf.Content})
+		}
+		families++
+	}
+	if families == 0 {
+		return nil, bundleMeta{}, fmt.Errorf("%s has no top-level index.yml and no family subdirs (definitions/, etymology/, …) with an index.yml", dir)
+	}
+	if id == "" {
+		return nil, bundleMeta{}, fmt.Errorf("composite notebook families must declare a shared id:")
+	}
+	return files, bundleMeta{ID: id, Kind: compositeBundleKind, Name: name}, nil
+}
+
 // validateBundleLocally parses the bundle through the SAME notebook reader the
 // server uses, catching structural errors before an upload. It materializes the
 // files to a temp dir, builds a reader with the bundle slotted into the family
@@ -133,6 +243,10 @@ func validateBundleLocally(files []bundleFile, meta bundleMeta) error {
 		if _, err := reader.ReadStoryNotebooks(id); err != nil {
 			return fmt.Errorf("read story %q: %w", id, err)
 		}
+	case "etymology":
+		if _, err := reader.ReadEtymologyNotebook(id); err != nil {
+			return fmt.Errorf("read etymology %q: %w", id, err)
+		}
 	default:
 		if _, err := reader.ReadFlashcardNotebooks(id); err != nil {
 			return fmt.Errorf("read flashcards %q: %w", id, err)
@@ -167,15 +281,24 @@ func newNotebooksPushCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "push <dir|index.yml>",
 		Short: "Validate and upload a notebook bundle (private by default)",
-		Args:  cobra.ExactArgs(1),
+		Long: `Validate and upload a notebook bundle, private by default.
+
+Point at a single-family notebook dir (containing index.yml), or at a COMPOSITE
+notebook: a parent dir whose subdirs are family buckets (definitions/, etymology/,
+stories/, …) that share the same id: — the same on-disk shape a composite notebook
+uses in the catalog. All families upload as ONE notebook under one server-minted id.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			files, meta, err := resolveBundle(args[0])
+			files, meta, err := resolveNotebookBundle(args[0])
 			if err != nil {
 				return err
 			}
-			// Fail fast: validate locally before touching the server.
-			if err := validateBundleLocally(files, meta); err != nil {
-				return fmt.Errorf("bundle validation failed: %w", err)
+			// Fail fast: validate locally before touching the server. A composite
+			// bundle is already validated per-family inside resolveCompositeBundle.
+			if meta.Kind != compositeBundleKind {
+				if err := validateBundleLocally(files, meta); err != nil {
+					return fmt.Errorf("bundle validation failed: %w", err)
+				}
 			}
 
 			store, err := LoadCredentials()

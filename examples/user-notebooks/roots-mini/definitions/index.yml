@@ -1,0 +1,4 @@
+id: roots-mini
+name: "Roots Mini (composite push demo)"
+notebooks:
+  - ./definitions.yml
