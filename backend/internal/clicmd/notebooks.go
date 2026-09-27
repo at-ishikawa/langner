@@ -186,7 +186,7 @@ func resolveCompositeBundle(dir string) ([]bundleFile, bundleMeta, error) {
 		return nil, bundleMeta{}, fmt.Errorf("%s has no top-level index.yml and no family subdirs (definitions/, etymology/, …) with an index.yml", dir)
 	}
 	if id == "" {
-		return nil, bundleMeta{}, fmt.Errorf("composite notebook families must declare a shared id:")
+		return nil, bundleMeta{}, fmt.Errorf("composite notebook families must each declare the same id")
 	}
 	return files, bundleMeta{ID: id, Kind: compositeBundleKind, Name: name}, nil
 }
