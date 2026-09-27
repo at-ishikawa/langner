@@ -271,6 +271,23 @@ func TestPushNotebook_Composite_LivePostgres_Integration(t *testing.T) {
 	require.NotEmpty(t, originMeaning,
 		"a composite-pushed definitions word must carry an etymology-sourced origin meaning — proving both families round-tripped under one minted id")
 
+	// Listing regressions: with includeUnstudied=false nothing is due for a fresh
+	// push, which used to (a) skip the definitions-book summary entirely and (b)
+	// name it by the raw nb_ id. Assert the Books summary still lists and is named
+	// from the etymology sibling index, not the id.
+	summaries, err := f.svc.LoadNotebookSummaries(f.ownerID, false)
+	require.NoError(t, err)
+	var defsSummary *quiz.NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == nbID && summaries[i].Kind == "Books" {
+			defsSummary = &summaries[i]
+			break
+		}
+	}
+	require.NotNil(t, defsSummary, "a 0-due composite book must still be listed, not skipped")
+	assert.NotEqual(t, nbID, defsSummary.Name, "the summary must not display the raw nb_ id as the name")
+	assert.Contains(t, defsSummary.Name, "Roots Mini", "the name resolves from the etymology sibling index")
+
 	// Private by default: a non-owner cannot load it.
 	_, err = f.svc.LoadCards(f.nonOwnerID, []string{nbID}, true, nil)
 	require.Error(t, err, "a composite push is private to its owner")
@@ -314,6 +331,16 @@ func TestPushNotebook_UpdatesExistingOwnedId_LivePostgres_Integration(t *testing
 	var blobs int
 	require.NoError(t, f.db.Get(&blobs, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = 'roots-mini'`))
 	assert.Greater(t, blobs, 0, "the push stored blobs under the preserved id")
+
+	// "My notebooks" = everything owned: the owned source='shipped' notebook is
+	// listed by ListUserNotebooks, not filtered out for not being source='user'.
+	owned, lerr := f.notebookHandler.fileRepo.ListUserNotebooks(ctx, f.ownerID)
+	require.NoError(t, lerr)
+	var ownedIDs []string
+	for _, n := range owned {
+		ownedIDs = append(ownedIDs, n.NotebookID)
+	}
+	assert.Contains(t, ownedIDs, "roots-mini", "an owned source='shipped' notebook must be listed among the owner's notebooks")
 
 	// A different user pushing that same declared id is rejected (ownership).
 	_, err = f.notebookHandler.PushNotebook(testutil.WithTestUser(ctx, f.nonOwnerID), connect.NewRequest(&apiv1.PushNotebookRequest{

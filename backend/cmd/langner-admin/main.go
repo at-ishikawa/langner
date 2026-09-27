@@ -34,7 +34,6 @@ func main() {
 	}
 	notebooksCommand.AddCommand(
 		clicmd.NewNotebooksSetOwnerCommand(),
-		clicmd.NewNotebooksImportFilesystemCommand(),
 	)
 
 	rootCommand.AddCommand(
