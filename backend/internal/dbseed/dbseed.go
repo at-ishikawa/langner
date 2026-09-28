@@ -92,7 +92,13 @@ type LearningLogSpec struct {
 	NotebookID string // source_notebook_id
 	Expression string // note-targeted: resolved/created into a note by the real write path
 	OriginID   int64  // etymology-origin-targeted
-	SenseID    string // grammar-targeted (with QuizType "grammar")
+	// SenseID is dual-use, disambiguated by whether Expression is set:
+	//   - vocab (Expression set): the note's content-derived stable id (a
+	//     flashcard/definition `id:`); "" means an id-less note keyed by
+	//     (usage, entry). Seeding it makes the seeded note the SAME row the
+	//     runtime ensure-on-serve resolves (ON CONFLICT (sense_id)).
+	//   - grammar (Expression empty, QuizType "grammar"): the correction sense_id.
+	SenseID string
 	QuizType   string // "" → "notebook"
 	Status     string // "" → "misunderstood" (a wrong attempt — what analytics Day Detail surfaces)
 	Quality    int    // 0–5
@@ -151,8 +157,15 @@ func SeedLearningLog(ctx context.Context, db *sqlx.DB, spec LearningLogSpec) err
 	// reconstruction finds a notebook's vocab via notebook_notes
 	// (DBNoteRepository.FindByNotebooks), so an unlinked note is invisible to
 	// analytics Day Detail, the Learn page, and the due-count reads. Link it.
-	if spec.Expression != "" && spec.OriginID == 0 && spec.SenseID == "" {
-		if err := ensureNotebookMembership(ctx, db, spec.NotebookID, spec.NotebookType, spec.Group, spec.Expression); err != nil {
+	// A note-targeted (vocab) attempt is exactly one with an Expression and no
+	// origin — grammar carries no Expression (SenseID is its correction id) and
+	// etymology carries an OriginID, so neither creates a note membership. A
+	// vocab note MAY still carry a SenseID: the note's content-derived stable id
+	// (e.g. a flashcard's `id:`). It must be seeded so the seeded note is the
+	// SAME row the runtime ensure-on-serve resolves to (ON CONFLICT (sense_id)),
+	// not a membership-less duplicate.
+	if spec.Expression != "" && spec.OriginID == 0 {
+		if err := ensureNotebookMembership(ctx, db, spec.NotebookID, spec.NotebookType, spec.Group, spec.SenseID, spec.Expression); err != nil {
 			return err
 		}
 	}
@@ -164,14 +177,22 @@ func SeedLearningLog(ctx context.Context, db *sqlx.DB, spec LearningLogSpec) err
 // defaults to "flashcard" (the flat, scene-less kind); group/subgroup are empty
 // (flashcards have no scenes). The note is resolved by (usage, entry) exactly as
 // the write path stored it (usage=entry=expression for a seeded id-less note).
-func ensureNotebookMembership(ctx context.Context, db *sqlx.DB, notebookID, notebookType, group, expression string) error {
+func ensureNotebookMembership(ctx context.Context, db *sqlx.DB, notebookID, notebookType, group, senseID, expression string) error {
 	if notebookType == "" {
 		notebookType = "flashcard"
 	}
+	// Resolve the just-written note the SAME way ensureNoteExists keyed it: an
+	// id-bearing card by its sense_id, an id-less card by (usage, entry).
 	var noteID int64
-	if err := db.GetContext(ctx, &noteID,
-		`SELECT id FROM notes WHERE "usage" = $1 AND entry = $1 AND sense_id = '' ORDER BY id LIMIT 1`,
-		expression); err != nil {
+	var err error
+	if senseID != "" {
+		err = db.GetContext(ctx, &noteID,
+			`SELECT id FROM notes WHERE sense_id = $1 ORDER BY id LIMIT 1`, senseID)
+	} else {
+		err = db.GetContext(ctx, &noteID,
+			`SELECT id FROM notes WHERE "usage" = $1 AND entry = $1 AND sense_id = '' ORDER BY id LIMIT 1`, expression)
+	}
+	if err != nil {
 		return fmt.Errorf("resolve seeded note %q: %w", expression, err)
 	}
 	if _, err := db.ExecContext(ctx,

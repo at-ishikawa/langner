@@ -29,6 +29,12 @@ type e2eHistoryFixture struct {
 	// the content the quiz loaders read BY TITLE (dbseed.LearningLogSpec.Group).
 	// Required for vocab (note) fixtures; ignored for origin/grammar.
 	Title string
+	// SenseID is the vocab card's content-derived stable id (a flashcard `id:`),
+	// "" for an id-less card keyed by (usage, entry). It MUST match the on-disk
+	// content so the seeded note is the SAME row the runtime ensure-on-serve
+	// resolves — otherwise a runtime answer forks a membership-less duplicate
+	// note and the word vanishes from Relearn / reconstruction reads.
+	SenseID string
 }
 
 // e2eHistoryFixtures replaces the old frontend/e2e/fixtures/learning_notes YAML.
@@ -39,9 +45,9 @@ type e2eHistoryFixture struct {
 var e2eHistoryFixtures = []e2eHistoryFixture{
 	// idioms (flashcard): a wrong notebook+reverse attempt on 01-02, a correct
 	// freeform recall on 01-03 — the analytics Day Detail "break the ice" case.
-	{Notebook: "idioms", Title: "Common Idioms", Word: "break the ice", QuizType: "notebook", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
-	{Notebook: "idioms", Title: "Common Idioms", Word: "break the ice", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
-	{Notebook: "idioms", Title: "Common Idioms", Word: "break the ice", QuizType: "freeform", Status: "understood", Day: "2025-01-03", Quality: 4},
+	{Notebook: "idioms", Title: "Common Idioms", SenseID: "break-the-ice", Word: "break the ice", QuizType: "notebook", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
+	{Notebook: "idioms", Title: "Common Idioms", SenseID: "break-the-ice", Word: "break the ice", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
+	{Notebook: "idioms", Title: "Common Idioms", SenseID: "break-the-ice", Word: "break the ice", QuizType: "freeform", Status: "understood", Day: "2025-01-03", Quality: 4},
 	{Notebook: "idioms", Title: "Common Idioms", Word: "lose one's temper", QuizType: "notebook", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
 	{Notebook: "idioms", Title: "Common Idioms", Word: "lose one's temper", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
 	{Notebook: "idioms", Title: "Common Idioms", Word: "lose one's temper", QuizType: "freeform", Status: "understood", Day: "2025-01-03", Quality: 4},
@@ -173,6 +179,7 @@ func seedE2EHistory(ctx context.Context, db *sqlx.DB, ownerID int64) error {
 			spec.SenseID = f.Word
 		default:
 			spec.Expression = f.Word
+			spec.SenseID = f.SenseID // the note's content id ("" = id-less)
 		}
 		if err := dbseed.SeedLearningLog(ctx, db, spec); err != nil {
 			return err

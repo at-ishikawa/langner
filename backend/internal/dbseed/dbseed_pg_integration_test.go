@@ -47,6 +47,7 @@ func TestDBSeed_LearningLog_ThroughRealWritePath(t *testing.T) {
 		NotebookID: "roots-mini",
 		Group:      "Common Idioms",
 		Expression: "break the ice",
+		SenseID:    "break-the-ice", // an id-bearing card: note keyed by sense_id
 		Status:     "misunderstood",
 		Quality:    1,
 		LearnedAt:  when,
