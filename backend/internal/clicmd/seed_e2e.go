@@ -1,9 +1,12 @@
 package clicmd
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
 
 	"github.com/at-ishikawa/langner/internal/dbseed"
@@ -64,7 +67,8 @@ var e2eHistoryFixtures = []e2eHistoryFixture{
 // suite asserts on, through the real write path (internal/dbseed) — replacing
 // the reset-db/import seed for e2e and the learning_notes YAML fixtures. Notebook
 // CONTENT is served from the on-disk fixtures (config.e2e.yml); this command
-// only seeds STATE (history), attributed to the initial-admin account.
+// only seeds STATE (history), attributed to the initial-admin account. Runs once
+// on a fresh DB at server start; the per-scenario reset uses reset-e2e.
 func NewMigrateSeedE2ECommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "seed-e2e",
@@ -81,39 +85,98 @@ func NewMigrateSeedE2ECommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("resolve seed owner: %w", err)
 			}
-
-			for _, f := range e2eHistoryFixtures {
-				day, perr := time.Parse("2006-01-02", f.Day)
-				if perr != nil {
-					return fmt.Errorf("bad fixture day %q: %w", f.Day, perr)
-				}
-				spec := dbseed.LearningLogSpec{
-					UserID:     ownerID,
-					NotebookID: f.Notebook,
-					Group:      f.Title,
-					QuizType:   f.QuizType,
-					Status:     f.Status,
-					Quality:    f.Quality,
-					LearnedAt:  day,
-				}
-				switch {
-				case f.Origin:
-					originID, oerr := dbseed.SeedEtymologyOrigin(ctx, db, f.Notebook, f.Word, "", "", "")
-					if oerr != nil {
-						return oerr
-					}
-					spec.OriginID = originID
-				case f.Grammar:
-					spec.SenseID = f.Word
-				default:
-					spec.Expression = f.Word
-				}
-				if err := dbseed.SeedLearningLog(ctx, db, spec); err != nil {
-					return err
-				}
+			if err := seedE2EHistory(ctx, db, ownerID); err != nil {
+				return err
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Seeded %d e2e learning-history rows.\n", len(e2eHistoryFixtures))
 			return nil
 		},
 	}
+}
+
+// e2eStateTables are the learning-content STATE tables seed-e2e populates and a
+// quiz run mutates. reset-e2e truncates exactly these back to the seeded
+// baseline; CASCADE clears their dependents (note_images / note_references /
+// note_origin_parts / etymology_origin_forms). users, notebooks (ownership), the
+// CLI auth tables, and schema_migrations are deliberately preserved so the
+// pre-minted access token keeps resolving (content is filesystem-served, so the
+// definitions/flashcard/concept content tables are never populated in e2e).
+var e2eStateTables = []string{
+	"learning_logs",
+	"notebook_notes",
+	"note_skip_flags",
+	"origin_skip_flags",
+	"grammar_corrections",
+	"etymology_origins",
+	"notes",
+}
+
+// NewMigrateResetE2ECommand restores the seeded e2e baseline between scenarios:
+// it TRUNCATEs the learning-content STATE tables (undoing the prior scenario's
+// quiz writes) and re-seeds the fixtures via the same fixtures-library path as
+// seed-e2e — with NO import pipeline (reset-db) and without touching auth, so
+// the harness's access token stays valid and no re-provision is needed.
+func NewMigrateResetE2ECommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reset-e2e",
+		Short: "Reset e2e learning state to the seeded baseline (truncate + fixtures reseed)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			cfg, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			ownerID, err := resolveSeedOwnerID(ctx, cfg, db)
+			if err != nil {
+				return fmt.Errorf("resolve seed owner: %w", err)
+			}
+			if _, err := db.ExecContext(ctx,
+				"TRUNCATE "+strings.Join(e2eStateTables, ", ")+" RESTART IDENTITY CASCADE"); err != nil {
+				return fmt.Errorf("truncate e2e state: %w", err)
+			}
+			if err := seedE2EHistory(ctx, db, ownerID); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reset e2e state and re-seeded %d learning-history rows.\n", len(e2eHistoryFixtures))
+			return nil
+		},
+	}
+}
+
+// seedE2EHistory inserts every e2eHistoryFixtures row through the fixtures
+// library (internal/dbseed) — the real write path — attributed to ownerID.
+func seedE2EHistory(ctx context.Context, db *sqlx.DB, ownerID int64) error {
+	for _, f := range e2eHistoryFixtures {
+		day, perr := time.Parse("2006-01-02", f.Day)
+		if perr != nil {
+			return fmt.Errorf("bad fixture day %q: %w", f.Day, perr)
+		}
+		spec := dbseed.LearningLogSpec{
+			UserID:     ownerID,
+			NotebookID: f.Notebook,
+			Group:      f.Title,
+			QuizType:   f.QuizType,
+			Status:     f.Status,
+			Quality:    f.Quality,
+			LearnedAt:  day,
+		}
+		switch {
+		case f.Origin:
+			originID, oerr := dbseed.SeedEtymologyOrigin(ctx, db, f.Notebook, f.Word, "", "", "")
+			if oerr != nil {
+				return oerr
+			}
+			spec.OriginID = originID
+		case f.Grammar:
+			spec.SenseID = f.Word
+		default:
+			spec.Expression = f.Word
+		}
+		if err := dbseed.SeedLearningLog(ctx, db, spec); err != nil {
+			return err
+		}
+	}
+	return nil
 }
