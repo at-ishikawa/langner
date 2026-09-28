@@ -101,6 +101,7 @@ func CardInfoFromFreeformCard(card FreeformCard) CardInfo {
 		SceneTitle:         card.SceneTitle,
 		Expression:         card.Expression,
 		OriginalExpression: card.OriginalExpression,
+		ID:                 card.ID,
 	}
 }
 
@@ -115,6 +116,7 @@ func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 		StoryTitle:   card.StoryTitle,
 		SceneTitle:   card.SceneTitle,
 		Expression:   card.Expression,
+		ID:           card.ID,
 	}
 }
 
@@ -273,6 +275,20 @@ func (s *Service) resolveSkipTarget(ctx context.Context, info CardInfo, expressi
 		if ferr != nil {
 			return 0, 0, fmt.Errorf("load notes to resolve exclude target: %w", ferr)
 		}
+		// A stable content sense_id is GLOBALLY unique (the partial unique index
+		// notes_sense_id_key), so it identifies the note regardless of which
+		// notebook the card came from — resolve by it BEFORE requiring notebook
+		// membership. This matters for a word shared across notebooks (e.g. an
+		// idiom that is also a story headword): a quiz answer may resolve it under
+		// one notebook whose notebook_notes link was never materialised, yet the
+		// canonical note still exists under its sense_id and must be excludable.
+		if info.ID != "" {
+			for i := range notes {
+				if notes[i].SenseID == info.ID {
+					return notes[i].ID, 0, nil
+				}
+			}
+		}
 		seen := make(map[int64]bool)
 		var matches []int64
 		for i := range notes {
@@ -286,9 +302,6 @@ func (s *Service) resolveSkipTarget(ctx context.Context, info CardInfo, expressi
 			}
 			if !linked {
 				continue
-			}
-			if info.ID != "" && n.SenseID == info.ID {
-				return n.ID, 0, nil
 			}
 			if strings.ToLower(strings.TrimSpace(n.Entry)) == target || strings.ToLower(strings.TrimSpace(n.Usage)) == target {
 				if !seen[n.ID] {
