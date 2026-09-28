@@ -98,6 +98,17 @@ type LearningLogSpec struct {
 	Quality    int    // 0–5
 	Interval   int    // interval_days; 0 → 1
 	LearnedAt  time.Time
+	// NotebookType is the note-targeted membership kind ("flashcard",
+	// "definition", "story"); "" → "flashcard". Ignored for origin/grammar
+	// logs. See SeedLearningLog for why a membership row is required.
+	NotebookType string
+	// Group is the note-targeted membership's title (notebook_notes."group").
+	// The history reconstruction keys a notebook's LearningHistory on it
+	// (Metadata.Title), and the quiz loaders match content cards to that
+	// history BY TITLE — so it MUST equal the on-disk notebook's display title
+	// (e.g. a flashcard book's `title`), or the seeded logs won't attach to the
+	// quiz's due/status counts. Ignored for origin/grammar logs.
+	Group string
 }
 
 // SeedLearningLog writes one learning_logs row through the REAL write path
@@ -131,6 +142,44 @@ func SeedLearningLog(ctx context.Context, db *sqlx.DB, spec LearningLogSpec) err
 	}
 	if err := learning.NewDBLearningRepository(db).Create(ctx, log); err != nil {
 		return fmt.Errorf("seed learning log %q/%q: %w", spec.NotebookID, spec.Expression, err)
+	}
+
+	// A note-targeted attempt: the real write path resolved/created the note
+	// but does NOT register its notebook membership — in production the note
+	// already carries a notebook_notes link from the content import. In a
+	// content-free seed the note is otherwise orphaned, and the DB history
+	// reconstruction finds a notebook's vocab via notebook_notes
+	// (DBNoteRepository.FindByNotebooks), so an unlinked note is invisible to
+	// analytics Day Detail, the Learn page, and the due-count reads. Link it.
+	if spec.Expression != "" && spec.OriginID == 0 && spec.SenseID == "" {
+		if err := ensureNotebookMembership(ctx, db, spec.NotebookID, spec.NotebookType, spec.Group, spec.Expression); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ensureNotebookMembership upserts the notebook_notes link for a seeded vocab
+// note so the notebook's history reconstruction can find it. notebookType
+// defaults to "flashcard" (the flat, scene-less kind); group/subgroup are empty
+// (flashcards have no scenes). The note is resolved by (usage, entry) exactly as
+// the write path stored it (usage=entry=expression for a seeded id-less note).
+func ensureNotebookMembership(ctx context.Context, db *sqlx.DB, notebookID, notebookType, group, expression string) error {
+	if notebookType == "" {
+		notebookType = "flashcard"
+	}
+	var noteID int64
+	if err := db.GetContext(ctx, &noteID,
+		`SELECT id FROM notes WHERE "usage" = $1 AND entry = $1 AND sense_id = '' ORDER BY id LIMIT 1`,
+		expression); err != nil {
+		return fmt.Errorf("resolve seeded note %q: %w", expression, err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, "group", subgroup)
+		 VALUES ($1, $2, $3, $4, '')
+		 ON CONFLICT (note_id, notebook_type, notebook_id, "group", subgroup) DO NOTHING`,
+		noteID, notebookType, notebookID, group); err != nil {
+		return fmt.Errorf("link note %d to notebook %q: %w", noteID, notebookID, err)
 	}
 	return nil
 }

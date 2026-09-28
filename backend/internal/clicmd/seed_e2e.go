@@ -21,6 +21,11 @@ type e2eHistoryFixture struct {
 	Quality  int
 	Origin   bool
 	Grammar  bool
+	// Title is the on-disk notebook's display title, carried onto the note's
+	// notebook_notes membership so the reconstructed LearningHistory matches
+	// the content the quiz loaders read BY TITLE (dbseed.LearningLogSpec.Group).
+	// Required for vocab (note) fixtures; ignored for origin/grammar.
+	Title string
 }
 
 // e2eHistoryFixtures replaces the old frontend/e2e/fixtures/learning_notes YAML.
@@ -31,18 +36,18 @@ type e2eHistoryFixture struct {
 var e2eHistoryFixtures = []e2eHistoryFixture{
 	// idioms (flashcard): a wrong notebook+reverse attempt on 01-02, a correct
 	// freeform recall on 01-03 — the analytics Day Detail "break the ice" case.
-	{Notebook: "idioms", Word: "break the ice", QuizType: "notebook", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
-	{Notebook: "idioms", Word: "break the ice", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
-	{Notebook: "idioms", Word: "break the ice", QuizType: "freeform", Status: "understood", Day: "2025-01-03", Quality: 4},
-	{Notebook: "idioms", Word: "lose one's temper", QuizType: "notebook", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
-	{Notebook: "idioms", Word: "lose one's temper", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
-	{Notebook: "idioms", Word: "lose one's temper", QuizType: "freeform", Status: "understood", Day: "2025-01-03", Quality: 4},
+	{Notebook: "idioms", Title: "Common Idioms", Word: "break the ice", QuizType: "notebook", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
+	{Notebook: "idioms", Title: "Common Idioms", Word: "break the ice", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
+	{Notebook: "idioms", Title: "Common Idioms", Word: "break the ice", QuizType: "freeform", Status: "understood", Day: "2025-01-03", Quality: 4},
+	{Notebook: "idioms", Title: "Common Idioms", Word: "lose one's temper", QuizType: "notebook", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
+	{Notebook: "idioms", Title: "Common Idioms", Word: "lose one's temper", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
+	{Notebook: "idioms", Title: "Common Idioms", Word: "lose one's temper", QuizType: "freeform", Status: "understood", Day: "2025-01-03", Quality: 4},
 
 	// reverse-progress (flashcard): learned on 01-01, missed in reverse on 01-02.
-	{Notebook: "reverse-progress", Word: "spick and span", QuizType: "freeform", Status: "understood", Day: "2025-01-01", Quality: 4},
-	{Notebook: "reverse-progress", Word: "spick and span", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
-	{Notebook: "reverse-progress", Word: "under the weather", QuizType: "freeform", Status: "understood", Day: "2025-01-01", Quality: 4},
-	{Notebook: "reverse-progress", Word: "under the weather", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
+	{Notebook: "reverse-progress", Title: "Reverse Progress", Word: "spick and span", QuizType: "freeform", Status: "understood", Day: "2025-01-01", Quality: 4},
+	{Notebook: "reverse-progress", Title: "Reverse Progress", Word: "spick and span", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
+	{Notebook: "reverse-progress", Title: "Reverse Progress", Word: "under the weather", QuizType: "freeform", Status: "understood", Day: "2025-01-01", Quality: 4},
+	{Notebook: "reverse-progress", Title: "Reverse Progress", Word: "under the weather", QuizType: "reverse", Status: "misunderstood", Day: "2025-01-02", Quality: 1},
 
 	// practice (grammar): a missed grammar correction — the analytics
 	// "labeled grammar, not notebook" case (Word is the correction sense_id).
@@ -85,6 +90,7 @@ func NewMigrateSeedE2ECommand() *cobra.Command {
 				spec := dbseed.LearningLogSpec{
 					UserID:     ownerID,
 					NotebookID: f.Notebook,
+					Group:      f.Title,
 					QuizType:   f.QuizType,
 					Status:     f.Status,
 					Quality:    f.Quality,
