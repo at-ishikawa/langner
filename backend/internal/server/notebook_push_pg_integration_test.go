@@ -17,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
+	"github.com/at-ishikawa/langner/internal/dbseed"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -61,8 +62,8 @@ func newPushFixture(t *testing.T) pushFixture {
 	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
 
 	seedUser := func(sub string) int64 {
-		var id int64
-		require.NoError(t, db.Get(&id, `INSERT INTO users (google_sub, username) VALUES ($1, $1) RETURNING id`, sub))
+		id, err := dbseed.SeedUser(context.Background(), db, sub, "")
+		require.NoError(t, err)
 		return id
 	}
 	ownerID := seedUser("push-owner")
@@ -305,10 +306,7 @@ func TestPushNotebook_UpdatesExistingOwnedId_LivePostgres_Integration(t *testing
 
 	// Simulate a prior filesystem import: a shipped notebook under a human id
 	// the owner claimed (private, source='shipped').
-	_, err := f.db.Exec(
-		`INSERT INTO notebooks (notebook_id, owner_user_id, visibility, source) VALUES ('roots-mini', $1, 'private', 'shipped')`,
-		f.ownerID)
-	require.NoError(t, err)
+	require.NoError(t, dbseed.SetNotebookOwner(ctx, f.db, "roots-mini", &f.ownerID, "private", "shipped"))
 
 	// Push the composite roots-mini bundle (its index.yml declares id roots-mini).
 	resp, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{
