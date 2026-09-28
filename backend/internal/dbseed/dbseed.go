@@ -55,12 +55,44 @@ func SetNotebookOwner(ctx context.Context, db *sqlx.DB, notebookID string, owner
 	return nil
 }
 
-// LearningLogSpec is a compact learning-history fixture: a single attempt on a
-// word in a notebook, for a given user, at a given time.
+// SeedEtymologyOrigin upserts an etymology_origins row and returns its id, so an
+// etymology-origin learning log can target it. type/language/meaning default to
+// generic non-empty values (analytics Day Detail only displays `origin`).
+func SeedEtymologyOrigin(ctx context.Context, db *sqlx.DB, notebookID, origin, originType, language, meaning string) (int64, error) {
+	if originType == "" {
+		originType = "root"
+	}
+	if language == "" {
+		language = "Latin"
+	}
+	if meaning == "" {
+		meaning = origin
+	}
+	// The live unique key is (notebook_id, session_title, origin, language,
+	// sense); session_title/sense default to '' and are irrelevant to what the
+	// analytics Day Detail displays (the origin string), so seed them empty.
+	var id int64
+	if err := db.GetContext(ctx, &id,
+		`INSERT INTO etymology_origins (notebook_id, session_title, origin, type, language, sense, meaning)
+		 VALUES ($1, '', $2, $3, $4, '', $5)
+		 ON CONFLICT (notebook_id, session_title, origin, language, sense) DO UPDATE SET meaning = EXCLUDED.meaning
+		 RETURNING id`,
+		notebookID, origin, originType, language, meaning); err != nil {
+		return 0, fmt.Errorf("seed etymology origin %q/%q: %w", notebookID, origin, err)
+	}
+	return id, nil
+}
+
+// LearningLogSpec is a compact learning-history fixture: a single attempt for a
+// user at a time, targeting exactly one of a note (Expression → real note write
+// path), an etymology origin (OriginID from SeedEtymologyOrigin), or a grammar
+// correction (SenseID with QuizType "grammar" → real ensureGrammarCorrection).
 type LearningLogSpec struct {
 	UserID     int64
 	NotebookID string // source_notebook_id
-	Expression string // resolved/created into a note by the real write path
+	Expression string // note-targeted: resolved/created into a note by the real write path
+	OriginID   int64  // etymology-origin-targeted
+	SenseID    string // grammar-targeted (with QuizType "grammar")
 	QuizType   string // "" → "notebook"
 	Status     string // "" → "misunderstood" (a wrong attempt — what analytics Day Detail surfaces)
 	Quality    int    // 0–5
@@ -88,6 +120,8 @@ func SeedLearningLog(ctx context.Context, db *sqlx.DB, spec LearningLogSpec) err
 	log := &learning.LearningLog{
 		UserID:           spec.UserID,
 		Expression:       spec.Expression,
+		OriginID:         spec.OriginID,
+		SenseID:          spec.SenseID,
 		SourceNotebookID: spec.NotebookID,
 		Status:           status,
 		QuizType:         quizType,
