@@ -1,0 +1,26 @@
+# Etymology origins are tracked as a flat block (one session per block,
+# origins at the top level, type: origin) carrying a single
+# etymology_origin_logs series per origin — the shape FindOriginExpression
+# and the YAML analytics repository both read. The 2025-01-02 misunderstood
+# entry makes each origin due for the Etymology Origin quiz AND surfaces it
+# on the Analytics Day Detail for that date.
+- metadata:
+    id: word-stems
+    title: "Word Stems"
+  expressions:
+    - expression: scribo
+      type: origin
+      etymology_origin_logs:
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
+          quality: 1
+          quiz_type: etymology_origin
+          interval_days: 1
+    - expression: dico
+      type: origin
+      etymology_origin_logs:
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
+          quality: 1
+          quiz_type: etymology_origin
+          interval_days: 1

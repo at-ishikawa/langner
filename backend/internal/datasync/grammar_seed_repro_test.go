@@ -41,8 +41,11 @@ func (f *fakeGrammarRepoRepro) FindOrCreate(_ context.Context, notebookID, sense
 // the etymology-origin seed. The true Postgres round-trip is Postgres-only and
 // NOT exercised here.
 func TestStateSeeder_SeedGrammarCorrections_FromE2EFixtures(t *testing.T) {
-	repoRoot, _ := filepath.Abs("../../..")
-	learningNotes := filepath.Join(repoRoot, "frontend", "e2e", "fixtures", "learning_notes")
+	// The learning-history YAML is no longer shipped as e2e/example content
+	// (e2e seeds state via internal/dbseed). This StateSeeder YAML-import path
+	// is still live for real-data reset-db/sync-db, so its regression fixtures
+	// live here as test-local testdata.
+	learningNotes := filepath.Join("testdata", "learning_notes")
 
 	learnRepo := &fakeLearningRepoRepro{}
 	grammarRepo := &fakeGrammarRepoRepro{}

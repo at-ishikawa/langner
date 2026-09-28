@@ -106,7 +106,7 @@ func NewMigrateSeedE2ECommand() *cobra.Command {
 					return err
 				}
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Seeded %d e2e learning-history rows.\n", len(e2eHistoryFixtures))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Seeded %d e2e learning-history rows.\n", len(e2eHistoryFixtures))
 			return nil
 		},
 	}

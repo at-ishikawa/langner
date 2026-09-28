@@ -1,0 +1,23 @@
+# Flat etymology-origin learning block (see word-stems.yml). graph and tele
+# carry a stale misunderstood etymology_origin_log so they stay due for the
+# Etymology Origin quiz even without the "include unstudied" toggle.
+- metadata:
+    id: word-roots
+    title: "Word Roots"
+  expressions:
+    - expression: graph
+      type: origin
+      etymology_origin_logs:
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
+          quality: 1
+          quiz_type: etymology_origin
+          interval_days: 1
+    - expression: tele
+      type: origin
+      etymology_origin_logs:
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
+          quality: 1
+          quiz_type: etymology_origin
+          interval_days: 1
