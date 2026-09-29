@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"connectrpc.com/connect"
@@ -397,14 +398,36 @@ func newNotebooksListCommand() *cobra.Command {
 			}
 			entries := resp.Msg.Notebooks
 			sort.Slice(entries, func(i, j int) bool { return entries[i].NotebookId < entries[j].NotebookId })
+			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
+			fmt.Fprintln(tw, "NOTEBOOK ID\tTYPE\tVISIBILITY\tSIZE\tNAME")
 			for _, e := range entries {
-				fmt.Printf("%s  %-12s  %-8s  %5dB  %s\n", e.NotebookId, e.Kind, e.Visibility, e.ByteSize, e.Name)
+				kind := e.Kind
+				if kind == "" {
+					kind = "-"
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.NotebookId, kind, e.Visibility, humanizeBytes(int64(e.ByteSize)), e.Name)
 			}
-			return nil
+			return tw.Flush()
 		},
 	}
 	cmd.Flags().StringVar(&server, "server", "", "server base URL")
 	return cmd
+}
+
+// humanizeBytes renders a byte count as a compact, right-sized string (e.g.
+// "9.4 KB", "271 KB", "1.2 MB") so the size column stays readable and aligned
+// instead of printing raw byte counts of wildly different widths.
+func humanizeBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGT"[exp])
 }
 
 // bundleContentHash mirrors notebook.HashBundle for the client-side hash the
