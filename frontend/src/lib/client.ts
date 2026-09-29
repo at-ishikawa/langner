@@ -5,20 +5,27 @@ import { NotebookService } from "@/gen-protos/api/v1/notebook_pb";
 import { AnalyticsService } from "@/gen-protos/api/v1/analytics_pb";
 import { getAccessToken } from "./authToken";
 import { redirectToSignIn } from "./auth";
+import { tryRefreshSession } from "./refresh";
 
-// authFetch attaches the in-memory bearer access token to every RPC and, on a
-// 401 (missing/expired token), triggers a silent redirect through Google to
-// re-mint one (returning the user to where they were). Auth is a header, not a
-// cookie, so no `credentials: "include"`.
+// authFetch attaches the bearer access token to every RPC. On a 401
+// (missing/expired token) it first tries a silent refresh (exchange the
+// stored refresh token for a new access token) and retries the request; only if
+// that fails does it fall back to a redirect through Google. Auth is a header,
+// not a cookie, so no `credentials: "include"`.
 const authFetch: typeof fetch = async (input, init) => {
-  const token = getAccessToken();
-  const headers = new Headers(init?.headers);
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  const res = await fetch(input, { ...init, headers });
+  const send = (token: string | null): Promise<Response> => {
+    const headers = new Headers(init?.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  };
+  let res = await send(getAccessToken());
   if (res.status === 401 && typeof window !== "undefined") {
-    redirectToSignIn();
+    if (await tryRefreshSession()) {
+      res = await send(getAccessToken());
+    }
+    if (res.status === 401) {
+      redirectToSignIn();
+    }
   }
   return res;
 };

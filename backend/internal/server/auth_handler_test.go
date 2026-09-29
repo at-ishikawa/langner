@@ -161,4 +161,9 @@ func TestAuthHandler_CallbackRedirect_OpenRedirectGuard(t *testing.T) {
 		before, _, _ := strings.Cut(got, "#")
 		assert.NotContains(t, before, "JWT")
 	})
+
+	t.Run("refresh token is NOT in the fragment (it rides the HttpOnly cookie)", func(t *testing.T) {
+		got := h.callbackRedirect("/learn", "JWT")
+		assert.NotContains(t, got, "refresh_token=")
+	})
 }

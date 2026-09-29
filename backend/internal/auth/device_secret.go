@@ -36,6 +36,17 @@ func GenerateRefreshToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+// GenerateFamilyID returns an opaque id that tags a refresh-token rotation
+// chain (one sign-in / one device). It is NOT a secret and is stored in the
+// clear, so it only needs to be unique and unguessable enough not to collide.
+func GenerateFamilyID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		return "", fmt.Errorf("read family id: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
 // GenerateUserCode returns an 8-character human code rendered as XXXX-XXXX from
 // the unambiguous alphabet. ~28^8 space; combined with a 15-min expiry and rate
 // limiting it is impractical to brute-force on the approval page.

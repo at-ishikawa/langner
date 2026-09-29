@@ -1,11 +1,12 @@
 // In-memory langner access-token store.
 //
-// The web SPA holds ONLY the 24h access token, and ONLY in memory — never in a
-// cookie and never in localStorage. It is delivered by the OAuth callback in
-// the URL fragment (see src/app/auth/callback/page.tsx) and, on expiry or a
-// hard reload, re-acquired by a silent redirect through Google. Because the
-// token lives in module memory it is lost on a full page load, which is exactly
-// the trigger for that silent re-auth.
+// The SPA holds ONLY the short-lived (24h) access token, and ONLY in memory —
+// never in a cookie and never in localStorage. The long-lived REFRESH token is
+// kept by the browser in an HttpOnly cookie that JavaScript cannot read (see
+// src/lib/refresh.ts), so an XSS bug cannot exfiltrate a durable credential.
+// On a full page load the in-memory access token is gone, which triggers a
+// silent refresh (the cookie rides along) to mint a new one — keeping the user
+// signed in for weeks without any token being readable by scripts.
 //
 // e2e seam: the harness injects `window.__LANGNER_ACCESS_TOKEN__` before app
 // scripts run (Playwright addInitScript) so every full page load re-seeds the
@@ -35,13 +36,15 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
-// setAccessToken replaces the in-memory token and notifies subscribers.
+// setAccessToken replaces the in-memory token and notifies subscribers. Called
+// with the fragment token at sign-in and with the refreshed token on each
+// silent refresh.
 export function setAccessToken(token: string | null): void {
   accessToken = token;
   emit();
 }
 
-// clearAccessToken drops the in-memory token (web logout).
+// clearAccessToken drops the in-memory token (web logout / unrecoverable refresh).
 export function clearAccessToken(): void {
   accessToken = null;
   emit();

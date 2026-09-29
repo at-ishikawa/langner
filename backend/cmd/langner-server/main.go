@@ -378,6 +378,7 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*authComponents, error) {
 		State:          state,
 		Users:          users,
 		DeviceCodes:    deviceCodes,
+		RefreshTokens:  refreshTokens,
 		AllowedEmails:  cfg.Auth.AllowedEmails,
 		FrontendURL:    cfg.Auth.FrontendURL,
 		AllowedOrigins: cfg.Server.CORS.AllowedOrigins,
@@ -390,6 +391,8 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*authComponents, error) {
 		Tokens:          tokens,
 		FrontendURL:     cfg.Auth.FrontendURL,
 		VerificationURI: deviceVerificationURI(cfg.Auth.RedirectURL),
+		CookieSecure:    cfg.Auth.CookieSecure,
+		CookieSameSite:  parseSameSite(cfg.Auth.CookieSameSite),
 	})
 	return &authComponents{handler: handler, deviceHandler: deviceHandler, tokens: tokens, deviceCodes: deviceCodes}, nil
 }

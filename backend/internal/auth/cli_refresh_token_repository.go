@@ -13,10 +13,13 @@ import (
 // ErrRefreshTokenNotFound is returned when no refresh row matches a hash.
 var ErrRefreshTokenNotFound = errors.New("refresh token not found")
 
-// CLIRefreshToken is one hashed refresh-token record.
+// CLIRefreshToken is one hashed refresh-token record. FamilyID tags the
+// rotation chain it belongs to (one sign-in / one device) so a compromise
+// revokes only that chain, not every token for the user.
 type CLIRefreshToken struct {
 	ID        int64        `db:"id"`
 	UserID    int64        `db:"user_id"`
+	FamilyID  string       `db:"family_id"`
 	TokenHash string       `db:"token_hash"`
 	ExpiresAt time.Time    `db:"expires_at"`
 	CreatedAt time.Time    `db:"created_at"`
@@ -34,14 +37,15 @@ func NewCLIRefreshTokenRepository(db *sqlx.DB) *CLIRefreshTokenRepository {
 	return &CLIRefreshTokenRepository{db: db}
 }
 
-// Create inserts a refresh-token row storing only its hash.
-func (r *CLIRefreshTokenRepository) Create(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) (*CLIRefreshToken, error) {
+// Create inserts a refresh-token row storing only its hash, tagged with the
+// rotation chain's familyID (a fresh id at sign-in; carried forward on rotation).
+func (r *CLIRefreshTokenRepository) Create(ctx context.Context, userID int64, familyID, tokenHash string, expiresAt time.Time) (*CLIRefreshToken, error) {
 	var row CLIRefreshToken
 	if err := r.db.GetContext(ctx, &row,
-		`INSERT INTO cli_refresh_tokens (user_id, token_hash, expires_at)
-		 VALUES ($1, $2, $3)
-		 RETURNING id, user_id, token_hash, expires_at, created_at, revoked_at`,
-		userID, tokenHash, expiresAt); err != nil {
+		`INSERT INTO cli_refresh_tokens (user_id, family_id, token_hash, expires_at)
+		 VALUES ($1, $2, $3, $4)
+		 RETURNING id, user_id, family_id, token_hash, expires_at, created_at, revoked_at`,
+		userID, familyID, tokenHash, expiresAt); err != nil {
 		return nil, fmt.Errorf("create refresh token: %w", err)
 	}
 	return &row, nil
@@ -53,7 +57,7 @@ func (r *CLIRefreshTokenRepository) Create(ctx context.Context, userID int64, to
 func (r *CLIRefreshTokenRepository) FindByHash(ctx context.Context, tokenHash string) (*CLIRefreshToken, error) {
 	var row CLIRefreshToken
 	err := r.db.GetContext(ctx, &row,
-		`SELECT id, user_id, token_hash, expires_at, created_at, revoked_at
+		`SELECT id, user_id, family_id, token_hash, expires_at, created_at, revoked_at
 		 FROM cli_refresh_tokens WHERE token_hash = $1`, tokenHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrRefreshTokenNotFound
@@ -87,12 +91,14 @@ func (r *CLIRefreshTokenRepository) RevokeByHash(ctx context.Context, tokenHash 
 	return nil
 }
 
-// RevokeFamily revokes every still-live refresh token for a user — the
-// compromise response when an already-rotated token is reused.
-func (r *CLIRefreshTokenRepository) RevokeFamily(ctx context.Context, userID int64, at time.Time) error {
+// RevokeFamily revokes every still-live refresh token in ONE rotation chain —
+// the compromise response when an already-rotated token is reused. Scoped to the
+// family (one sign-in / one device), NOT the whole user, so a replay on the web
+// does not log out the user's CLI devices and vice-versa.
+func (r *CLIRefreshTokenRepository) RevokeFamily(ctx context.Context, familyID string, at time.Time) error {
 	if _, err := r.db.ExecContext(ctx,
-		`UPDATE cli_refresh_tokens SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL`,
-		at, userID); err != nil {
+		`UPDATE cli_refresh_tokens SET revoked_at = $1 WHERE family_id = $2 AND revoked_at IS NULL`,
+		at, familyID); err != nil {
 		return fmt.Errorf("revoke refresh token family: %w", err)
 	}
 	return nil

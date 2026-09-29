@@ -88,24 +88,27 @@ func TestCLIRepositories_LivePostgres(t *testing.T) {
 		token, err := GenerateRefreshToken()
 		require.NoError(t, err)
 		now := time.Now()
-		row, err := refreshRepo.Create(ctx, user.ID, HashSecret(token), now.Add(30*24*time.Hour))
+		row, err := refreshRepo.Create(ctx, user.ID, "fam-1", HashSecret(token), now.Add(30*24*time.Hour))
 		require.NoError(t, err)
 		assert.False(t, row.RevokedAt.Valid)
+		assert.Equal(t, "fam-1", row.FamilyID)
 
 		found, err := refreshRepo.FindByHash(ctx, HashSecret(token))
 		require.NoError(t, err)
 		assert.Equal(t, row.ID, found.ID)
+		assert.Equal(t, "fam-1", found.FamilyID)
 
 		require.NoError(t, refreshRepo.Revoke(ctx, row.ID, now))
 		reFound, err := refreshRepo.FindByHash(ctx, HashSecret(token))
 		require.NoError(t, err)
 		assert.True(t, reFound.RevokedAt.Valid, "revoke stamps revoked_at")
 
-		// A second live token, then family revoke kills all live tokens.
+		// A second live token in the SAME family, then family revoke kills all
+		// live tokens in that family.
 		token2, _ := GenerateRefreshToken()
-		row2, err := refreshRepo.Create(ctx, user.ID, HashSecret(token2), now.Add(30*24*time.Hour))
+		row2, err := refreshRepo.Create(ctx, user.ID, "fam-1", HashSecret(token2), now.Add(30*24*time.Hour))
 		require.NoError(t, err)
-		require.NoError(t, refreshRepo.RevokeFamily(ctx, user.ID, now))
+		require.NoError(t, refreshRepo.RevokeFamily(ctx, "fam-1", now))
 		after, err := refreshRepo.FindByHash(ctx, HashSecret(token2))
 		require.NoError(t, err)
 		assert.True(t, after.RevokedAt.Valid, "family revoke kills row2 (id %d)", row2.ID)

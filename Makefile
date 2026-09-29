@@ -2,6 +2,9 @@ OPENAI_API_KEY ?=
 GEMINI_API_KEY ?=
 INFERENCE_MODE ?=
 API_BASE_URL ?= http://localhost:8080
+# Server-side target the Next dev server proxies /auth to; defaults to a
+# locally-reachable backend (see frontend/Makefile / next.config.ts).
+AUTH_PROXY_TARGET ?= http://localhost:8080
 DATABASE_URL ?= postgres://user:password@localhost:5432/local?sslmode=disable
 
 .PHONY: pre-commit
@@ -61,7 +64,7 @@ dev-backend: check-api-key
 
 .PHONY: dev-frontend
 dev-frontend:
-	$(MAKE) -C frontend dev API_BASE_URL=$(API_BASE_URL)
+	$(MAKE) -C frontend dev API_BASE_URL=$(API_BASE_URL) AUTH_PROXY_TARGET=$(AUTH_PROXY_TARGET)
 
 BUF_VERSION ?= v1.66.0
 
