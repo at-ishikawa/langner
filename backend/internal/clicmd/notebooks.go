@@ -399,13 +399,13 @@ func newNotebooksListCommand() *cobra.Command {
 			entries := resp.Msg.Notebooks
 			sort.Slice(entries, func(i, j int) bool { return entries[i].NotebookId < entries[j].NotebookId })
 			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
-			fmt.Fprintln(tw, "NOTEBOOK ID\tTYPE\tVISIBILITY\tSIZE\tNAME")
+			_, _ = fmt.Fprintln(tw, "NOTEBOOK ID\tTYPE\tVISIBILITY\tSIZE\tNAME")
 			for _, e := range entries {
 				kind := e.Kind
 				if kind == "" {
 					kind = "-"
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.NotebookId, kind, e.Visibility, humanizeBytes(int64(e.ByteSize)), e.Name)
+				_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.NotebookId, kind, e.Visibility, humanizeBytes(int64(e.ByteSize)), e.Name)
 			}
 			return tw.Flush()
 		},
