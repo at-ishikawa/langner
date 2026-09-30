@@ -26,6 +26,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/inference/fallback"
 	"github.com/at-ishikawa/langner/internal/inference/gemini"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
@@ -65,30 +66,47 @@ func run(ctx context.Context) error {
 	}
 
 	var inferenceClient inference.Client
-	switch cfg.Inference.Mode {
-	case "mock":
+	if cfg.Inference.Mode == "mock" {
 		inferenceClient = mock.NewClient()
 		slog.Info("using mock inference client (substring grader)")
-	case "gemini":
+	} else {
+		// The mode selects the PRIMARY provider ("gemini" → Gemini, anything else
+		// → OpenAI). Whenever the OTHER provider's key is also configured, it is
+		// wrapped as an automatic fallback used ONLY on a primary rate-limit /
+		// quota error (see internal/inference/fallback) — so a rate-limited Gemini
+		// relearn transparently retries on OpenAI, and vice versa.
+		var gem, oai inference.Client
 		if cfg.Gemini.APIKey != "" {
-			geminiClient := gemini.NewClient(cfg.Gemini.APIKey, cfg.Gemini.Model, inference.DefaultMaxRetryAttempts)
-			defer func() {
-				_ = geminiClient.Close()
-			}()
-			inferenceClient = geminiClient
-			slog.Info("using Gemini inference provider", "model", cfg.Gemini.Model)
-		} else {
-			slog.Warn("GEMINI_API_KEY is not set; quiz grading features will be unavailable")
+			c := gemini.NewClient(cfg.Gemini.APIKey, cfg.Gemini.Model, inference.DefaultMaxRetryAttempts)
+			defer func() { _ = c.Close() }()
+			gem = c
 		}
-	default:
 		if cfg.OpenAI.APIKey != "" {
-			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
-			defer func() {
-				_ = openaiClient.Close()
-			}()
-			inferenceClient = openaiClient
-		} else {
-			slog.Warn("OPENAI_API_KEY is not set; quiz grading features will be unavailable")
+			c := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
+			defer func() { _ = c.Close() }()
+			oai = c
+		}
+
+		primary, secondary := oai, gem
+		primaryName, secondaryName := "OpenAI", "Gemini"
+		if cfg.Inference.Mode == "gemini" {
+			primary, secondary = gem, oai
+			primaryName, secondaryName = "Gemini", "OpenAI"
+		}
+
+		switch {
+		case primary != nil && secondary != nil:
+			inferenceClient = fallback.NewClient(primary, secondary)
+			slog.Info("using inference provider with automatic rate-limit fallback",
+				"primary", primaryName, "fallback", secondaryName)
+		case primary != nil:
+			inferenceClient = primary
+			slog.Info("using inference provider (no fallback key configured)", "provider", primaryName)
+		case secondary != nil:
+			inferenceClient = secondary
+			slog.Info("primary provider key missing; using the other provider without fallback", "provider", secondaryName)
+		default:
+			slog.Warn("no inference API key set (OPENAI_API_KEY / GEMINI_API_KEY); quiz grading features will be unavailable")
 		}
 	}
 
