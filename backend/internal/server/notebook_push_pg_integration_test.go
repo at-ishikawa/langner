@@ -17,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
+	"github.com/at-ishikawa/langner/internal/dbseed"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -61,8 +62,8 @@ func newPushFixture(t *testing.T) pushFixture {
 	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
 
 	seedUser := func(sub string) int64 {
-		var id int64
-		require.NoError(t, db.Get(&id, `INSERT INTO users (google_sub, username) VALUES ($1, $1) RETURNING id`, sub))
+		id, err := dbseed.SeedUser(context.Background(), db, sub, "")
+		require.NoError(t, err)
 		return id
 	}
 	ownerID := seedUser("push-owner")
@@ -271,7 +272,79 @@ func TestPushNotebook_Composite_LivePostgres_Integration(t *testing.T) {
 	require.NotEmpty(t, originMeaning,
 		"a composite-pushed definitions word must carry an etymology-sourced origin meaning — proving both families round-tripped under one minted id")
 
+	// Listing regressions: with includeUnstudied=false nothing is due for a fresh
+	// push, which used to (a) skip the definitions-book summary entirely and (b)
+	// name it by the raw nb_ id. Assert the Books summary still lists and is named
+	// from the etymology sibling index, not the id.
+	summaries, err := f.svc.LoadNotebookSummaries(f.ownerID, false)
+	require.NoError(t, err)
+	var defsSummary *quiz.NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == nbID && summaries[i].Kind == "Books" {
+			defsSummary = &summaries[i]
+			break
+		}
+	}
+	require.NotNil(t, defsSummary, "a 0-due composite book must still be listed, not skipped")
+	assert.NotEqual(t, nbID, defsSummary.Name, "the summary must not display the raw nb_ id as the name")
+	assert.Contains(t, defsSummary.Name, "Roots Mini", "the name resolves from the etymology sibling index")
+
 	// Private by default: a non-owner cannot load it.
 	_, err = f.svc.LoadCards(f.nonOwnerID, []string{nbID}, true, nil)
 	require.Error(t, err, "a composite push is private to its owner")
+}
+
+// TestPushNotebook_UpdatesExistingOwnedId_LivePostgres_Integration pins the
+// create-or-update policy: a fresh push mints a new nb_ id, but when the bundle
+// declares an id that ALREADY EXISTS and the caller OWNS it, push updates it in
+// place — preserving the id (so learning history stays attached) and its source
+// ('shipped' stays 'shipped'), not minting a new notebook.
+func TestPushNotebook_UpdatesExistingOwnedId_LivePostgres_Integration(t *testing.T) {
+	f := newPushFixture(t)
+	ctx := context.Background()
+	ownerCtx := testutil.WithTestUser(ctx, f.ownerID)
+
+	// Simulate a prior filesystem import: a shipped notebook under a human id
+	// the owner claimed (private, source='shipped').
+	require.NoError(t, dbseed.SetNotebookOwner(ctx, f.db, "roots-mini", &f.ownerID, "private", "shipped"))
+
+	// Push the composite roots-mini bundle (its index.yml declares id roots-mini).
+	resp, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind:  "composite",
+		Name:  "Roots Mini",
+		Files: compositeRootsBundle(t),
+	}))
+	require.NoError(t, err)
+
+	// Updated in place under the SAME human id — NOT minted as a new nb_.
+	assert.Equal(t, "roots-mini", resp.Msg.NotebookId, "an owned declared id updates in place, not minting a new nb_")
+	assert.False(t, strings.HasPrefix(resp.Msg.NotebookId, notebook.NotebookIDPrefix), "must not mint an nb_ id when updating an existing owned notebook")
+
+	// Source preserved: a re-pushed shipped notebook stays 'shipped'.
+	var source string
+	require.NoError(t, f.db.Get(&source, `SELECT source FROM notebooks WHERE notebook_id = 'roots-mini'`))
+	assert.Equal(t, "shipped", source, "updating a shipped notebook must not reclassify it as user")
+
+	// Blobs were (re)written under the preserved id.
+	var blobs int
+	require.NoError(t, f.db.Get(&blobs, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = 'roots-mini'`))
+	assert.Greater(t, blobs, 0, "the push stored blobs under the preserved id")
+
+	// "My notebooks" = everything owned: the owned source='shipped' notebook is
+	// listed by ListUserNotebooks, not filtered out for not being source='user'.
+	owned, lerr := f.notebookHandler.fileRepo.ListUserNotebooks(ctx, f.ownerID)
+	require.NoError(t, lerr)
+	var ownedIDs []string
+	for _, n := range owned {
+		ownedIDs = append(ownedIDs, n.NotebookID)
+	}
+	assert.Contains(t, ownedIDs, "roots-mini", "an owned source='shipped' notebook must be listed among the owner's notebooks")
+
+	// A different user pushing that same declared id is rejected (ownership).
+	_, err = f.notebookHandler.PushNotebook(testutil.WithTestUser(ctx, f.nonOwnerID), connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind:  "composite",
+		Name:  "Roots Mini",
+		Files: compositeRootsBundle(t),
+	}))
+	require.Error(t, err, "a non-owner cannot update someone else's notebook by declaring its id")
 }

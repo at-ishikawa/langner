@@ -65,7 +65,7 @@ db-schema-rollback:
 .PHONY: db-import
 db-import:
 	$(GO) build -o ../langner-admin ./cmd/langner-admin
-	cd .. && ./langner-admin migrate import-db --config config.example.yml
+	cd .. && ./langner-admin migrate reset-db --config config.example.yml
 
 .PHONY: install-tools
 install-tools:

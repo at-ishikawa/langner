@@ -1,33 +1,21 @@
 // Per-scenario state reset for the e2e harness.
 //
-// The e2e stack runs the backend in DB mode against ONE Postgres seeded once
-// in global-setup, with workers:1 and no reset between scenarios. Once PR #26
-// serves learning-history reads from the database, a quiz answer written in an
-// earlier scenario PERSISTS and changes what a later scenario sees (a word
-// answered correctly in quiz-freeform is no longer due in quiz-standard). The
-// scenarios are each self-contained, so we restore the seeded baseline before
-// every one.
+// The e2e stack runs the backend in DB mode against ONE Postgres seeded once in
+// global-setup, with workers:1 and no reset between scenarios. DB-mode reads
+// reflect earlier scenarios' quiz writes (a word answered correctly in
+// quiz-freeform is no longer due in quiz-standard), so we restore the seeded
+// baseline before every scenario.
 //
-// Two stores must return to baseline:
-//   1. The database (vocabulary / etymology history) — `langner-admin migrate
-//      reset-db` clears every data table and re-imports + re-seeds from the
-//      source YAML.
-//   2. The on-disk learning_notes YAML — the app dual-writes to it, and grammar
-//      history is read from it (grammar has no DB home), so restore it from git
-//      before re-importing.
+// Restoring the baseline is a single `langner-admin migrate reset-e2e`: it
+// TRUNCATEs the learning-content STATE tables (undoing the prior scenario's
+// quiz writes) and re-seeds the SAME deterministic fixtures the server started
+// with, through the fixtures library (internal/dbseed) — NOT the import pipeline
+// (reset-db) and NOT the removed learning_notes YAML. Notebook CONTENT is served
+// from the on-disk fixtures, never the DB, so there is nothing to re-import.
 //
-// The auth accounts + notebook ownership `reset-db` CANNOT restore: auth
-// provisioning is now DECOUPLED from reset-db (it no longer runs implicitly), so
-// we run `langner-admin auth provision` explicitly after every reset to re-upsert
-// the allowlist/admin accounts and re-assign notebook ownership from the config's
-// notebook_ownership block. `reset-db` drops + re-migrates the managed tables
-// (`users` among them, migration 024) and re-imports the YAML, which wipes those
-// rows and would leave the pre-minted access token (see global-setup.ts)
-// pointing at a nonexistent user — so `/auth/me` 401s and every authenticated
-// page redirects to sign-in. We therefore re-provision and re-mint the same
-// allowlisted user after every reset. The scoped rebuild restarts the BIGSERIAL
-// sequence, so the re-inserted user reclaims id=1 and the seed-time access token
-// (its `sub` = user id, signed with the fixed test key) keeps resolving.
+// reset-e2e deliberately leaves users, notebook ownership, and the CLI auth
+// tables untouched, so the pre-minted access token (see global-setup.ts) keeps
+// resolving to the same user id=1 — no re-provision or re-mint needed.
 
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -36,47 +24,17 @@ import { join } from "node:path";
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const CONFIG_PATH = process.env.LANGNER_TEST_CONFIG ?? "config.e2e.yml";
 const DB_PASSWORD = process.env.LANGNER_TEST_DB_PASSWORD ?? "password";
-// Must match the email seed-and-serve.sh mints the access token for.
-const E2E_EMAIL = process.env.E2E_EMAIL ?? "e2e@example.com";
-const LEARNING_NOTES = "frontend/e2e/fixtures/learning_notes";
-
-function git(args: string[]): void {
-  execFileSync("git", args, { cwd: REPO_ROOT, stdio: "pipe" });
-}
 
 /**
- * Restore the seeded baseline: revert any learning_notes the app mutated, then
- * rebuild the database from that clean YAML. Fast (clear + import + seed, no
- * roundtrip diff). Throws with captured output on failure so a broken reset is
- * visible in CI rather than silently corrupting later scenarios.
+ * Restore the seeded baseline: truncate the learning-content state tables and
+ * re-seed the deterministic fixtures via the fixtures library. Throws with
+ * captured output on failure so a broken reset is visible in CI rather than
+ * silently corrupting later scenarios.
  */
 export function resetState(): void {
-  // 1. Restore mutated + drop any newly-created learning-note YAML files.
-  git(["checkout", "--", LEARNING_NOTES]);
-  git(["clean", "-fdq", LEARNING_NOTES]);
-
-  // 2. Rebuild the DB to the seeded baseline from the restored YAML.
-  execFileSync("./langner-admin", ["migrate", "reset-db", "--config", CONFIG_PATH], {
+  execFileSync("./langner-admin", ["migrate", "reset-e2e", "--config", CONFIG_PATH], {
     cwd: REPO_ROOT,
     stdio: "pipe",
     env: { ...process.env, DB_PASSWORD },
   });
-
-  // 3. Re-provision auth accounts + notebook ownership the rebuild wiped (auth
-  //    provisioning is decoupled from reset-db, so it must run explicitly).
-  execFileSync("./langner-admin", ["auth", "provision", "--config", CONFIG_PATH], {
-    cwd: REPO_ROOT,
-    stdio: "pipe",
-    env: { ...process.env, DB_PASSWORD },
-  });
-
-  // 4. Re-mint the allowlisted auth user the rebuild just wiped, so the
-  //    seed-time access token keeps resolving (upsert is idempotent; the
-  //    re-inserted user reclaims id=1 after the sequence restart). We only need
-  //    the user row — the printed token is discarded.
-  execFileSync(
-    "./langner-admin",
-    ["auth", "issue-test-token", "--email", E2E_EMAIL, "--config", CONFIG_PATH],
-    { cwd: REPO_ROOT, stdio: "pipe", env: { ...process.env, DB_PASSWORD } },
-  );
 }

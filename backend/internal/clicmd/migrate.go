@@ -35,8 +35,9 @@ func NewMigrateCommand() *cobra.Command {
 
 	migrateCmd.AddCommand(newMigrateSchemaCommand())
 	migrateCmd.AddCommand(newMigrateRollbackCommand())
-	migrateCmd.AddCommand(newMigrateImportDBCommand())
 	migrateCmd.AddCommand(newMigrateResetDBCommand())
+	migrateCmd.AddCommand(NewMigrateSeedE2ECommand())
+	migrateCmd.AddCommand(NewMigrateResetE2ECommand())
 	migrateCmd.AddCommand(newExportDBCommand())
 	migrateCmd.AddCommand(newValidateDBCommand())
 	migrateCmd.AddCommand(newSyncDBCommand())

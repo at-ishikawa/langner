@@ -1512,8 +1512,15 @@ func TestService_LoadNotebookSummaries_ConceptMembersFollowHead(t *testing.T) {
 			break
 		}
 	}
-	require.Nil(t, book,
-		"head is studied and inside SR interval; concept must contribute 0 — book should not appear")
+	// The book still lists (like story/flashcard notebooks — a definitions book
+	// with nothing due must not silently disappear from the learner's list). The
+	// invariant this test pins is the BADGE: a studied head inside its SR interval
+	// makes the concept contribute 0 to the due count (it must not be inflated by
+	// the non-head members the source YAML still lists).
+	require.NotNil(t, book, "the book lists even when nothing is due")
+	assert.Equal(t, 0, book.ReviewCount,
+		"studied head inside SR interval; concept contributes 0 to the due badge")
+	assert.Equal(t, 0, book.ReverseReviewCount, "reverse due count is also 0")
 }
 
 // TestService_LoadCards_DefinitionsBook_FamilyConceptUsesHeadRow pins the

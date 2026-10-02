@@ -106,8 +106,8 @@ jobs:
       - name: Run database migrations
         run: migrate -source file://backend/schemas/migrations -database "postgres://user:password@localhost:5432/local?sslmode=disable" up
 
-      - name: Import example data to DB
-        run: ./langner-admin migrate import-db --config config.example.yml
+      - name: Seed example data into the DB (reset-db = scoped rebuild + import + seed)
+        run: ./langner-admin migrate reset-db --config config.example.yml
         env:
           DB_PASSWORD: password
 

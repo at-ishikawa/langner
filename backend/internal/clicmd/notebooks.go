@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"connectrpc.com/connect"
@@ -397,10 +398,12 @@ func newNotebooksListCommand() *cobra.Command {
 			}
 			entries := resp.Msg.Notebooks
 			sort.Slice(entries, func(i, j int) bool { return entries[i].NotebookId < entries[j].NotebookId })
+			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
+			_, _ = fmt.Fprintln(tw, "NOTEBOOK ID\tVISIBILITY\tNAME")
 			for _, e := range entries {
-				fmt.Printf("%s  %-12s  %-8s  %5dB  %s\n", e.NotebookId, e.Kind, e.Visibility, e.ByteSize, e.Name)
+				_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", e.NotebookId, e.Visibility, e.Name)
 			}
-			return nil
+			return tw.Flush()
 		},
 	}
 	cmd.Flags().StringVar(&server, "server", "", "server base URL")

@@ -116,23 +116,61 @@ func (h *NotebookHandler) PushNotebook(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parse index.yml: %w", err))
 	}
 
-	// Resolve the notebook id: mint on create, verify ownership on update.
+	// Resolve the notebook id (create-or-update). Policy: a fresh push MINTS a
+	// new nb_ id and ignores the author's declared id (ids are server-owned for
+	// new notebooks). The ONE exception is an UPDATE — when the id already
+	// exists AND the caller owns it, push updates it in place, preserving the id
+	// (so learning history stays attached) and its source ('shipped' stays
+	// 'shipped'). An explicit --id must be an existing owned notebook.
+	declaredID := strings.TrimSpace(meta.ID)
 	notebookID := strings.TrimSpace(msg.NotebookId)
-	if notebookID == "" {
-		notebookID, err = notebook.MintNotebookID()
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-	} else {
-		existing, found, gerr := h.fileRepo.GetUserNotebook(ctx, notebookID)
+	storedSource := "user"
+	visibility := notebook.VisibilityPrivate
+
+	// claimExisting resolves id as an update target: (claimed=true) when it
+	// exists and the caller owns it (adopting its source/visibility), an error
+	// when it exists but belongs to someone else, (claimed=false) when absent.
+	claimExisting := func(id string) (bool, error) {
+		owner, source, vis, found, gerr := h.fileRepo.GetNotebookOwnership(ctx, id)
 		if gerr != nil {
-			return nil, connect.NewError(connect.CodeInternal, gerr)
+			return false, connect.NewError(connect.CodeInternal, gerr)
 		}
 		if !found {
+			return false, nil
+		}
+		if owner == nil || *owner != userID {
+			return false, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("not the owner of %s", id))
+		}
+		notebookID = id
+		if s := strings.TrimSpace(source); s != "" {
+			storedSource = s
+		}
+		visibility = vis
+		return true, nil
+	}
+
+	switch {
+	case notebookID != "":
+		claimed, cerr := claimExisting(notebookID)
+		if cerr != nil {
+			return nil, cerr
+		}
+		if !claimed {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
 		}
-		if existing.OwnerUserID == nil || *existing.OwnerUserID != userID {
-			return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("not the owner of %s", notebookID))
+	case declaredID != "":
+		claimed, cerr := claimExisting(declaredID)
+		if cerr != nil {
+			return nil, cerr
+		}
+		if !claimed {
+			if notebookID, err = notebook.MintNotebookID(); err != nil {
+				return nil, connect.NewError(connect.CodeInternal, err)
+			}
+		}
+	default:
+		if notebookID, err = notebook.MintNotebookID(); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	}
 
@@ -161,7 +199,8 @@ func (h *NotebookHandler) PushNotebook(
 	nb := notebook.UserNotebook{
 		NotebookID:  notebookID,
 		OwnerUserID: &userID,
-		Visibility:  notebook.VisibilityPrivate,
+		Visibility:  visibility,   // private on create; preserved on update
+		Source:      storedSource, // 'user' on create; preserved ('shipped') on update
 		Kind:        kind,
 		DisplayName: name,
 		ContentHash: notebook.HashBundle(files),

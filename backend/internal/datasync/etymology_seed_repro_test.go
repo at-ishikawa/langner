@@ -86,6 +86,12 @@ func (fakeSkipRepoRepro) ResumeOrigin(context.Context, int64, int64, string) err
 func TestReproSeeder_EtymologyLogsFromE2EFixtures(t *testing.T) {
 	repoRoot, _ := filepath.Abs("../../..")
 	fx := filepath.Join(repoRoot, "frontend", "e2e", "fixtures")
+	// The learning-history YAML (the legacy learned/reverse/etymology_origin
+	// shape) is no longer shipped as e2e/example content — e2e now seeds state
+	// through internal/dbseed. This StateSeeder YAML-import path is still live
+	// for real-data reset-db/sync-db, so its regression fixtures live here as
+	// test-local testdata rather than in the shipped fixtures.
+	learningNotes := filepath.Join("testdata", "learning_notes")
 
 	reader, err := notebook.NewReader(
 		[]string{filepath.Join(fx, "stories")},
@@ -115,7 +121,7 @@ func TestReproSeeder_EtymologyLogsFromE2EFixtures(t *testing.T) {
 	// level with `type: origin`, no scenes, and no `type: flashcard` on the
 	// metadata. Before the FindByNotebookID fix this returned zero, so the
 	// seeder wrote no etymology logs ("Etymology logs: 0 new").
-	learningSrc := learning.NewYAMLLearningRepository(filepath.Join(fx, "learning_notes"), nil)
+	learningSrc := learning.NewYAMLLearningRepository(learningNotes, nil)
 	for _, id := range []string{"word-roots", "word-stems"} {
 		exprs, ferr := learningSrc.FindByNotebookID(id)
 		if ferr != nil {
