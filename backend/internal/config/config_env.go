@@ -2,97 +2,53 @@ package config
 
 import (
 	"os"
-	"strconv"
 	"strings"
 )
 
-// applyEnvOverrides lets EVERY deploy-relevant setting be provided by an
-// environment variable, so the server can run with NO config.yml on disk — the
-// shape a serverless/PaaS deploy (e.g. Vercel functions) needs, where mounting a
-// file is awkward. It runs AFTER the YAML load, so env wins over file, and
-// BEFORE validation, so env-provided values are validated too.
-//
-// Secrets (DB_PASSWORD, GOOGLE_CLIENT_SECRET, TOKEN_SIGNING_KEY, OPENAI/GEMINI/
-// RAPID keys, INFERENCE_MODE) are already bound by viper in Load and are not
-// repeated here. These are the NON-secret settings that previously lived only in
-// the YAML file: server, database (incl. the pooler knobs), CORS, and the auth
-// URLs/flags. Names use the DB_ prefix for database fields to match the existing
-// DB_PASSWORD, and PORT (the PaaS convention) overrides server.port.
-func applyEnvOverrides(cfg *Config) {
-	// Server. PORT is the platform-injected convention; SERVER_PORT is explicit.
-	// Whichever is set last wins, so PORT (checked last) takes precedence.
-	envInt(&cfg.Server.Port, "SERVER_PORT")
-	envInt(&cfg.Server.Port, "PORT")
-	envCSV(&cfg.Server.CORS.AllowedOrigins, "CORS_ALLOWED_ORIGINS")
-
-	// Database — host/port/name/user/tls plus the generic pooler knobs. Point
-	// host/port at ANY transaction pooler (PgBouncer, Supabase's pooler, pgcat);
-	// DB_PARAMS ("k=v,k=v") passes through arbitrary DSN params (sslmode,
-	// default_query_exec_mode, …) for pooler-specific tuning without code changes.
-	envStr(&cfg.Database.Host, "DB_HOST")
-	envInt(&cfg.Database.Port, "DB_PORT")
-	envStr(&cfg.Database.Database, "DB_NAME")
-	envStr(&cfg.Database.Username, "DB_USER")
-	envBool(&cfg.Database.TLS, "DB_TLS")
-	envInt(&cfg.Database.MaxOpenConns, "DB_MAX_OPEN_CONNS")
-	envInt(&cfg.Database.MaxIdleConns, "DB_MAX_IDLE_CONNS")
-	envInt(&cfg.Database.ConnMaxLifetime, "DB_CONN_MAX_LIFETIME_SECONDS")
-	envKV(&cfg.Database.Params, "DB_PARAMS")
-
-	// Auth (non-secret). The redirect/frontend URLs and cookie flags all move to
-	// prod values; allowed_emails is the sign-in allowlist.
-	envStr(&cfg.Auth.GoogleClientID, "AUTH_GOOGLE_CLIENT_ID")
-	envStr(&cfg.Auth.RedirectURL, "AUTH_REDIRECT_URL")
-	envStr(&cfg.Auth.FrontendURL, "AUTH_FRONTEND_URL")
-	envCSV(&cfg.Auth.AllowedEmails, "AUTH_ALLOWED_EMAILS")
-	envStr(&cfg.Auth.InitialAdminEmail, "AUTH_INITIAL_ADMIN_EMAIL")
-	envBool(&cfg.Auth.CookieSecure, "AUTH_COOKIE_SECURE")
-	envStr(&cfg.Auth.CookieSameSite, "AUTH_COOKIE_SAMESITE")
+// nonSecretEnvBindings maps each non-secret config key to the environment
+// variable(s) that may override it, so the server can run with NO config.yml
+// (serverless/PaaS). Explicit BindEnv — NOT AutomaticEnv — because AutomaticEnv
+// does not register nested, default-less keys for Unmarshal; binding each key by
+// name does, and pins a stable, documented env name. viper precedence makes env
+// win over the file. `server.port` accepts PORT (the PaaS convention) first,
+// then SERVER_PORT. (database.params is a map BindEnv can't express — DB_PARAMS
+// is merged in applyEnvExtras.)
+var nonSecretEnvBindings = [][]string{
+	{"server.port", "PORT", "SERVER_PORT"},
+	{"server.cors.allowed_origins", "CORS_ALLOWED_ORIGINS"},
+	{"database.host", "DB_HOST"},
+	{"database.port", "DB_PORT"},
+	{"database.database", "DB_NAME"},
+	{"database.username", "DB_USER"},
+	{"database.tls", "DB_TLS"},
+	{"database.max_open_conns", "DB_MAX_OPEN_CONNS"},
+	{"database.max_idle_conns", "DB_MAX_IDLE_CONNS"},
+	{"database.conn_max_lifetime_seconds", "DB_CONN_MAX_LIFETIME_SECONDS"},
+	{"auth.google_client_id", "AUTH_GOOGLE_CLIENT_ID"},
+	{"auth.redirect_url", "AUTH_REDIRECT_URL"},
+	{"auth.frontend_url", "AUTH_FRONTEND_URL"},
+	{"auth.allowed_emails", "AUTH_ALLOWED_EMAILS"},
+	{"auth.initial_admin_email", "AUTH_INITIAL_ADMIN_EMAIL"},
+	{"auth.cookie_secure", "AUTH_COOKIE_SECURE"},
+	{"auth.cookie_samesite", "AUTH_COOKIE_SAMESITE"},
 }
 
-// envStr sets *dst to the env value when the variable is present (even if empty,
-// so it can be deliberately cleared). Absent variable leaves *dst untouched.
-func envStr(dst *string, key string) {
-	if v, ok := os.LookupEnv(key); ok {
-		*dst = v
-	}
+// applyEnvExtras handles the two things viper's BindEnv can't do cleanly, run
+// after Unmarshal: (1) merge DB_PARAMS ("k=v,k=v") into the database.params map,
+// and (2) trim whitespace from comma-separated list values (viper's
+// StringToSlice hook splits on "," but does not trim), so `A, B` yields
+// ["A","B"] not ["A"," B"].
+func applyEnvExtras(cfg *Config) {
+	mergeKVInto(&cfg.Database.Params, os.Getenv("DB_PARAMS"))
+	cfg.Server.CORS.AllowedOrigins = trimList(cfg.Server.CORS.AllowedOrigins)
+	cfg.Auth.AllowedEmails = trimList(cfg.Auth.AllowedEmails)
 }
 
-// envInt sets *dst only when the variable is present AND parses as an int, so a
-// malformed value is ignored rather than silently zeroing a good default.
-func envInt(dst *int, key string) {
-	if v, ok := os.LookupEnv(key); ok {
-		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
-			*dst = n
-		}
-	}
-}
-
-// envBool sets *dst when the variable parses as a bool (1/t/true/0/f/false).
-func envBool(dst *bool, key string) {
-	if v, ok := os.LookupEnv(key); ok {
-		if b, err := strconv.ParseBool(strings.TrimSpace(v)); err == nil {
-			*dst = b
-		}
-	}
-}
-
-// envCSV sets *dst to the comma-separated env value (trimmed, empties dropped);
-// an empty value clears the list. Absent variable leaves *dst untouched.
-func envCSV(dst *[]string, key string) {
-	if v, ok := os.LookupEnv(key); ok {
-		*dst = splitList(v)
-	}
-}
-
-// envKV merges a "k=v,k=v" env value into *dst (creating the map if nil), so
-// DSN params can be set/extended from the environment.
-func envKV(dst *map[string]string, key string) {
-	v, ok := os.LookupEnv(key)
-	if !ok {
-		return
-	}
-	for _, pair := range splitList(v) {
+// mergeKVInto parses a "k=v,k=v" string and merges it into *dst (creating the
+// map if nil). Empty string is a no-op; a pair with no '=' or empty key is
+// skipped.
+func mergeKVInto(dst *map[string]string, s string) {
+	for _, pair := range splitList(s) {
 		k, val, found := strings.Cut(pair, "=")
 		k = strings.TrimSpace(k)
 		if !found || k == "" {
@@ -105,8 +61,22 @@ func envKV(dst *map[string]string, key string) {
 	}
 }
 
-// splitList splits a comma-separated list, trimming each element and dropping
-// empties.
+// trimList trims each element and drops empties, normalizing a slice whether it
+// came from the file or from a comma-split env value.
+func trimList(in []string) []string {
+	if len(in) == 0 {
+		return in
+	}
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if t := strings.TrimSpace(s); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// splitList splits a comma-separated list, trimming and dropping empties.
 func splitList(s string) []string {
 	var out []string
 	for _, part := range strings.Split(s, ",") {

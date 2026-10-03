@@ -93,33 +93,27 @@ func TestLoad_EnvOnly_NoFile(t *testing.T) {
 	assert.Equal(t, 8080, cfg.Server.Port, "default survives when PORT unset")
 }
 
-func TestEnvHelpers(t *testing.T) {
-	t.Run("envInt ignores malformed, keeps default", func(t *testing.T) {
-		n := 42
-		t.Setenv("X_INT", "notnum")
-		envInt(&n, "X_INT")
-		assert.Equal(t, 42, n)
-	})
-	t.Run("envBool parses truthy", func(t *testing.T) {
-		b := false
-		t.Setenv("X_BOOL", "1")
-		envBool(&b, "X_BOOL")
-		assert.True(t, b)
-	})
-	t.Run("envCSV trims and drops empties", func(t *testing.T) {
-		var s []string
-		t.Setenv("X_CSV", " a , ,b ,")
-		envCSV(&s, "X_CSV")
-		assert.Equal(t, []string{"a", "b"}, s)
-	})
-	t.Run("envKV merges into existing map", func(t *testing.T) {
+func TestEnvExtraHelpers(t *testing.T) {
+	t.Run("mergeKVInto merges into existing map, skips bad pairs", func(t *testing.T) {
 		m := map[string]string{"keep": "1"}
-		t.Setenv("X_KV", "a=1, b = 2 ,bad")
-		envKV(&m, "X_KV")
+		mergeKVInto(&m, "a=1, b = 2 ,bad")
 		assert.Equal(t, "1", m["keep"])
 		assert.Equal(t, "1", m["a"])
 		assert.Equal(t, "2", m["b"])
 		_, hasBad := m["bad"]
 		assert.False(t, hasBad, "a param with no '=' is skipped")
+	})
+	t.Run("mergeKVInto creates the map when nil", func(t *testing.T) {
+		var m map[string]string
+		mergeKVInto(&m, "sslmode=require")
+		assert.Equal(t, "require", m["sslmode"])
+	})
+	t.Run("mergeKVInto empty string is a no-op", func(t *testing.T) {
+		var m map[string]string
+		mergeKVInto(&m, "")
+		assert.Nil(t, m)
+	})
+	t.Run("trimList trims and drops empties", func(t *testing.T) {
+		assert.Equal(t, []string{"a", "b"}, trimList([]string{" a ", "", " b ", "  "}))
 	})
 }
