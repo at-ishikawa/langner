@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { Box, Spinner, Text, VStack } from "@chakra-ui/react";
 import { setAccessToken } from "@/lib/authToken";
 
-// AuthCallbackPage receives the langner access token from the OAuth callback in
-// the URL fragment (#access_token=…&next=…). The fragment is never sent to a
-// server; this client page reads it into the in-memory token store, scrubs it
+// AuthCallbackPage receives the langner ACCESS token from the OAuth callback in
+// the URL fragment (#access_token=…&next=…). The refresh token is NOT here — the
+// backend set it as an HttpOnly cookie. The fragment is never sent to a server;
+// this client page reads the access token into the in-memory store, scrubs it
 // from the URL/history, and forwards the user to `next` (default home). With no
 // token it falls back to /login.
 export default function AuthCallbackPage() {

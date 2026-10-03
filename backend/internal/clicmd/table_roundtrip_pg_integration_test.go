@@ -179,8 +179,8 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		 SELECT 'roundtrip-seed-device-hash', 'WDJB-MJHT', id, 'approved', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '15 minutes'
 		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
 	seedIfEmpty(ctx, t, db, "cli_refresh_tokens",
-		`INSERT INTO cli_refresh_tokens (user_id, token_hash, expires_at)
-		 SELECT id, 'roundtrip-seed-refresh-hash', CURRENT_TIMESTAMP + INTERVAL '30 days'
+		`INSERT INTO cli_refresh_tokens (user_id, family_id, token_hash, expires_at)
+		 SELECT id, 'roundtrip-seed-family', 'roundtrip-seed-refresh-hash', CURRENT_TIMESTAMP + INTERVAL '30 days'
 		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
 
 	// Every table must actually carry rows so the round trip is meaningful —

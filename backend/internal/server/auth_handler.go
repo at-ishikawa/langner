@@ -21,6 +21,12 @@ const (
 	stateCookieName = "langner_oauth_state"
 
 	stateTTL = 10 * time.Minute
+
+	// webRefreshTokenTTL is the rolling lifetime of a web session's refresh
+	// token — long enough to keep a signed-in user from re-authing for weeks
+	// (matches the CLI refresh TTL). The access token stays short-lived (24h);
+	// the SPA silently refreshes against it.
+	webRefreshTokenTTL = 30 * 24 * time.Hour
 )
 
 // AuthHandler serves the plain-HTTP endpoints of the Google-OAuth flow. These
@@ -36,6 +42,7 @@ type AuthHandler struct {
 	state          *auth.StateSigner
 	users          *auth.UserRepository
 	deviceCodes    *auth.CLIDeviceCodeRepository
+	refreshTokens  *auth.CLIRefreshTokenRepository
 	allowedEmails  []string
 	frontendURL    string
 	allowedOrigins []string
@@ -52,7 +59,12 @@ type AuthHandlerConfig struct {
 	Users         *auth.UserRepository
 	// DeviceCodes approves the CLI device row inside the callback (M3). May be
 	// nil in tests that never exercise the device path.
-	DeviceCodes   *auth.CLIDeviceCodeRepository
+	DeviceCodes *auth.CLIDeviceCodeRepository
+	// RefreshTokens mints the web session's refresh token at sign-in so the SPA
+	// can stay signed in past the 24h access-token lifetime (shared table with
+	// the CLI; the /auth/token/refresh endpoint is keyed by user_id, not client).
+	// May be nil in tests / DB-less setups: no web refresh token is issued.
+	RefreshTokens *auth.CLIRefreshTokenRepository
 	AllowedEmails []string
 	FrontendURL   string
 	// AllowedOrigins is the set of frontend origins a post-sign-in redirect may
@@ -77,6 +89,7 @@ func NewAuthHandler(cfg AuthHandlerConfig) *AuthHandler {
 		state:          cfg.State,
 		users:          cfg.Users,
 		deviceCodes:    cfg.DeviceCodes,
+		refreshTokens:  cfg.RefreshTokens,
 		allowedEmails:  cfg.AllowedEmails,
 		frontendURL:    cfg.FrontendURL,
 		allowedOrigins: cfg.AllowedOrigins,
@@ -176,16 +189,47 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Web sign-in: mint the access JWT and hand it to the SPA via the URL
-	// fragment (never a query param — a fragment is not sent to a server). No
-	// refresh token for the web and no session cookie.
+	// Web sign-in: mint the short-lived access JWT and hand it to the SPA via the
+	// URL fragment (never a query param — a fragment is not sent to a server).
+	// The long-lived REFRESH token is set as an HttpOnly cookie instead, so it is
+	// never readable by JavaScript; the SPA silently exchanges it for a new
+	// access token (via /auth/token/refresh) on reload and on expiry. No session
+	// cookie — the cookie carries only the refresh token.
 	access, err := h.tokens.Sign(user.ID, h.now())
 	if err != nil {
 		slog.Error("auth: sign access token failed", "error", err)
 		http.Redirect(w, r, h.frontendURL+"/login?error=server_error", http.StatusFound)
 		return
 	}
+	if err := h.setWebRefreshCookie(ctx, w, user.ID); err != nil {
+		slog.Error("auth: issue web refresh token failed", "error", err)
+		http.Redirect(w, r, h.frontendURL+"/login?error=server_error", http.StatusFound)
+		return
+	}
 	http.Redirect(w, r, h.callbackRedirect(claims.Next, access), http.StatusFound)
+}
+
+// setWebRefreshCookie mints a rolling refresh token for a web session, stores it
+// hashed under a FRESH rotation family (this sign-in), and writes it as the
+// HttpOnly refresh cookie. A nil refresh repo (DB-less/test setups) is a no-op,
+// so web sign-in still works with an access-token-only session.
+func (h *AuthHandler) setWebRefreshCookie(ctx context.Context, w http.ResponseWriter, userID int64) error {
+	if h.refreshTokens == nil {
+		return nil
+	}
+	familyID, err := auth.GenerateFamilyID()
+	if err != nil {
+		return err
+	}
+	refresh, err := auth.GenerateRefreshToken()
+	if err != nil {
+		return err
+	}
+	if _, err := h.refreshTokens.Create(ctx, userID, familyID, auth.HashSecret(refresh), h.now().Add(webRefreshTokenTTL)); err != nil {
+		return err
+	}
+	setRefreshCookie(w, refresh, h.cookieSecure, h.cookieSameSite, webRefreshTokenTTL)
+	return nil
 }
 
 // approveDevice binds the just-verified identity to a still-pending, unexpired

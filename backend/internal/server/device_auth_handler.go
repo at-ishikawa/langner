@@ -39,8 +39,12 @@ type DeviceAuthHandler struct {
 	// verificationURI is the API-host URL the user opens to approve, e.g.
 	// https://api.langner.app/auth/device.
 	verificationURI string
-	limiter         *rateLimiter
-	now             func() time.Time
+	// cookieSecure / cookieSameSite style the WEB refresh cookie this handler
+	// sets when a browser refreshes (mirrors the OAuth state cookie's config).
+	cookieSecure   bool
+	cookieSameSite http.SameSite
+	limiter        *rateLimiter
+	now            func() time.Time
 }
 
 // DeviceAuthHandlerConfig wires a DeviceAuthHandler.
@@ -50,6 +54,9 @@ type DeviceAuthHandlerConfig struct {
 	Tokens          *auth.TokenSigner
 	FrontendURL     string
 	VerificationURI string
+	// CookieSecure / CookieSameSite style the web refresh cookie.
+	CookieSecure   bool
+	CookieSameSite http.SameSite
 	// Now is optional; defaults to time.Now. Tests pin it.
 	Now func() time.Time
 }
@@ -66,6 +73,8 @@ func NewDeviceAuthHandler(cfg DeviceAuthHandlerConfig) *DeviceAuthHandler {
 		tokens:          cfg.Tokens,
 		frontendURL:     cfg.FrontendURL,
 		verificationURI: cfg.VerificationURI,
+		cookieSecure:    cfg.CookieSecure,
+		cookieSameSite:  cfg.CookieSameSite,
 		limiter:         newRateLimiter(20, time.Minute),
 		now:             now,
 	}
@@ -93,10 +102,12 @@ type deviceTokenRequest struct {
 }
 
 type tokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-	RefreshToken string `json:"refresh_token"`
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+	// RefreshToken is returned to the CLI (body carrier); for the web client the
+	// refresh token is set in the HttpOnly cookie instead, so it is omitted here.
+	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
 type refreshRequest struct {
@@ -104,9 +115,6 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-type revokeRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
 
 // RequestCode handles POST /auth/device/code (RFC 8628 §3.1/§3.2).
 func (h *DeviceAuthHandler) RequestCode(w http.ResponseWriter, r *http.Request) {
@@ -259,30 +267,41 @@ func (h *DeviceAuthHandler) Token(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "expired_token")
 		return
 	}
-	h.issueTokens(w, r, row.UserID.Int64)
+	// A fresh device approval starts a NEW rotation family; the CLI carries its
+	// refresh token in the body, so never via the cookie.
+	familyID, err := auth.GenerateFamilyID()
+	if err != nil {
+		slog.Error("device: generate family id failed", "error", err)
+		writeOAuthError(w, http.StatusInternalServerError, "server_error")
+		return
+	}
+	h.issueTokens(w, r, row.UserID.Int64, familyID, false)
 }
 
-// Refresh handles POST /auth/token/refresh (rotation-on-use).
+// Refresh handles POST /auth/token/refresh (rotation-on-use). The refresh token
+// arrives EITHER in the HttpOnly cookie (web) or the JSON body (CLI); the
+// response echoes the rotated token back the same way it arrived.
 func (h *DeviceAuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeOAuthError(w, http.StatusMethodNotAllowed, "invalid_request")
 		return
 	}
-	var req refreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+	token, viaCookie := h.readRefreshToken(r)
+	if token == "" {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	row, err := h.refreshTokens.FindByHash(r.Context(), auth.HashSecret(req.RefreshToken))
+	row, err := h.refreshTokens.FindByHash(r.Context(), auth.HashSecret(token))
 	if err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
 	now := h.now()
 	// Reuse of an already-revoked (rotated-away) token is a compromise signal:
-	// revoke the whole family and reject.
+	// revoke its FAMILY (this one sign-in / device) and reject. Other families
+	// — the user's other clients — are untouched.
 	if row.RevokedAt.Valid {
-		if err := h.refreshTokens.RevokeFamily(r.Context(), row.UserID, now); err != nil {
+		if err := h.refreshTokens.RevokeFamily(r.Context(), row.FamilyID, now); err != nil {
 			slog.Error("device: revoke family failed", "error", err)
 		}
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
@@ -292,33 +311,54 @@ func (h *DeviceAuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
-	// Rotate: revoke the presented token, mint a fresh pair.
+	// Rotate within the same family: revoke the presented token, mint a fresh one.
 	if err := h.refreshTokens.Revoke(r.Context(), row.ID, now); err != nil {
 		slog.Error("device: revoke on rotation failed", "error", err)
 		writeOAuthError(w, http.StatusInternalServerError, "server_error")
 		return
 	}
-	h.issueTokens(w, r, row.UserID)
+	h.issueTokens(w, r, row.UserID, row.FamilyID, viaCookie)
 }
 
-// Revoke handles POST /auth/token/revoke (logout). Always 200 (idempotent).
+// Revoke handles POST /auth/token/revoke (logout). Always 200 (idempotent). It
+// accepts the refresh token from the cookie (web) or the body (CLI), revokes it,
+// and clears the cookie when one was presented.
 func (h *DeviceAuthHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeOAuthError(w, http.StatusMethodNotAllowed, "invalid_request")
 		return
 	}
-	var req revokeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err == nil && req.RefreshToken != "" {
-		if err := h.refreshTokens.RevokeByHash(r.Context(), auth.HashSecret(req.RefreshToken), h.now()); err != nil {
+	token, viaCookie := h.readRefreshToken(r)
+	if token != "" {
+		if err := h.refreshTokens.RevokeByHash(r.Context(), auth.HashSecret(token), h.now()); err != nil {
 			slog.Error("device: revoke failed", "error", err)
 		}
+	}
+	if viaCookie {
+		clearRefreshCookie(w, h.cookieSecure, h.cookieSameSite)
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-// issueTokens mints an access JWT + a fresh refresh token (stored hashed) and
-// writes the success response.
-func (h *DeviceAuthHandler) issueTokens(w http.ResponseWriter, r *http.Request, userID int64) {
+// readRefreshToken pulls the refresh token from the cookie (web) first, then the
+// JSON body (CLI), reporting which carrier supplied it so the response can reply
+// in kind.
+func (h *DeviceAuthHandler) readRefreshToken(r *http.Request) (token string, viaCookie bool) {
+	if c := readRefreshCookie(r); c != "" {
+		return c, true
+	}
+	var req refreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
+		return req.RefreshToken, false
+	}
+	return "", false
+}
+
+// issueTokens mints an access JWT + a fresh refresh token (stored hashed, in the
+// given family) and writes the success response. For a web (cookie) client the
+// new refresh token is set as the HttpOnly cookie and NOT echoed in the body;
+// for the CLI it is returned in the JSON body.
+func (h *DeviceAuthHandler) issueTokens(w http.ResponseWriter, r *http.Request, userID int64, familyID string, viaCookie bool) {
 	now := h.now()
 	access, err := h.tokens.Sign(userID, now)
 	if err != nil {
@@ -332,17 +372,22 @@ func (h *DeviceAuthHandler) issueTokens(w http.ResponseWriter, r *http.Request, 
 		writeOAuthError(w, http.StatusInternalServerError, "server_error")
 		return
 	}
-	if _, err := h.refreshTokens.Create(r.Context(), userID, auth.HashSecret(refresh), now.Add(refreshTokenTTL)); err != nil {
+	if _, err := h.refreshTokens.Create(r.Context(), userID, familyID, auth.HashSecret(refresh), now.Add(refreshTokenTTL)); err != nil {
 		slog.Error("device: store refresh token failed", "error", err)
 		writeOAuthError(w, http.StatusInternalServerError, "server_error")
 		return
 	}
-	writeJSON(w, http.StatusOK, tokenResponse{
-		AccessToken:  access,
-		TokenType:    "Bearer",
-		ExpiresIn:    int(auth.AccessTokenTTL.Seconds()),
-		RefreshToken: refresh,
-	})
+	resp := tokenResponse{
+		AccessToken: access,
+		TokenType:   "Bearer",
+		ExpiresIn:   int(auth.AccessTokenTTL.Seconds()),
+	}
+	if viaCookie {
+		setRefreshCookie(w, refresh, h.cookieSecure, h.cookieSameSite, refreshTokenTTL)
+	} else {
+		resp.RefreshToken = refresh
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // --- helpers ---
