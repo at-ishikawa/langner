@@ -336,6 +336,10 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid configuration format: %w", err)
 	}
+	// Overlay environment variables onto the file-loaded config so a deploy can
+	// run with NO config.yml (serverless/PaaS). Env wins over file; runs before
+	// validation so env-provided values are validated too.
+	applyEnvOverrides(&cfg)
 	cfg.Notebooks.applyBaseDirectory()
 
 	if err := loader.validator.Struct(cfg); err != nil {
