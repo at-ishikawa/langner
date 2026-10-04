@@ -44,12 +44,13 @@ jobs:
         run: make test-coverage
 
   vercel-build:
-    name: Vercel function build
-    # The backend deploys to Vercel as a Go serverless function
-    # (backend/api/index.go). Cross-compile it for the lambda target
-    # (linux/amd64) — the same GOOS/GOARCH Vercel's Go runtime builds — so a
-    # change that breaks the serverless entrypoint is caught in CI, not only on
-    # a Vercel deploy. Also validates backend/vercel.json parses.
+    name: Vercel build (Go server)
+    # The backend deploys to Vercel as a Go web-server (Vercel's "go" framework
+    # runs the binary and routes $PORT traffic to it; vercel.json's buildCommand
+    # points at ./cmd/langner-server). Reproduce the exact build Vercel runs —
+    # cross-compile that entrypoint for the deploy target (linux/amd64) — so a
+    # change that breaks the Vercel build is caught in CI, not only on deploy.
+    # Also validates backend/vercel.json parses.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -58,9 +59,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: 'backend/go.mod'
-      - name: Cross-build the Vercel Go function (linux/amd64)
+      - name: Cross-build the Vercel server entrypoint (linux/amd64)
         working-directory: backend
-        run: GOOS=linux GOARCH=amd64 go build ./api/...
+        run: GOOS=linux GOARCH=amd64 go build -o /tmp/langner-server ./cmd/langner-server
       - name: Validate backend/vercel.json is valid JSON
         run: python3 -c "import json; json.load(open('backend/vercel.json'))"
 
