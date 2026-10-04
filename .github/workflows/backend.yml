@@ -45,12 +45,11 @@ jobs:
 
   vercel-build:
     name: Vercel build (Go server)
-    # The backend deploys to Vercel as a Go web-server (Vercel's "go" framework
-    # runs the binary and routes $PORT traffic to it; vercel.json's buildCommand
-    # points at ./cmd/langner-server). Reproduce the exact build Vercel runs —
-    # cross-compile that entrypoint for the deploy target (linux/amd64) — so a
-    # change that breaks the Vercel build is caught in CI, not only on deploy.
-    # Also validates backend/vercel.json parses.
+    # The backend deploys to Vercel as a Go web server: Vercel's "go" framework
+    # detects cmd/server/main.go, builds it, and runs the binary — routing $PORT
+    # traffic to it. Reproduce the exact build Vercel runs — cross-compile that
+    # entrypoint for the deploy target (linux/amd64) — so a change that breaks
+    # the Vercel build is caught in CI, not only on deploy.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -61,9 +60,7 @@ jobs:
           go-version-file: 'backend/go.mod'
       - name: Cross-build the Vercel server entrypoint (linux/amd64)
         working-directory: backend
-        run: GOOS=linux GOARCH=amd64 go build -o /tmp/langner-server ./cmd/langner-server
-      - name: Validate backend/vercel.json is valid JSON
-        run: python3 -c "import json; json.load(open('backend/vercel.json'))"
+        run: GOOS=linux GOARCH=amd64 go build -o /tmp/langner-server ./cmd/server
 
   gemini-integration:
     name: Gemini live integration

@@ -1,4 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "go build -o $VERCEL_OUTPUT_FILE ./cmd/langner-server"
-}
