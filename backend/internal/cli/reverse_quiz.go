@@ -40,7 +40,7 @@ func NewReverseQuizCLI(
 	}
 
 	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
+	svc := quiz.NewService(notebooksConfig, inference.StaticResolver(openaiClient), baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	var notebookIDs []string
 	if notebookName == "" {
@@ -184,7 +184,7 @@ func (r *ReverseQuizCLI) gradeWithSynonymRetry(
 		}, nil
 	}
 
-	grade, err := r.svc.GradeReverseAnswer(ctx, *card, userAnswer, responseTimeMs)
+	grade, err := r.svc.GradeReverseAnswer(ctx, 0, *card, userAnswer, responseTimeMs)
 	if err != nil {
 		return quiz.GradeResult{
 			Correct: false,

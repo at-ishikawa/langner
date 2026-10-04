@@ -15,9 +15,9 @@ import (
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/config"
-	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	mock_notebook "github.com/at-ishikawa/langner/internal/mocks/notebook"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -33,7 +33,7 @@ func newTestHandler(t *testing.T, openaiClient inference.Client) *QuizHandler {
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningNotesDir,
-	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningNotesDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(openaiClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningNotesDir, nil), config.QuizConfig{})
 
 	return NewQuizHandler(svc)
 }
@@ -114,7 +114,7 @@ notebooks:
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(openaiClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	return NewQuizHandler(svc), learningDir
 }
@@ -413,7 +413,7 @@ notebooks:
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	// Test story with definition field
@@ -516,6 +516,64 @@ func TestQuizHandler_SubmitAnswer_UpdatesLearningHistory(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// startQuizAndFindNote starts a quiz on the fixtures and returns the session
+// note id for the given entry.
+func startQuizAndFindNote(t *testing.T, handler *QuizHandler, notebookID, entry string) int64 {
+	t.Helper()
+	_, err := handler.StartQuiz(context.Background(), connect.NewRequest(&apiv1.StartQuizRequest{
+		NotebookIds:      []string{notebookID},
+		IncludeUnstudied: true,
+	}))
+	require.NoError(t, err)
+	var noteID int64
+	handler.mu.Lock()
+	for id, note := range handler.noteStore {
+		if note.Entry == entry {
+			noteID = id
+			break
+		}
+	}
+	handler.mu.Unlock()
+	require.Greater(t, noteID, int64(0))
+	return noteID
+}
+
+// TestQuizHandler_SubmitAnswer_GradeErrorMapping proves the grade path surfaces
+// actionable connect codes end to end (not a blanket Internal): a missing key
+// resolves to FailedPrecondition and an upstream quota error to
+// ResourceExhausted, via the shared mapGradeError.
+func TestQuizHandler_SubmitAnswer_GradeErrorMapping(t *testing.T) {
+	t.Run("no credential -> FailedPrecondition", func(t *testing.T) {
+		// A nil client wraps to a resolver that returns inference.ErrNoCredential.
+		handler, _ := newTestHandlerWithFixtures(t, nil)
+		noteID := startQuizAndFindNote(t, handler, "test-vocab", "serendipity")
+
+		_, err := handler.SubmitAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId: noteID, Answer: "a fortunate discovery", ResponseTimeMs: 1000,
+		}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	})
+
+	t.Run("quota provider error -> ResourceExhausted", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockClient := mock_inference.NewMockClient(ctrl)
+		handler, _ := newTestHandlerWithFixtures(t, mockClient)
+		noteID := startQuizAndFindNote(t, handler, "test-vocab", "serendipity")
+
+		mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+			inference.AnswerMeaningsResponse{},
+			&inference.ProviderError{Provider: "openai", StatusCode: 429, Code: "insufficient_quota"},
+		)
+
+		_, err := handler.SubmitAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId: noteID, Answer: "a fortunate discovery", ResponseTimeMs: 1000,
+		}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
+	})
+}
+
 func TestQuizHandler_SubmitAnswer_UpdateLearningHistoryError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
@@ -524,7 +582,7 @@ func TestQuizHandler_SubmitAnswer_UpdateLearningHistoryError(t *testing.T) {
 
 	svc := quiz.NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	// Place a malformed YAML file in the learning directory to trigger error in SaveResult
@@ -580,7 +638,7 @@ func TestQuizHandler_GetQuizOptions_LearningHistoryError(t *testing.T) {
 
 	svc := quiz.NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	// Place a malformed YAML file in the learning directory
@@ -628,7 +686,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	resp, err := handler.GetQuizOptions(
@@ -668,7 +726,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	resp, err := handler.StartQuiz(
@@ -716,7 +774,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	resp, err := handler.StartQuiz(
@@ -764,7 +822,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	// Place a malformed YAML file in the learning directory
@@ -1021,9 +1079,9 @@ func TestQuizHandler_SubmitAnswer_WordDetail(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		notebookType     string // "story" or "flashcard"
-		expression       string
+		name         string
+		notebookType string // "story" or "flashcard"
+		expression   string
 		// notebookYAML is the content of the story/flashcard notebook file.
 		notebookYAML string
 		want         wantWordDetail
@@ -1222,13 +1280,13 @@ func TestQuizHandler_SubmitAnswer_WordDetail(t *testing.T) {
 				StoriesDirectories:     []string{storiesDir},
 				FlashcardsDirectories:  []string{flashcardsDir},
 				LearningNotesDirectory: learningDir,
-			}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+			}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 			handler := NewQuizHandler(svc)
 
 			// Start the quiz to populate the note store
 			startResp, err := handler.StartQuiz(context.Background(), connect.NewRequest(&apiv1.StartQuizRequest{
-				NotebookIds:       []string{notebookID},
-				IncludeUnstudied:  true,
+				NotebookIds:      []string{notebookID},
+				IncludeUnstudied: true,
 			}))
 			require.NoError(t, err)
 			require.NotEmpty(t, startResp.Msg.GetFlashcards(), "quiz should have at least one card")
@@ -1368,7 +1426,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		BooksDirectories:       []string{booksDir},
 		LearningNotesDirectory: learningDir,
-	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(openaiClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	handler := NewQuizHandler(svc)
 
 	resp, err := handler.GetQuizOptions(

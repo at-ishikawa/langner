@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -29,20 +28,6 @@ func skippedGradeResult() quiz.GradeResult {
 		Quality:        1,
 		Classification: string(inference.ClassificationWrong),
 	}
-}
-
-// gradeError converts a grader failure into a Connect error. A provider
-// rate-limit / quota exhaustion (HTTP 429 / RESOURCE_EXHAUSTED) is surfaced as
-// CodeResourceExhausted with a short, user-facing retry hint so the client can
-// show "please retry in a moment" instead of an opaque internal error. Every
-// other failure stays CodeInternal, wrapped with msg for context.
-func gradeError(msg string, err error) error {
-	s := err.Error()
-	if strings.Contains(s, "response error 429") || strings.Contains(s, "RESOURCE_EXHAUSTED") {
-		return connect.NewError(connect.CodeResourceExhausted,
-			errors.New("grading is temporarily rate-limited — please retry in a moment"))
-	}
-	return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", msg, err))
 }
 
 // preloadHistories loads the distinct notebooks' histories once and returns a
@@ -98,14 +83,14 @@ func (h *QuizHandler) BatchSubmitAnswers(
 				subAns[k] = answers[i].GetAnswer()
 				subRT[k] = answers[i].GetResponseTimeMs()
 			}
-			return h.svc.GradeNotebookAnswerBatch(ctx, subCards, subAns, subRT)
+			return h.svc.GradeNotebookAnswerBatch(ctx, userID, subCards, subAns, subRT)
 		},
 		func(i int) (quiz.GradeResult, error) {
-			return h.svc.GradeNotebookAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
+			return h.svc.GradeNotebookAnswer(ctx, userID, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 		},
 	)
 	if err != nil {
-		return nil, gradeError("grade answers", err)
+		return nil, mapGradeError(err)
 	}
 
 	// Read each notebook's history once for the whole batch (interval computation
@@ -180,14 +165,14 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 				subAns[k] = answers[i].GetAnswer()
 				subRT[k] = answers[i].GetResponseTimeMs()
 			}
-			return h.svc.GradeReverseAnswerBatch(ctx, subCards, subAns, subRT)
+			return h.svc.GradeReverseAnswerBatch(ctx, userID, subCards, subAns, subRT)
 		},
 		func(i int) (quiz.GradeResult, error) {
-			return h.svc.GradeReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
+			return h.svc.GradeReverseAnswer(ctx, userID, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 		},
 	)
 	if err != nil {
-		return nil, gradeError("grade answers", err)
+		return nil, mapGradeError(err)
 	}
 
 	// Read each notebook's history once for the whole batch instead of per card.

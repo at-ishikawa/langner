@@ -12,6 +12,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -50,7 +51,7 @@ func TestService_OverrideAnswer_PersistsCorrectionToYAML_StandardScene(t *testin
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	markCorrect := true
@@ -112,7 +113,7 @@ func TestService_OverrideAnswer_PersistsCorrectionToYAML_DefinitionEntryFallback
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	// Mimics CardInfoFromCard for a card built from a definition-bearing
@@ -181,7 +182,7 @@ func TestService_OverrideAnswer_TargetsLearnedAt_NotJustLatest(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	info := CardInfo{
@@ -242,7 +243,7 @@ func TestService_OverrideAnswer_Freeform_KeepsLearnedAndReverseLogsInSync(t *tes
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	markCorrect := true
@@ -301,7 +302,7 @@ func TestService_UndoOverrideAnswer_RestoresOriginalStateOnDisk(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	info := CardInfo{
@@ -354,7 +355,7 @@ func TestService_OverrideAnswer_PersistsCorrectionToYAML_StandardFlashcard(t *te
 	svc := NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	markCorrect := true

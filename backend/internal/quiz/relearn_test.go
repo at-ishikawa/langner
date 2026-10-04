@@ -118,7 +118,7 @@ func TestLoadRelearnPool_ResolvesHomographByID(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{})
 
@@ -195,7 +195,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
@@ -255,7 +255,7 @@ func TestLoadRelearnPool_GrammarMiss(t *testing.T) {
 
 	// The card must grade like the live quiz: GradeGrammarBlank against the
 	// card's own grading inputs (GrammarCard(), never sent to the client).
-	result, err := svc.GradeGrammarBlank(context.Background(), card.Content, card.GrammarCard(), "John", 1200)
+	result, err := svc.GradeGrammarBlank(context.Background(), 0, card.Content, card.GrammarCard(), "John", 1200)
 	require.NoError(t, err)
 	assert.True(t, result.Correct)
 }
@@ -361,7 +361,7 @@ func TestLoadRelearnPool_GrammarSamePostMultipleBlanks(t *testing.T) {
 		if c.Incorrect == "go" {
 			want = "went"
 		}
-		result, err := svc.GradeGrammarBlank(context.Background(), c.Content, c.GrammarCard(), want, 1200)
+		result, err := svc.GradeGrammarBlank(context.Background(), 0, c.Content, c.GrammarCard(), want, 1200)
 		require.NoError(t, err)
 		assert.True(t, result.Correct, "blank %q must grade against its own reference", c.Incorrect)
 	}
@@ -458,7 +458,7 @@ func TestLoadRelearnPool_GrammarTwoBlanksKeepsBothBlanks(t *testing.T) {
 		}
 		// Each blank grades against its OWN correction — grading one never
 		// resolves the other.
-		result, err := svc.GradeGrammarBlank(context.Background(), c.Content, c.GrammarCard(), want, 1200)
+		result, err := svc.GradeGrammarBlank(context.Background(), 0, c.Content, c.GrammarCard(), want, 1200)
 		require.NoError(t, err)
 		assert.True(t, result.Correct, "blank %q must grade against its own reference", c.Incorrect)
 	}
@@ -535,7 +535,7 @@ origins:
 		EtymologyDirectories:   []string{etymDir},
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
 }
@@ -708,7 +708,7 @@ definitions:
 		EtymologyDirectories:   []string{etymDir},
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
 }
@@ -862,7 +862,7 @@ origins:
 		FlashcardsDirectories:  []string{flashcardsDir},
 		EtymologyDirectories:   []string{etymDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 }
 
