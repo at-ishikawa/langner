@@ -61,6 +61,31 @@ jobs:
       - name: Run tests with coverage
         run: pnpm test -- --coverage --coverage.thresholds.branches=90
 
+  build:
+    name: Frontend Build
+    # Runs the exact production build Vercel runs (`next build`) so a
+    # build-breaking change (type error in app code, bad import, failed route
+    # compile) is caught in CI instead of only when Vercel deploys.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: 'frontend/.node-version'
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build (next build)
+        run: pnpm build
+
   e2e:
     name: Frontend E2E Test
     runs-on: ubuntu-latest

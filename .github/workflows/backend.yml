@@ -43,6 +43,27 @@ jobs:
       - name: Run tests with coverage check
         run: make test-coverage
 
+  vercel-build:
+    name: Vercel function build
+    # The backend deploys to Vercel as a Go serverless function
+    # (backend/api/index.go). Cross-compile it for the lambda target
+    # (linux/amd64) — the same GOOS/GOARCH Vercel's Go runtime builds — so a
+    # change that breaks the serverless entrypoint is caught in CI, not only on
+    # a Vercel deploy. Also validates backend/vercel.json parses.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'backend/go.mod'
+      - name: Cross-build the Vercel Go function (linux/amd64)
+        working-directory: backend
+        run: GOOS=linux GOARCH=amd64 go build ./api/...
+      - name: Validate backend/vercel.json is valid JSON
+        run: python3 -c "import json; json.load(open('backend/vercel.json'))"
+
   gemini-integration:
     name: Gemini live integration
     runs-on: ubuntu-latest
