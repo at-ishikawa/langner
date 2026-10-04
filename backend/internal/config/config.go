@@ -8,6 +8,7 @@ import (
 
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
 
@@ -326,6 +327,15 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to bind TOKEN_SIGNING_KEY environment variable: %w", err)
 	}
 
+	// Non-secret settings are env-overridable too (see nonSecretEnvBindings), so a
+	// serverless/PaaS deploy can run with no config.yml. BindEnv both registers the
+	// key for Unmarshal and lets viper's precedence make env win over the file.
+	for _, b := range nonSecretEnvBindings {
+		if err := v.BindEnv(b...); err != nil {
+			return nil, fmt.Errorf("failed to bind env for %s: %w", b[0], err)
+		}
+	}
+
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("configuration file found but could not be read: %w. Please check the file format and permissions", err)
@@ -333,9 +343,17 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	}
 
 	var cfg Config
-	if err := v.Unmarshal(&cfg); err != nil {
+	if err := v.Unmarshal(&cfg, func(dc *mapstructure.DecoderConfig) {
+		// Env values arrive as strings; coerce them to the struct's bool/int
+		// fields (DB_TLS, DB_PORT, AUTH_COOKIE_SECURE, …) during Unmarshal.
+		dc.WeaklyTypedInput = true
+	}); err != nil {
 		return nil, fmt.Errorf("invalid configuration format: %w", err)
 	}
+	// Finish the two things BindEnv can't express — merge DB_PARAMS into the
+	// params map and trim comma-split list values — before validation so
+	// env-provided values are validated too.
+	applyEnvExtras(&cfg)
 	cfg.Notebooks.applyBaseDirectory()
 
 	if err := loader.validator.Struct(cfg); err != nil {

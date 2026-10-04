@@ -1,4 +1,22 @@
 # Langner Configuration
+#
+# Every setting below can also be provided by an ENVIRONMENT VARIABLE, so a
+# serverless/PaaS deploy can run with NO config.yml on disk (env wins over file):
+#   server.port              PORT (PaaS convention) or SERVER_PORT
+#   server.cors.allowed_origins   CORS_ALLOWED_ORIGINS (comma-separated)
+#   database.host/port/database/username/tls   DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_TLS
+#   database.password        DB_PASSWORD (secret)
+#   database.params          DB_PARAMS ("k=v,k=v" — e.g. sslmode=require,default_query_exec_mode=simple_protocol)
+#   database pool sizes      DB_MAX_OPEN_CONNS, DB_MAX_IDLE_CONNS, DB_CONN_MAX_LIFETIME_SECONDS
+#   auth.google_client_id    AUTH_GOOGLE_CLIENT_ID   (secret: GOOGLE_CLIENT_SECRET)
+#   auth.redirect_url/frontend_url   AUTH_REDIRECT_URL, AUTH_FRONTEND_URL
+#   auth.allowed_emails      AUTH_ALLOWED_EMAILS (comma-separated)
+#   auth.cookie_secure/samesite      AUTH_COOKIE_SECURE, AUTH_COOKIE_SAMESITE
+#   auth.token_signing_key   TOKEN_SIGNING_KEY (secret)
+#   inference.mode           INFERENCE_MODE; keys OPENAI_API_KEY / GEMINI_API_KEY
+# The database host/port point at ANY Postgres or transaction pooler (PgBouncer,
+# Supabase's pooler, pgcat) — no provider-specific handling; set DB_TLS and, for
+# a transaction pooler, keep the default exec mode (or DB_PARAMS=default_query_exec_mode=simple_protocol).
 
 server:
   port: 8080

@@ -12,6 +12,7 @@ require (
 	github.com/go-playground/locales v0.14.1
 	github.com/go-playground/universal-translator v0.18.1
 	github.com/go-resty/resty/v2 v2.16.5
+	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/jackc/pgx/v5 v5.5.4
@@ -41,7 +42,6 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-swiss/fonts v0.0.0-20230807175105-90067c2f5042 // indirect
-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/cel-go v0.27.0 // indirect
 	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
