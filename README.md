@@ -73,7 +73,7 @@ There are two ways to build vocabulary notebooks:
 
 **From books** - As you read a book in the web UI, select any word to look it up. Save the definition and it's added to a notebook for that book automatically.
 
-**From YAML files** - Create your own notebooks as YAML files for vocabulary from any source (TV shows, articles, podcasts, etc.). Place them in the directories configured in `config.yml`. See the `examples/` directory for the supported formats:
+**From YAML files** - Create your own notebooks as YAML files for vocabulary from any source (TV shows, articles, podcasts, etc.). Place them in the directories configured in `config.yml`, then load them into the database with `langner-admin migrate import-content` (the server serves notebook content from the database, so new or edited YAML takes effect after an import). See the `examples/` directory for the supported formats:
 
 - `examples/stories/` - Story notebooks with conversations and scenes
 - `examples/flashcards/` - Simple vocabulary card lists

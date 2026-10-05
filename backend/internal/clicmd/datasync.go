@@ -227,6 +227,12 @@ func newMigrateResetDBCommand() *cobra.Command {
 					return fmt.Errorf("seed db-only state: %w", err)
 				}
 			}
+			// Import notebook CONTENT (the configured example catalog) into
+			// notebook_files so the server serves content from the DB — the same
+			// content path dev, e2e, and prod all use (no filesystem serving).
+			if _, err := ImportShippedContent(ctx, cfg, db, io.Discard); err != nil {
+				return fmt.Errorf("import notebook content: %w", err)
+			}
 			// Auth provisioning is a SEPARATE, explicit step (see import-db).
 			// Seeded history is already attributed to the initial admin AT INSERT
 			// via resolveSeedOwnerID (user_id NOT NULL), so reset-db no longer runs

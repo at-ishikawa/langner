@@ -3,6 +3,7 @@ package clicmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -70,15 +71,16 @@ var e2eHistoryFixtures = []e2eHistoryFixture{
 }
 
 // NewMigrateSeedE2ECommand seeds the deterministic learning-history the e2e
-// suite asserts on, through the real write path (internal/dbseed) — replacing
-// the reset-db/import seed for e2e and the learning_notes YAML fixtures. Notebook
-// CONTENT is served from the on-disk fixtures (config.e2e.yml); this command
-// only seeds STATE (history), attributed to the initial-admin account. Runs once
-// on a fresh DB at server start; the per-scenario reset uses reset-e2e.
+// suite asserts on, through the real write path (internal/dbseed), AND imports
+// the notebook CONTENT catalog (config.e2e.yml fixtures) into notebook_files so
+// e2e serves content from the DB — the SAME content path as prod (no filesystem
+// serving). It seeds STATE (history, attributed to the initial-admin account)
+// plus content. Runs once on a fresh DB at server start; the per-scenario reset
+// uses reset-e2e, which restores STATE only (content is baseline, not state).
 func NewMigrateSeedE2ECommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "seed-e2e",
-		Short: "Seed deterministic e2e learning history (state only) via the fixtures library",
+		Short: "Seed deterministic e2e learning history + import notebook content into the DB",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			cfg, db, err := openConfigAndDB()
@@ -94,7 +96,10 @@ func NewMigrateSeedE2ECommand() *cobra.Command {
 			if err := seedE2EHistory(ctx, db, ownerID); err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Seeded %d e2e learning-history rows.\n", len(e2eHistoryFixtures))
+			if _, err := ImportShippedContent(ctx, cfg, db, io.Discard); err != nil {
+				return fmt.Errorf("import notebook content: %w", err)
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Seeded %d e2e learning-history rows and imported notebook content.\n", len(e2eHistoryFixtures))
 			return nil
 		},
 	}
@@ -103,10 +108,11 @@ func NewMigrateSeedE2ECommand() *cobra.Command {
 // e2eStateTables are the learning-content STATE tables seed-e2e populates and a
 // quiz run mutates. reset-e2e truncates exactly these back to the seeded
 // baseline; CASCADE clears their dependents (note_images / note_references /
-// note_origin_parts / etymology_origin_forms). users, notebooks (ownership), the
-// CLI auth tables, and schema_migrations are deliberately preserved so the
-// pre-minted access token keeps resolving (content is filesystem-served, so the
-// definitions/flashcard/concept content tables are never populated in e2e).
+// note_origin_parts / etymology_origin_forms). users, notebooks (ownership),
+// notebook_files (the imported content catalog — baseline, not per-scenario
+// state), the CLI auth tables, and schema_migrations are deliberately preserved
+// so the pre-minted access token keeps resolving and the DB-served notebook
+// content survives a reset; ensure-on-serve recreates notes from that content.
 var e2eStateTables = []string{
 	"learning_logs",
 	"notebook_notes",
