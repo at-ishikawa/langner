@@ -44,11 +44,11 @@ if [ "${existing}" -lt 1 ]; then
     -c "DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE)" \
     -c "CREATE DATABASE ${DB_NAME} ENCODING 'UTF8'"
 
-  # No bulk import: notebook CONTENT is served from the on-disk fixtures
-  # (config.e2e.yml) and notes are created on demand by ensure-on-serve. We only
-  # apply the schema and seed STATE — auth accounts + deterministic learning
-  # history — via the fixtures library (migrate seed-e2e), replacing the old
-  # reset-db/import + learning_notes YAML.
+  # Notebook CONTENT is served from Postgres (the same path as prod — no
+  # filesystem serving). `migrate seed-e2e` seeds STATE (auth accounts +
+  # deterministic learning history via the fixtures library) AND imports the
+  # notebook content catalog (config.e2e.yml fixtures) into notebook_files; notes
+  # are then created on demand by ensure-on-serve from that DB content.
   echo "[seed] applying schema (migrate schema)"
   DB_PASSWORD="${DB_PASSWORD}" ./langner-admin migrate schema --config "${TEST_CONFIG_PATH}"
 

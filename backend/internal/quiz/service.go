@@ -146,28 +146,35 @@ func (s *Service) SetContentSource(cs notebook.ContentSource) {
 	s.contentSource = cs
 }
 
-// contentDirs merges the configured filesystem directories with any DB content
-// source's directories. It is the ONE place the reader's directory set is
-// assembled, so the quiz service and any other reader builder union the same
-// two sources.
+// contentDirs returns the directory roots the reader walks. It is the ONE place
+// the reader's directory set is assembled.
+//
+// When a DB content source is installed (every served environment — dev, e2e,
+// prod set one once the database is connected) the reader reads notebook CONTENT
+// SOLELY from the DB's materialized dirs; the configured filesystem
+// `*_directories` are NOT served, they are only an import source that fills
+// notebook_files. This keeps serving identical across dev/e2e/prod and removes
+// every filesystem content read from the serving path. With no content source
+// (component unit tests that build the Service directly) the reader falls back
+// to the configured filesystem directories, so those tests keep using their
+// on-disk fixtures unchanged.
 func (s *Service) contentDirs() (notebook.ContentDirs, error) {
-	dirs := notebook.ContentDirs{
-		Stories:     s.notebooksConfig.StoriesDirectories,
-		Flashcards:  s.notebooksConfig.FlashcardsDirectories,
-		Books:       s.notebooksConfig.BooksDirectories,
-		Definitions: s.notebooksConfig.DefinitionsDirectories,
-		Etymology:   s.notebooksConfig.EtymologyDirectories,
-		Journals:    s.notebooksConfig.JournalsDirectories,
-		Grammars:    s.notebooksConfig.GrammarsDirectories,
-	}
 	if s.contentSource == nil {
-		return dirs, nil
+		return notebook.ContentDirs{
+			Stories:     s.notebooksConfig.StoriesDirectories,
+			Flashcards:  s.notebooksConfig.FlashcardsDirectories,
+			Books:       s.notebooksConfig.BooksDirectories,
+			Definitions: s.notebooksConfig.DefinitionsDirectories,
+			Etymology:   s.notebooksConfig.EtymologyDirectories,
+			Journals:    s.notebooksConfig.JournalsDirectories,
+			Grammars:    s.notebooksConfig.GrammarsDirectories,
+		}, nil
 	}
 	dbDirs, err := s.contentSource.Dirs(context.Background())
 	if err != nil {
-		return notebook.ContentDirs{}, fmt.Errorf("resolve user-notebook content dirs: %w", err)
+		return notebook.ContentDirs{}, fmt.Errorf("resolve notebook content dirs: %w", err)
 	}
-	return dirs.Merge(dbDirs), nil
+	return dbDirs, nil
 }
 
 // visibleNotebooks returns a predicate reporting whether a notebook is visible

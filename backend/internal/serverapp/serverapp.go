@@ -222,20 +222,36 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	svc := quiz.NewService(cfg.Notebooks, inferenceClient, dictionaryMap, learningRepo, cfg.Quiz)
 	svc.SetHistoryStore(historyStore)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
-	// DB mode: install the ensure-on-serve hook so a notebook whose YAML gained
-	// units without a fresh `migrate import-db` still gets its notes rows created
-	// additively when its cards are served. YAML-only mode leaves the hook nil.
+
+	// Per-user + shipped notebooks (DB mode only): the quiz service, the
+	// notebook-detail reader, and the ensure-on-serve hook all read notebook
+	// CONTENT from the DB content source — never the filesystem. YAML-only mode
+	// (no DB) leaves these nil, so the reader uses the configured directories and
+	// the push/pull/list RPCs return Unimplemented.
+	var dbFileRepo *notebook.NotebookFileRepository
+	var dbContentSource *notebook.DBContentSource
 	if db != nil {
-		if ensureReader, rerr := notebook.NewReader(
-			cfg.Notebooks.StoriesDirectories,
-			cfg.Notebooks.FlashcardsDirectories,
-			cfg.Notebooks.BooksDirectories,
-			cfg.Notebooks.DefinitionsDirectories,
-			cfg.Notebooks.EtymologyDirectories,
+		dbFileRepo = notebook.NewNotebookFileRepository(db)
+		dbContentSource = notebook.NewDBContentSource(dbFileRepo)
+		svc.SetContentSource(dbContentSource)
+
+		// Ensure-on-serve creates notes rows additively when a notebook's content
+		// is served. It reads from the SAME materialized DB content the quiz
+		// serves, so dev/e2e/prod share one content path with no filesystem read.
+		if dirs, derr := dbContentSource.Dirs(context.Background()); derr != nil {
+			slog.Warn("ensure-on-serve disabled — DB content dirs unavailable", "error", derr)
+		} else if ensureReader, rerr := notebook.NewReader(
+			dirs.Stories,
+			dirs.Flashcards,
+			dirs.Books,
+			dirs.Definitions,
+			dirs.Etymology,
 			dictionaryMap,
 		); rerr != nil {
 			slog.Warn("ensure-on-serve disabled — notebook reader init failed", "error", rerr)
 		} else {
+			_ = ensureReader.LoadJournals(dirs.Journals)
+			_ = ensureReader.LoadGrammars(dirs.Grammars)
 			noteSource := notebook.NewYAMLNoteRepository(ensureReader)
 			ensurer := datasync.NewImporter(noteRepo, nil, noteSource, nil, nil, nil, io.Discard)
 			svc.SetNoteEnsurer(ensurer)
@@ -254,16 +270,10 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	notebookHandler.SetHistoryStore(historyStore)
 	notebookHandler.SetNotebookACL(repos.ACL)
 
-	// Per-user notebooks (DB mode only): surface user-pushed content to the quiz
-	// service + notebook-detail reader through the DB content source, and give
-	// the notebook handler the push/pull/list dependencies. YAML-only mode leaves
-	// these nil, so those RPCs return Unimplemented and the reader sees only the
-	// shipped catalog.
+	// Give the notebook handler the push/pull/list dependencies (DB mode only),
+	// reusing the content source already installed on the quiz service above.
 	if db != nil {
-		fileRepo := notebook.NewNotebookFileRepository(db)
-		contentSource := notebook.NewDBContentSource(fileRepo)
-		svc.SetContentSource(contentSource)
-		notebookHandler.SetPushDeps(db, fileRepo, contentSource)
+		notebookHandler.SetPushDeps(db, dbFileRepo, dbContentSource)
 	}
 
 	handler := server.NewQuizHandler(svc)
