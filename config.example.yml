@@ -13,6 +13,8 @@
 #   auth.allowed_emails      AUTH_ALLOWED_EMAILS (comma-separated)
 #   auth.cookie_secure/samesite      AUTH_COOKIE_SECURE, AUTH_COOKIE_SAMESITE
 #   auth.token_signing_key   TOKEN_SIGNING_KEY (secret)
+#   quiz.algorithm           QUIZ_ALGORITHM (e.g. fixed / modified_sm2)
+#   quiz.fixed_intervals     QUIZ_FIXED_INTERVALS (comma-separated ints, e.g. 1,7,30,90)
 #   inference.mode           INFERENCE_MODE; keys OPENAI_API_KEY / GEMINI_API_KEY
 # The database host/port point at ANY Postgres or transaction pooler (PgBouncer,
 # Supabase's pooler, pgcat) — no provider-specific handling; set DB_TLS and, for

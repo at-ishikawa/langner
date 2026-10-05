@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -31,6 +32,9 @@ var nonSecretEnvBindings = [][]string{
 	{"auth.initial_admin_email", "AUTH_INITIAL_ADMIN_EMAIL"},
 	{"auth.cookie_secure", "AUTH_COOKIE_SECURE"},
 	{"auth.cookie_samesite", "AUTH_COOKIE_SAMESITE"},
+	{"quiz.algorithm", "QUIZ_ALGORITHM"},
+	// quiz.fixed_intervals ([]int) is not bound here — a comma-separated env
+	// value needs custom int parsing (see applyEnvExtras / QUIZ_FIXED_INTERVALS).
 }
 
 // applyEnvExtras handles the two things viper's BindEnv can't do cleanly, run
@@ -42,6 +46,25 @@ func applyEnvExtras(cfg *Config) {
 	mergeKVInto(&cfg.Database.Params, os.Getenv("DB_PARAMS"))
 	cfg.Server.CORS.AllowedOrigins = trimList(cfg.Server.CORS.AllowedOrigins)
 	cfg.Auth.AllowedEmails = trimList(cfg.Auth.AllowedEmails)
+	// QUIZ_FIXED_INTERVALS overrides quiz.fixed_intervals ([]int) from a
+	// comma-separated env value, e.g. "1,7,30,90". Parsed here (not via BindEnv)
+	// so spaces are tolerated and bad entries skipped.
+	if ints, ok := intsFromCSV(os.Getenv("QUIZ_FIXED_INTERVALS")); ok {
+		cfg.Quiz.FixedIntervals = ints
+	}
+}
+
+// intsFromCSV parses a comma-separated int list ("1, 7, 30"), trimming each and
+// skipping non-numeric entries. Returns ok=false when s has no valid int, so the
+// caller keeps the existing (file/default) value.
+func intsFromCSV(s string) ([]int, bool) {
+	var out []int
+	for _, p := range splitList(s) {
+		if n, err := strconv.Atoi(p); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out, len(out) > 0
 }
 
 // mergeKVInto parses a "k=v,k=v" string and merges it into *dst (creating the

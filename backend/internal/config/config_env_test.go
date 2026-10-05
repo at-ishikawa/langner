@@ -48,6 +48,8 @@ auth:
 	t.Setenv("AUTH_ALLOWED_EMAILS", "a@x.com,b@y.com")
 	t.Setenv("AUTH_COOKIE_SECURE", "true")
 	t.Setenv("AUTH_COOKIE_SAMESITE", "none")
+	t.Setenv("QUIZ_ALGORITHM", "fixed")
+	t.Setenv("QUIZ_FIXED_INTERVALS", "1, 7, 30, 90")
 
 	loader, err := NewConfigLoader(path)
 	require.NoError(t, err)
@@ -68,6 +70,8 @@ auth:
 	assert.Equal(t, []string{"a@x.com", "b@y.com"}, cfg.Auth.AllowedEmails)
 	assert.True(t, cfg.Auth.CookieSecure)
 	assert.Equal(t, "none", cfg.Auth.CookieSameSite)
+	assert.Equal(t, "fixed", cfg.Quiz.Algorithm)
+	assert.Equal(t, []int{1, 7, 30, 90}, cfg.Quiz.FixedIntervals, "QUIZ_FIXED_INTERVALS parsed (spaces tolerated)")
 
 	// un-overridden file value survives
 	assert.Equal(t, "filedb", cfg.Database.Database)
