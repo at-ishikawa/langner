@@ -160,6 +160,25 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 		}
 	}
 
+	// Serve the dictionary from Postgres, like notebook content: in a deployed
+	// environment the on-disk rapidapi cache is absent, so dictionaryMap loaded
+	// from the cache dir above is empty. The dictionary lives in dictionary_entries
+	// (filled at import time); without overlaying it a story word whose meaning
+	// comes from the dictionary (dictionary_number set, no inline meaning) makes
+	// Note.SetDetails fail and takes down the whole notebook listing. DB entries
+	// win; the filesystem cache stays a dev-only fallback so YAML-only mode and the
+	// e2e fixtures are unchanged.
+	if db != nil {
+		if dbMap, derr := dictionary.NewDBDictionaryRepository(db).LoadResponseMap(context.Background()); derr != nil {
+			slog.Warn("failed to load dictionary from database; using filesystem cache only", "error", derr)
+		} else {
+			for word, resp := range dbMap {
+				dictionaryMap[word] = resp
+			}
+			slog.Info("loaded dictionary from database", "db_entries", len(dbMap), "total_words", len(dictionaryMap))
+		}
+	}
+
 	// Always-on auth (design §2). Google-OAuth sign-in mints a langner access
 	// JWT for the web SPA (delivered in the URL fragment, no session cookie) and
 	// the RFC 8628 device flow mints one for the CLI; EVERY connect RPC is gated
