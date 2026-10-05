@@ -326,7 +326,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Existing fixtures predate the includeNoCorrectAnswers gate;
 			// pass true to preserve the original assertions.
-			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc, true, QuizTypeNotebook)
+			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc, true, QuizTypeNotebook, true)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.wantErrMsg != "" {

@@ -185,9 +185,9 @@ func TestHighlightDefinitionsInText(t *testing.T) {
 			expected:        "A completely different sentence.",
 		},
 		{
-			name: "Empty definitions returns text unchanged",
-			text: "The eager student arrived.",
-			definitions: []Note{},
+			name:            "Empty definitions returns text unchanged",
+			text:            "The eager student arrived.",
+			definitions:     []Note{},
 			conversionStyle: ConversionStyleMarkdown,
 			expected:        "The eager student arrived.",
 		},
@@ -459,11 +459,11 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			learningHistory: []LearningHistory{
 				{
 					Metadata: LearningHistoryMetadata{Title: "Story 1"},
-					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+					Scenes:   []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 				{
 					Metadata: LearningHistoryMetadata{Title: "Story 2"},
-					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+					Scenes:   []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 			},
 			sortDesc:                true,
@@ -502,11 +502,11 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			learningHistory: []LearningHistory{
 				{
 					Metadata: LearningHistoryMetadata{Title: "Story 1"},
-					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+					Scenes:   []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 				{
 					Metadata: LearningHistoryMetadata{Title: "Story 2"},
-					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+					Scenes:   []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 			},
 			includeNoCorrectAnswers: true,
@@ -544,11 +544,11 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			learningHistory: []LearningHistory{
 				{
 					Metadata: LearningHistoryMetadata{Title: "Story 1"},
-					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+					Scenes:   []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 				{
 					Metadata: LearningHistoryMetadata{Title: "Story 2"},
-					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+					Scenes:   []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 			},
 			includeNoCorrectAnswers: true,
@@ -578,7 +578,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			learningHistory: []LearningHistory{
 				{
 					Metadata: LearningHistoryMetadata{Title: "Story 1"},
-					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "test", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+					Scenes:   []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "test", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 			},
 			dictionaryMap: map[string]rapidapi.Response{
@@ -949,6 +949,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 				tt.useSpacedRepetition,
 				tt.preserveOrder,
 				QuizTypeNotebook,
+				true,
 			)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -1035,8 +1036,9 @@ func TestFilterStoryNotebooks_ExcludesReverseLearnedWords(t *testing.T) {
 
 	filtered, err := FilterStoryNotebooks(
 		storyNotebooks, learningHistory, nil,
-		false /*sortDesc*/, true /*includeNoCorrectAnswers*/, false /*useSpacedRepetition*/, true /*preserveOrder*/,
+		false /*sortDesc*/, true /*includeNoCorrectAnswers*/, false /*useSpacedRepetition*/, true, /*preserveOrder*/
 		QuizTypeNotebook,
+		true, /*resolveMeanings*/
 	)
 	require.NoError(t, err)
 
@@ -1052,6 +1054,54 @@ func TestFilterStoryNotebooks_ExcludesReverseLearnedWords(t *testing.T) {
 		"export must exclude words with a recent correct ReverseLogs entry; "+
 			"break the ice was answered today in reverse mode and should not "+
 			"reappear in the study PDF until its 30-day interval elapses")
+}
+
+// TestFilterStoryNotebooks_CountPathSkipsMeanings pins the quiz-options summary
+// behavior: with resolveMeanings=false the filter counts due words WITHOUT
+// resolving dictionary meanings, so a word whose meaning can't be resolved (here
+// an out-of-range dictionary_number) no longer fails the whole listing — the
+// production crash that took down /quiz. With resolveMeanings=true the same input
+// still surfaces the SetDetails error (the quiz-card path is unchanged).
+func TestFilterStoryNotebooks_CountPathSkipsMeanings(t *testing.T) {
+	storyNotebooks := []StoryNotebook{{
+		Event: "Story 1",
+		Scenes: []StoryScene{{
+			Title:         "Scene 1",
+			Conversations: []Conversation{{Speaker: "A", Quote: "This is a test word"}},
+			Definitions:   []Note{{Expression: "test", Meaning: "test meaning", DictionaryNumber: 5}},
+		}},
+	}}
+	learningHistory := []LearningHistory{{
+		Metadata: LearningHistoryMetadata{Title: "Story 1"},
+		Scenes: []LearningScene{{
+			Metadata:    LearningSceneMetadata{Title: "Scene 1"},
+			Expressions: []LearningHistoryExpression{{Expression: "test", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}},
+		}},
+	}}
+	dictionaryMap := map[string]rapidapi.Response{
+		"test": {Word: "test", Results: []rapidapi.Result{{Definition: "a trial"}}},
+	}
+
+	// Card path (resolveMeanings=true): the out-of-range dictionary_number still
+	// surfaces as an error — unchanged.
+	_, err := FilterStoryNotebooks(storyNotebooks, learningHistory, dictionaryMap,
+		false, true, true, false, QuizTypeNotebook, true)
+	require.Error(t, err)
+
+	// Count path (resolveMeanings=false): no meaning resolution, so the word is
+	// still counted and the listing does not fail.
+	filtered, err := FilterStoryNotebooks(storyNotebooks, learningHistory, dictionaryMap,
+		false, true, true, false, QuizTypeNotebook, false)
+	require.NoError(t, err)
+	var got []string
+	for _, nb := range filtered {
+		for _, scene := range nb.Scenes {
+			for _, def := range scene.Definitions {
+				got = append(got, def.Expression)
+			}
+		}
+	}
+	assert.Equal(t, []string{"test"}, got)
 }
 
 func TestReader_ReadAllStoryNotebooksMap(t *testing.T) {

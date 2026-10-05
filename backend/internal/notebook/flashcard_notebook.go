@@ -102,6 +102,7 @@ func FilterFlashcardNotebooks(
 	sortDesc bool,
 	includeNoCorrectAnswers bool,
 	quizType QuizType,
+	resolveMeanings bool,
 ) ([]FlashcardNotebook, error) {
 	result := make([]FlashcardNotebook, 0)
 
@@ -156,9 +157,15 @@ func FilterFlashcardNotebooks(
 				continue
 			}
 
-			// Set details from dictionary
-			if err := card.SetDetails(dictionaryMap, ""); err != nil {
-				return nil, fmt.Errorf("card.SetDetails() > %w", err)
+			// Resolve the card's meaning from the dictionary. Skipped when the
+			// caller only needs the due COUNT (the quiz-options summary): the
+			// count doesn't read meanings, so resolving them is wasted work and
+			// must not let a word whose meaning is unavailable fail the whole
+			// listing. The quiz-card paths pass resolveMeanings=true.
+			if resolveMeanings {
+				if err := card.SetDetails(dictionaryMap, ""); err != nil {
+					return nil, fmt.Errorf("card.SetDetails() > %w", err)
+				}
 			}
 
 			cards = append(cards, card)

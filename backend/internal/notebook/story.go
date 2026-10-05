@@ -294,7 +294,7 @@ const (
 // filter. PDF/markdown export and the standard quiz both pass
 // QuizTypeNotebook; reverse and freeform paths have their own loaders that
 // don't go through this function.
-func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool, preserveOrder bool, quizType QuizType) ([]StoryNotebook, error) {
+func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool, preserveOrder bool, quizType QuizType, resolveMeanings bool) ([]StoryNotebook, error) {
 	result := make([]StoryNotebook, 0)
 	for _, notebook := range storyNotebooks {
 		if len(notebook.Scenes) == 0 {
@@ -346,8 +346,16 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 						continue
 					}
 				}
-				if err := definition.SetDetails(dictionaryMap, ""); err != nil {
-					return nil, fmt.Errorf("definition.SetDetails() > %w", err)
+				// Resolve the word's meaning from the dictionary. Skipped when the
+				// caller only needs the due COUNT (the quiz-options summary): the
+				// count doesn't read meanings, so resolving them is wasted work and
+				// must not let a word whose meaning is unavailable fail the whole
+				// listing. The quiz-card / render / export paths pass
+				// resolveMeanings=true.
+				if resolveMeanings {
+					if err := definition.SetDetails(dictionaryMap, ""); err != nil {
+						return nil, fmt.Errorf("definition.SetDetails() > %w", err)
+					}
 				}
 				definitions = append(definitions, definition)
 			}
@@ -416,7 +424,7 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 
 	// For books, preserve index order instead of sorting by date
 	preserveOrder := writer.reader.IsBook(storyID)
-	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false, preserveOrder, QuizTypeNotebook)
+	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false, preserveOrder, QuizTypeNotebook, true)
 	if err != nil {
 		return fmt.Errorf("filterStoryNotebooks() > %w", err)
 	}

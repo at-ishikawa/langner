@@ -391,6 +391,7 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		filtered, err := notebook.FilterStoryNotebooks(
 			stories, learningHistories[id], s.dictionaryMap,
 			false, includeUnstudied, true, false, notebook.QuizTypeNotebook,
+			false, // summary needs the due COUNT only — don't resolve meanings
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter story notebook %q: %w", id, err)
@@ -443,6 +444,7 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		// includeUnstudied=true when the toggle flips.
 		filtered, err := notebook.FilterFlashcardNotebooks(
 			notebooks, learningHistories[id], s.dictionaryMap, false, includeUnstudied, notebook.QuizTypeNotebook,
+			false, // summary needs the due COUNT only — don't resolve meanings
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
@@ -777,6 +779,7 @@ func (s *Service) loadStoryCards(
 	filtered, err := notebook.FilterStoryNotebooks(
 		stories, learningHistories[notebookID], s.dictionaryMap,
 		false, includeUnstudied, true, false, notebook.QuizTypeNotebook,
+		true, // building cards — resolve meanings for display
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter story notebook %q: %w", notebookID, err)
@@ -834,6 +837,7 @@ func (s *Service) loadFlashcardCards(
 
 	filtered, err := notebook.FilterFlashcardNotebooks(
 		notebooks, learningHistories[notebookID], s.dictionaryMap, false, includeUnstudied, notebook.QuizTypeNotebook,
+		true, // building cards — resolve meanings for display
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
