@@ -43,6 +43,25 @@ jobs:
       - name: Run tests with coverage check
         run: make test-coverage
 
+  vercel-build:
+    name: Vercel build (Go server)
+    # The backend deploys to Vercel as a Go web server: Vercel's "go" framework
+    # detects cmd/server/main.go, builds it, and runs the binary — routing $PORT
+    # traffic to it. Reproduce the exact build Vercel runs — cross-compile that
+    # entrypoint for the deploy target (linux/amd64) — so a change that breaks
+    # the Vercel build is caught in CI, not only on deploy.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'backend/go.mod'
+      - name: Cross-build the Vercel server entrypoint (linux/amd64)
+        working-directory: backend
+        run: GOOS=linux GOARCH=amd64 go build -o /tmp/langner-server ./cmd/server
+
   gemini-integration:
     name: Gemini live integration
     runs-on: ubuntu-latest
