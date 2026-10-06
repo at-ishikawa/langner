@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -16,36 +15,6 @@ import (
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
-
-func TestGradeError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want connect.Code
-	}{
-		{
-			name: "429 maps to resource exhausted",
-			err:  errors.New("response error 429: quota exceeded"),
-			want: connect.CodeResourceExhausted,
-		},
-		{
-			name: "RESOURCE_EXHAUSTED maps to resource exhausted",
-			err:  errors.New("some wrapper: RESOURCE_EXHAUSTED"),
-			want: connect.CodeResourceExhausted,
-		},
-		{
-			name: "other errors stay internal",
-			err:  errors.New("json.Unmarshal failed"),
-			want: connect.CodeInternal,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := gradeError("grade answers", tt.err)
-			assert.Equal(t, tt.want, connect.CodeOf(got))
-		})
-	}
-}
 
 func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 	tests := []struct {
@@ -177,8 +146,8 @@ func TestQuizHandler_BatchSubmitAnswers_Skip(t *testing.T) {
 	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
 		inference.AnswerMeaningsResponse{
 			Answers: []inference.AnswerMeaning{{
-				Expression: "word2",
-				Meaning:    "meaning2",
+				Expression:        "word2",
+				Meaning:           "meaning2",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 4}},
 			}},
 		}, nil,
@@ -328,10 +297,10 @@ func TestQuizHandler_BatchSubmitReverseAnswers_OneLLMCallForBatch(t *testing.T) 
 	resp, err := handler.BatchSubmitReverseAnswers(context.Background(),
 		connect.NewRequest(&apiv1.BatchSubmitReverseAnswersRequest{
 			Answers: []*apiv1.SubmitReverseAnswerRequest{
-				{NoteId: 1, Answer: "break the ice"},  // correct
+				{NoteId: 1, Answer: "break the ice"},     // correct
 				{NoteId: 2, Answer: "totally unrelated"}, // wrong
-				{NoteId: 4, IsSkipped: true},           // skipped -> no LLM, no per-item call
-				{NoteId: 3, Answer: "hit the sack"},    // correct
+				{NoteId: 4, IsSkipped: true},             // skipped -> no LLM, no per-item call
+				{NoteId: 3, Answer: "hit the sack"},      // correct
 			},
 		}),
 	)
@@ -477,7 +446,7 @@ func TestQuizHandler_BatchSubmitReverseAnswers_ReorderedResultsMapByIndex(t *tes
 	resp, err := handler.BatchSubmitReverseAnswers(context.Background(),
 		connect.NewRequest(&apiv1.BatchSubmitReverseAnswersRequest{
 			Answers: []*apiv1.SubmitReverseAnswerRequest{
-				{NoteId: 1, Answer: "break the ice"},    // correct
+				{NoteId: 1, Answer: "break the ice"},     // correct
 				{NoteId: 2, Answer: "hit the sack"},      // correct
 				{NoteId: 3, Answer: "totally unrelated"}, // wrong
 			},

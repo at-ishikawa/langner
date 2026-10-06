@@ -100,6 +100,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				Gemini: GeminiConfig{
 					Model: "gemini-3.5-flash-lite",
 				},
+				Inference: InferenceConfig{Mode: "user"},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -167,6 +168,7 @@ outputs:
 				Gemini: GeminiConfig{
 					Model: "gemini-3.5-flash-lite",
 				},
+				Inference: InferenceConfig{Mode: "user"},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -228,6 +230,7 @@ outputs:
 				Gemini: GeminiConfig{
 					Model: "gemini-3.5-flash-lite",
 				},
+				Inference: InferenceConfig{Mode: "user"},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -305,7 +308,7 @@ func TestConfigLoader_Load_InferenceModeEnvOverride(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.yaml")
 
-	t.Run("unset leaves inference mode empty (default openai path)", func(t *testing.T) {
+	t.Run("unset defaults inference mode to the per-user grader", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(configPath, []byte("# Empty config\n"), 0644))
 
 		loader, err := NewConfigLoader(configPath)
@@ -313,7 +316,7 @@ func TestConfigLoader_Load_InferenceModeEnvOverride(t *testing.T) {
 
 		cfg, err := loader.Load()
 		require.NoError(t, err)
-		assert.Equal(t, "", cfg.Inference.Mode)
+		assert.Equal(t, "user", cfg.Inference.Mode)
 	})
 
 	t.Run("INFERENCE_MODE env overrides inference.mode from config file", func(t *testing.T) {

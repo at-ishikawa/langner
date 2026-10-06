@@ -60,6 +60,11 @@ Given("I am on the Quiz page", async ({ page }) => {
   await page.goto("/quiz");
 });
 
+// covers route: /settings — the per-user LLM API key page.
+Given("I am on the Settings page", async ({ page }) => {
+  await page.goto("/settings");
+});
+
 When("I follow the {string} link", async ({ page }, name: string) => {
   await page.getByRole("link", { name: new RegExp(name, "i") }).first().click();
 });

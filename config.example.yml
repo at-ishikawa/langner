@@ -15,7 +15,7 @@
 #   auth.token_signing_key   TOKEN_SIGNING_KEY (secret)
 #   quiz.algorithm           QUIZ_ALGORITHM (e.g. fixed / modified_sm2)
 #   quiz.fixed_intervals     QUIZ_FIXED_INTERVALS (comma-separated ints, e.g. 1,7,30,90)
-#   inference.mode           INFERENCE_MODE; keys OPENAI_API_KEY / GEMINI_API_KEY
+#   inference.mode           INFERENCE_MODE (mock = tests; anything else = per-user keys)
 # The database host/port point at ANY Postgres or transaction pooler (PgBouncer,
 # Supabase's pooler, pgcat) — no provider-specific handling; set DB_TLS and, for
 # a transaction pooler, keep the default exec mode (or DB_PARAMS=default_query_exec_mode=simple_protocol).
@@ -54,13 +54,16 @@ auth:
   cookie_secure: true
   cookie_samesite: lax
   # SECRETS — keep out of committed files; env var or a private/uncommitted config:
-  #   GOOGLE_CLIENT_SECRET   the OAuth client secret
-  #   TOKEN_SIGNING_KEY      REQUIRED. Signs the langner access JWT (HS256) for
-  #                          BOTH web and CLI, and keys the OAuth CSRF `state`.
-  #                          The server refuses to start without it. Generate a
-  #                          secret, e.g. `openssl rand -hex 32`. (This replaces
-  #                          the removed SESSION_SIGNING_KEY / session cookie.)
-  # No email/name is stored, so there is no credential-encryption key.
+  #   GOOGLE_CLIENT_SECRET        the OAuth client secret
+  #   TOKEN_SIGNING_KEY           REQUIRED. Signs the langner access JWT (HS256)
+  #                               for BOTH web and CLI, and keys the OAuth CSRF
+  #                               `state`. The server refuses to start without it.
+  #                               Generate a secret, e.g. `openssl rand -hex 32`.
+  #   CREDENTIAL_ENCRYPTION_KEY   32-byte (hex/base64) AES-256 key that encrypts
+  #                               each user's LLM API key at rest. Required when
+  #                               inference.mode is "user". MUST differ from
+  #                               TOKEN_SIGNING_KEY.
+  # No email/name is stored, so the only secret encrypted at rest is the LLM key.
 
 # Notebook ownership + public/private visibility (auth Phase 3). Content stays a
 # shared global catalog; this overlay decides who may SEE each notebook. A
@@ -104,25 +107,19 @@ database:
   # max_idle_conns: 5
   # conn_max_lifetime_seconds: 300
 
-# Which inference provider grades quiz answers.
+# How quiz answers are graded. There is NO system-wide provider key: every
+# signed-in user registers their OWN provider + API key in Settings (stored
+# encrypted at rest under CREDENTIAL_ENCRYPTION_KEY), and grading resolves the
+# client per request from that credential.
 inference:
-  # mode selects the provider:
-  #   openai (default) — OpenAI Chat Completions (needs OPENAI_API_KEY)
-  #   gemini           — Google Gemini via its OpenAI-compatible endpoint
-  #                      (needs GEMINI_API_KEY)
-  #   mock             — deterministic substring grader (used by e2e tests)
-  # The INFERENCE_MODE environment variable overrides this value, e.g.
-  # `INFERENCE_MODE=gemini make dev`.
-  mode: openai
-
-# OpenAI provider. The API key and model are read from environment variables
-# ONLY (never from this file): OPENAI_API_KEY and OPENAI_MODEL. OPENAI_MODEL
-# defaults to gpt-4o-mini.
-
-# Google Gemini provider. Like OpenAI, credentials come from environment
-# variables ONLY: GEMINI_API_KEY and GEMINI_MODEL. GEMINI_MODEL defaults to the
-# free-tier model gemini-3.5-flash-lite. Select this provider with inference.mode:
-# gemini above.
+  # mode:
+  #   user (default)   — grade with each user's own key (the only real mode).
+  #                      Requires CREDENTIAL_ENCRYPTION_KEY set so keys can be
+  #                      stored; a user with no key yet gets a clear "no API key
+  #                      configured" message until they add one.
+  #   mock             — deterministic substring grader, no key (e2e tests only).
+  # Overridden by the INFERENCE_MODE environment variable.
+  mode: user
 
 notebooks:
   # These directories are the IMPORT SOURCE for notebook content, not a serving

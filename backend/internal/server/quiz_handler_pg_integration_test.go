@@ -162,7 +162,7 @@ notebooks:
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), multiRepo, config.QuizConfig{})
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response), multiRepo, config.QuizConfig{})
 
 	// A runtime learning-log write must be attributed to a user (auth Phase 2);
 	// seed one so the handler's SaveResult can stamp its id via the request ctx.

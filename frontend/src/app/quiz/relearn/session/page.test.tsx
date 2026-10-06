@@ -13,6 +13,7 @@ vi.mock("@/lib/client", () => ({
     skipWord: (...args: unknown[]) => skipWord(...args),
   },
   QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, FREEFORM: 3, ETYMOLOGY_ORIGIN: 4, RELEARN: 7, GRAMMAR: 8 },
+  messageForRpcError: (_err: unknown, fallback: string) => fallback,
 }));
 
 const pushMock = vi.fn();

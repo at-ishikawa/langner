@@ -14,11 +14,22 @@ export const API_BASE =
 
 export interface AuthUser {
   username: string;
+  // LLM-credential status (never the key itself). hasApiKey gates the quiz-start
+  // banner; provider/model show the current registration; availableProviders
+  // drives the Settings provider picker.
+  hasApiKey: boolean;
+  provider: string;
+  model: string;
+  availableProviders: string[];
 }
 
 interface MeResponse {
   authenticated: boolean;
   username?: string;
+  hasApiKey?: boolean;
+  provider?: string;
+  model?: string;
+  availableProviders?: string[];
 }
 
 // getMe returns the signed-in user, or null when unauthenticated. It restores a
@@ -53,7 +64,49 @@ export async function getMe(): Promise<AuthUser | null> {
   if (!data.authenticated || !data.username) {
     return null;
   }
-  return { username: data.username };
+  return {
+    username: data.username,
+    hasApiKey: data.hasApiKey ?? false,
+    provider: data.provider ?? "",
+    model: data.model ?? "",
+    availableProviders: data.availableProviders ?? [],
+  };
+}
+
+// setLlmCredential registers (or replaces) the user's LLM provider + API key
+// (+ optional model). The key is sent once and never read back. Authenticated
+// with the in-memory bearer access token, like every other API call.
+export async function setLlmCredential(params: {
+  provider: string;
+  apiKey: string;
+  model: string;
+}): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/llm-credential`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = (await res.text()).trim();
+    throw new Error(text || "Failed to save API key");
+  }
+}
+
+// deleteLlmCredential clears the user's stored LLM credential.
+export async function deleteLlmCredential(): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/llm-credential`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const text = (await res.text()).trim();
+    throw new Error(text || "Failed to remove API key");
+  }
 }
 
 // redirectToSignIn sends the browser to Google sign-in, folding the current

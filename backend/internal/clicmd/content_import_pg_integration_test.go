@@ -14,6 +14,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/dbseed"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -101,7 +102,7 @@ func TestImportShippedContent_ServesFromDB_LivePostgres_Integration(t *testing.T
 	servingCfg.LearningNotesDirectory = t.TempDir()
 
 	repos := bootstrap.BuildStateRepositories(servingCfg, cfg.Quiz, db)
-	svc := quiz.NewService(servingCfg, mock.NewClient(), make(map[string]rapidapi.Response), repos.Learning, cfg.Quiz)
+	svc := quiz.NewService(servingCfg, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response), repos.Learning, cfg.Quiz)
 	svc.SetHistoryStore(repos.HistoryStore)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
 	svc.SetContentSource(notebook.NewDBContentSource(notebook.NewNotebookFileRepository(db)))

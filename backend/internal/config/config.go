@@ -72,10 +72,13 @@ type AuthConfig struct {
 
 	// Secrets — TokenSigningKey signs the access JWT (HS256) for BOTH the web SPA
 	// and the CLI, and keys the OAuth CSRF `state` signer; GoogleClientSecret is
-	// the OAuth client secret. Provide privately (env or an uncommitted config);
-	// never commit real values. There is no session signing key anymore.
-	GoogleClientSecret string `mapstructure:"google_client_secret"`
-	TokenSigningKey    string `mapstructure:"token_signing_key"`
+	// the OAuth client secret; CredentialEncryptionKey is the 32-byte AES-256 key
+	// that encrypts each user's LLM API key at rest. Provide privately (env or an
+	// uncommitted config); never commit real values. There is no session signing
+	// key anymore.
+	GoogleClientSecret      string `mapstructure:"google_client_secret"`
+	TokenSigningKey         string `mapstructure:"token_signing_key"`
+	CredentialEncryptionKey string `mapstructure:"credential_encryption_key"`
 }
 
 // Enabled reports whether auth is configured — i.e. the required token signing
@@ -209,9 +212,11 @@ type GeminiConfig struct {
 }
 
 // InferenceConfig selects which inference client backs quiz grading.
-// Mode "openai" (default) uses the live OpenAI client.
-// Mode "gemini" uses the Google Gemini client (OpenAI-compatible endpoint).
-// Mode "mock" uses a deterministic substring-match grader, used by e2e tests.
+// Mode "user" (default) resolves the LLM client per request from the signed-in
+// user's registered provider + API key (no system-wide server key) — the
+// multi-user model. Modes "openai"/"gemini" use a single system-wide client
+// (one shared key, for single-user/CI). Mode "mock" uses a deterministic
+// substring-match grader, used by e2e tests.
 type InferenceConfig struct {
 	Mode string `mapstructure:"mode"`
 }
@@ -269,6 +274,9 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("openai.model", "gpt-4o-mini")
 	// Gemini model defaults to a free-tier flash model; override with GEMINI_MODEL.
 	v.SetDefault("gemini.model", "gemini-3.5-flash-lite")
+	// Default to the multi-user per-user-credential grader; override with
+	// INFERENCE_MODE (user/openai/gemini/mock).
+	v.SetDefault("inference.mode", "user")
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
 	v.SetDefault("database.host", "localhost")
@@ -325,6 +333,9 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	}
 	if err := v.BindEnv("auth.token_signing_key", "TOKEN_SIGNING_KEY"); err != nil {
 		return nil, fmt.Errorf("failed to bind TOKEN_SIGNING_KEY environment variable: %w", err)
+	}
+	if err := v.BindEnv("auth.credential_encryption_key", "CREDENTIAL_ENCRYPTION_KEY"); err != nil {
+		return nil, fmt.Errorf("failed to bind CREDENTIAL_ENCRYPTION_KEY environment variable: %w", err)
 	}
 
 	// Non-secret settings are env-overridable too (see nonSecretEnvBindings), so a

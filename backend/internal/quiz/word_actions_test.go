@@ -12,6 +12,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -34,7 +35,7 @@ func TestService_SkipWord_DoesNotForgeLearningLog(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	info := CardInfo{
@@ -98,7 +99,7 @@ func TestService_SkipWord_PreservesExistingLogs(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	info := CardInfo{

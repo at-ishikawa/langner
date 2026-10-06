@@ -12,7 +12,7 @@ import {
   Textarea,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient } from "@/lib/client";
+import { quizClient, messageForRpcError } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { BatchFeedback } from "@/components/BatchFeedback";
 import { freeformResultToItem } from "@/lib/quizResultItems";
@@ -97,8 +97,8 @@ export default function FreeformQuizPage() {
       // Mark this word as answered for the current session so the user
       // cannot re-submit the same word until its next review date.
       recordFreeformAnswered(word.trim(), res.nextReviewDate);
-    } catch {
-      setError("Failed to submit answer");
+    } catch (err) {
+      setError(messageForRpcError(err, "Failed to submit answer"));
     } finally {
       setLoading(false);
     }
