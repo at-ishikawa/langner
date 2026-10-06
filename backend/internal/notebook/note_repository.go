@@ -16,6 +16,10 @@ import (
 type NoteRepository interface {
 	FindAll(ctx context.Context) ([]NoteRecord, error)
 	FindByID(ctx context.Context, id int64) (*NoteRecord, error)
+	// FindIDsBySenseIDs maps each given sense_id to its DB note id (sense_id is
+	// globally unique). Used to stamp quiz cards with their real note id so the
+	// submit path can re-resolve them statelessly (no in-memory session store).
+	FindIDsBySenseIDs(ctx context.Context, senseIDs []string) (map[string]int64, error)
 	BatchCreate(ctx context.Context, notes []*NoteRecord) error
 	BatchUpdate(ctx context.Context, notes []*NoteRecord, newNotebookNotes []NotebookNote) error
 	Create(ctx context.Context, note *NoteRecord) error
@@ -104,6 +108,31 @@ func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []st
 		return nil, err
 	}
 	return notes, nil
+}
+
+// FindIDsBySenseIDs returns a sense_id → note id map for the given sense_ids
+// (sense_id is globally unique, see notes_sense_id_key). Missing/empty sense_ids
+// are simply absent from the result.
+func (r *DBNoteRepository) FindIDsBySenseIDs(ctx context.Context, senseIDs []string) (map[string]int64, error) {
+	result := make(map[string]int64, len(senseIDs))
+	if len(senseIDs) == 0 {
+		return result, nil
+	}
+	query, args, err := sqlx.In(`SELECT id, sense_id FROM notes WHERE sense_id IN (?)`, senseIDs)
+	if err != nil {
+		return nil, fmt.Errorf("build ids-by-sense_ids query: %w", err)
+	}
+	rows := []struct {
+		ID      int64  `db:"id"`
+		SenseID string `db:"sense_id"`
+	}{}
+	if err := r.db.SelectContext(ctx, &rows, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("load ids by sense_ids: %w", err)
+	}
+	for _, row := range rows {
+		result[row.SenseID] = row.ID
+	}
+	return result, nil
 }
 
 // FindOrphanNotesByUsage returns the id-less legacy "orphan" notes (no

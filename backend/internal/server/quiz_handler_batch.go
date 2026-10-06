@@ -158,19 +158,21 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	userID, _ := auth.UserIDFromContext(ctx)
 
 	cards := make([]quiz.ReverseCard, len(answers))
-	h.mu.Lock()
+	resolved := make([]bool, len(answers))
 	for i, a := range answers {
-		card, ok := h.reverseStore[a.GetNoteId()]
-		if !ok {
-			h.mu.Unlock()
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", a.GetNoteId()))
+		if card, ok := h.resolveReverseCard(ctx, userID, a.GetNoteId()); ok {
+			cards[i] = card
+			resolved[i] = true
+		} else {
+			// Non-fatal: a single unresolvable item must NOT abort the batch and
+			// drop the other graded answers. Skip it (no grade, no save) and
+			// return a placeholder response for it.
+			slog.Warn("reverse batch submit: card not resolved; skipping item", "note_id", a.GetNoteId())
 		}
-		cards[i] = card
 	}
-	h.mu.Unlock()
 
 	grades, err := gradeBatch(ctx, answers,
-		func(i int) bool { return answers[i].GetIsSkipped() },
+		func(i int) bool { return answers[i].GetIsSkipped() || !resolved[i] },
 		func(ctx context.Context, idx []int) ([]quiz.GradeResult, error) {
 			subCards := make([]quiz.ReverseCard, len(idx))
 			subAns := make([]string, len(idx))
@@ -199,6 +201,12 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 
 	responses := make([]*apiv1.SubmitReverseAnswerResponse, len(answers))
 	for i := range answers {
+		if !resolved[i] {
+			// Unresolvable item (see above): return a placeholder so the batch
+			// still responds for every answer; nothing is graded or saved for it.
+			responses[i] = &apiv1.SubmitReverseAnswerResponse{Correct: false, SenseId: ""}
+			continue
+		}
 		isSynonym := grades[i].Classification == string(inference.ClassificationSynonym)
 		if isSynonym && answers[i].GetAcceptSynonymAsCorrect() {
 			// Accepted-on-retry synonym: save as correct with reduced quality.
