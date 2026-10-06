@@ -2,6 +2,9 @@ package dictionary
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -33,6 +36,22 @@ func (r *DBDictionaryRepository) FindAll(ctx context.Context) ([]DictionaryEntry
 		return nil, fmt.Errorf("load all dictionary entries: %w", err)
 	}
 	return entries, nil
+}
+
+// FindResponseByWord returns the stored RapidAPI response bytes for a word, and
+// whether it exists. It is the DB-backed lookup the live reader consults before
+// calling the external API (so a serverless deploy never touches the filesystem
+// cache). A missing word is (nil, false, nil), not an error.
+func (r *DBDictionaryRepository) FindResponseByWord(ctx context.Context, word string) (json.RawMessage, bool, error) {
+	var resp json.RawMessage
+	err := r.db.GetContext(ctx, &resp, "SELECT response FROM dictionary_entries WHERE word = $1", word)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("find dictionary entry %q: %w", word, err)
+	}
+	return resp, true, nil
 }
 
 // BatchUpsert inserts or updates multiple dictionary entries.

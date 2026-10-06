@@ -129,11 +129,11 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 		}
 	}
 
-	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
-	if err != nil {
-		slog.Warn("failed to load dictionary cache", "error", err)
-		dictionaryMap = make(map[string]rapidapi.Response)
-	}
+	// The dictionary is served from Postgres only (filled below once the DB is
+	// connected). The on-disk rapidapi cache is no longer read by the server — it
+	// is absent on a serverless deploy and the dictionary lives in
+	// dictionary_entries.
+	dictionaryMap := map[string]rapidapi.Response{}
 
 	loggingInterceptor := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -160,22 +160,16 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 		}
 	}
 
-	// Serve the dictionary from Postgres, like notebook content: in a deployed
-	// environment the on-disk rapidapi cache is absent, so dictionaryMap loaded
-	// from the cache dir above is empty. The dictionary lives in dictionary_entries
-	// (filled at import time); without overlaying it a story word whose meaning
-	// comes from the dictionary (dictionary_number set, no inline meaning) makes
-	// Note.SetDetails fail and takes down the whole notebook listing. DB entries
-	// win; the filesystem cache stays a dev-only fallback so YAML-only mode and the
-	// e2e fixtures are unchanged.
+	// Load the dictionary from Postgres (dictionary_entries, filled at import
+	// time and by live lookups). This is the ONLY dictionary source for the
+	// server: a story word whose meaning comes from the dictionary
+	// (dictionary_number set, no inline meaning) resolves from here.
 	if db != nil {
 		if dbMap, derr := dictionary.NewDBDictionaryRepository(db).LoadResponseMap(context.Background()); derr != nil {
-			slog.Warn("failed to load dictionary from database; using filesystem cache only", "error", derr)
+			slog.Warn("failed to load dictionary from database", "error", derr)
 		} else {
-			for word, resp := range dbMap {
-				dictionaryMap[word] = resp
-			}
-			slog.Info("loaded dictionary from database", "db_entries", len(dbMap), "total_words", len(dictionaryMap))
+			dictionaryMap = dbMap
+			slog.Info("loaded dictionary from database", "entries", len(dbMap))
 		}
 	}
 
@@ -284,7 +278,13 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
 		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
 	}
-	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
+	// DB-backed live lookup: a cache miss is fetched from the external API and
+	// persisted to dictionary_entries — no filesystem cache. Nil without a DB
+	// (the handler guards it), so no server path reads the on-disk cache.
+	var dictReader *dictionary.Reader
+	if db != nil {
+		dictReader = dictionary.NewDBReader(dictionary.NewDBDictionaryRepository(db), dictConfig)
+	}
 	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, inferenceClient, noteRepo)
 	notebookHandler.SetHistoryStore(historyStore)
 	notebookHandler.SetNotebookACL(repos.ACL)
@@ -353,14 +353,6 @@ func sweepExpiredDeviceCodes(ctx context.Context, repo *auth.CLIDeviceCodeReposi
 			}
 		}
 	}
-}
-
-func loadDictionaryMap(cacheDir string) (map[string]rapidapi.Response, error) {
-	responses, err := rapidapi.NewReader().Read(cacheDir)
-	if err != nil {
-		return nil, fmt.Errorf("rapidapi.NewReader().Read() > %w", err)
-	}
-	return rapidapi.FromResponsesToMap(responses), nil
 }
 
 // buildAuth constructs the OAuth/web-token handler, the device-flow handler, the

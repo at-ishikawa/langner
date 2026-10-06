@@ -14,6 +14,11 @@ import (
 type Reader struct {
 	config    Config
 	fileCache *FileCache
+	// dictRepo, when set (NewDBReader), makes Lookup DB-backed: it reads/writes
+	// dictionary_entries instead of the filesystem cache, so the serving backend
+	// never depends on an on-disk rapidapi cache (absent on a serverless deploy)
+	// and a freshly looked-up word is persisted for every later request.
+	dictRepo *DBDictionaryRepository
 }
 
 type Config struct {
@@ -25,6 +30,16 @@ func NewReader(cacheDirectory string, config Config) *Reader {
 	return &Reader{
 		config:    config,
 		fileCache: NewFileCache(cacheDirectory),
+	}
+}
+
+// NewDBReader builds a reader that caches lookups in Postgres (dictionary_entries)
+// instead of the filesystem, so the serving backend has no on-disk dictionary
+// cache dependency.
+func NewDBReader(repo *DBDictionaryRepository, config Config) *Reader {
+	return &Reader{
+		config:   config,
+		dictRepo: repo,
 	}
 }
 
@@ -52,6 +67,9 @@ func (r *Reader) lookupAPI(ctx context.Context, word string) ([]byte, error) {
 
 func (r *Reader) Lookup(ctx context.Context, expression string) (rapidapi.Response, error) {
 	var resp rapidapi.Response
+	if r.dictRepo != nil {
+		return r.lookupDB(ctx, expression)
+	}
 	contents, err := r.fileCache.cache(expression, func() ([]byte, error) {
 		body, err := r.lookupAPI(ctx, expression)
 		if err != nil {
@@ -63,6 +81,32 @@ func (r *Reader) Lookup(ctx context.Context, expression string) (rapidapi.Respon
 		return resp, fmt.Errorf("r.fileCache.cache > %w", err)
 	}
 	if err := json.Unmarshal(contents, &resp); err != nil {
+		return resp, fmt.Errorf("json.Unmarshal > %w", err)
+	}
+	return resp, nil
+}
+
+// lookupDB resolves a word against dictionary_entries: a hit returns the stored
+// response; a miss fetches from the external API and PERSISTS it, so the word is
+// served from the DB on every later request. No filesystem cache is touched.
+func (r *Reader) lookupDB(ctx context.Context, expression string) (rapidapi.Response, error) {
+	var resp rapidapi.Response
+	body, ok, err := r.dictRepo.FindResponseByWord(ctx, expression)
+	if err != nil {
+		return resp, fmt.Errorf("dictRepo.FindResponseByWord > %w", err)
+	}
+	if !ok {
+		body, err = r.lookupAPI(ctx, expression)
+		if err != nil {
+			return resp, fmt.Errorf("r.lookupAPI > %w", err)
+		}
+		if err := r.dictRepo.BatchUpsert(ctx, []*DictionaryEntry{
+			{Word: expression, SourceType: "rapidapi", Response: body},
+		}); err != nil {
+			return resp, fmt.Errorf("persist dictionary entry > %w", err)
+		}
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return resp, fmt.Errorf("json.Unmarshal > %w", err)
 	}
 	return resp, nil
