@@ -127,13 +127,30 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load cards: %w", err))
 	}
+	realIDs := map[string]int64{}
+	if h.noteRepository != nil {
+		senseIDs := make([]string, 0, len(cards))
+		for _, c := range cards {
+			if c.ID != "" {
+				senseIDs = append(senseIDs, c.ID)
+			}
+		}
+		if m, merr := h.noteRepository.FindIDsBySenseIDs(ctx, senseIDs); merr != nil {
+			slog.Warn("quiz: sense-id→note-id map failed; using session ids", "error", merr)
+		} else {
+			realIDs = m
+		}
+	}
 	localStore := make(map[int64]quiz.Card)
 	nextID := sessionIDBase + 1
 	var flashcards []*apiv1.Flashcard
 	for _, card := range cards {
-		noteID := nextID
-		nextID++
-		localStore[noteID] = card
+		noteID, ok := realIDs[card.ID]
+		if !ok || noteID <= 0 {
+			noteID = nextID
+			nextID++
+			localStore[noteID] = card
+		}
 		var examples []*apiv1.Example
 		for _, ex := range card.Examples {
 			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker, Highlight: ex.Highlight})
@@ -156,9 +173,7 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	}
 	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
-	h.mu.Lock()
-	card, ok := h.noteStore[noteID]
-	h.mu.Unlock()
+	card, ok := h.resolveCard(ctx, userID, noteID)
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID))
 	}
@@ -341,6 +356,30 @@ func (h *QuizHandler) resolveReverseCard(ctx context.Context, userID, noteID int
 	return resolved, true
 }
 
+// resolveCard is the standard-quiz analogue of resolveReverseCard: store-first
+// (warm instance / legacy session id), else a real DB note id re-resolves via
+// the loader so the submit works on a cold/different serverless instance.
+func (h *QuizHandler) resolveCard(ctx context.Context, userID, noteID int64) (quiz.Card, bool) {
+	h.mu.Lock()
+	card, ok := h.noteStore[noteID]
+	h.mu.Unlock()
+	if ok {
+		return card, true
+	}
+	if noteID <= 0 || noteID >= sessionIDBase || h.noteRepository == nil {
+		return quiz.Card{}, false
+	}
+	note, err := h.noteRepository.FindByID(ctx, noteID)
+	if err != nil || note == nil {
+		return quiz.Card{}, false
+	}
+	resolved, found, err := h.svc.ResolveCardByNote(userID, note)
+	if err != nil || !found {
+		return quiz.Card{}, false
+	}
+	return resolved, true
+}
+
 func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitReverseAnswerRequest]) (*connect.Response[apiv1.SubmitReverseAnswerResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
@@ -420,6 +459,16 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 	h.mu.Lock()
 	cards := h.freeformCards
 	h.mu.Unlock()
+	if len(cards) == 0 {
+		// Serverless-safe: the deck isn't in this instance's memory (a cold or
+		// different instance than StartFreeformQuiz). Re-load it statelessly so
+		// the typed word can still be graded against the user's words.
+		reloaded, lerr := h.svc.LoadAllWords(userID)
+		if lerr != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load words: %w", lerr))
+		}
+		cards = reloaded
+	}
 	grade, err := h.svc.GradeFreeformAnswer(ctx, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
 	if err != nil {
 		return nil, gradeError("grade answer", err)

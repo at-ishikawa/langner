@@ -76,19 +76,19 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	userID, _ := auth.UserIDFromContext(ctx)
 
 	cards := make([]quiz.Card, len(answers))
-	h.mu.Lock()
+	resolved := make([]bool, len(answers))
 	for i, a := range answers {
-		card, ok := h.noteStore[a.GetNoteId()]
-		if !ok {
-			h.mu.Unlock()
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", a.GetNoteId()))
+		if card, ok := h.resolveCard(ctx, userID, a.GetNoteId()); ok {
+			cards[i] = card
+			resolved[i] = true
+		} else {
+			// Non-fatal: skip the unresolvable item instead of aborting the batch.
+			slog.Warn("batch submit: card not resolved; skipping item", "note_id", a.GetNoteId())
 		}
-		cards[i] = card
 	}
-	h.mu.Unlock()
 
 	grades, err := gradeBatch(ctx, answers,
-		func(i int) bool { return answers[i].GetIsSkipped() },
+		func(i int) bool { return answers[i].GetIsSkipped() || !resolved[i] },
 		func(ctx context.Context, idx []int) ([]quiz.GradeResult, error) {
 			subCards := make([]quiz.Card, len(idx))
 			subAns := make([]string, len(idx))
@@ -118,6 +118,10 @@ func (h *QuizHandler) BatchSubmitAnswers(
 
 	responses := make([]*apiv1.SubmitAnswerResponse, len(answers))
 	for i := range answers {
+		if !resolved[i] {
+			responses[i] = &apiv1.SubmitAnswerResponse{Correct: false, SenseId: ""}
+			continue
+		}
 		// SaveResultInfo returns the learnedAt/nextReviewDate it just wrote, so
 		// we don't re-read the learning history once per card (the batch's
 		// dominant DB egress before this change).

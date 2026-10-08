@@ -640,6 +640,34 @@ func buildWordDetail(note *notebook.Note, originMap map[string]notebook.Etymolog
 	}
 }
 
+// ResolveCardByNote rebuilds the standard (recognition) Card for a note WITHOUT
+// in-memory session state and WITHOUT the due filter, via the SAME loader Start
+// uses (includeUnstudied=true) — the serverless-safe submit path. See
+// ResolveReverseCardByNote for the rationale.
+func (s *Service) ResolveCardByNote(userID int64, note *notebook.NoteRecord) (Card, bool, error) {
+	seen := map[string]bool{}
+	var nbIDs []string
+	for _, nn := range note.NotebookNotes {
+		if nn.NotebookID != "" && !seen[nn.NotebookID] {
+			seen[nn.NotebookID] = true
+			nbIDs = append(nbIDs, nn.NotebookID)
+		}
+	}
+	if len(nbIDs) == 0 || note.SenseID == "" {
+		return Card{}, false, nil
+	}
+	cards, err := s.LoadCards(userID, nbIDs, true, nil)
+	if err != nil {
+		return Card{}, false, err
+	}
+	for _, c := range cards {
+		if c.ID == note.SenseID {
+			return c, true, nil
+		}
+	}
+	return Card{}, false, nil
+}
+
 // LoadCards returns filtered quiz cards for the given notebooks.
 // Returns *NotFoundError if any notebook ID does not exist.
 //
