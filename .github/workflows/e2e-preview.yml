@@ -4,22 +4,25 @@
 # those). The local e2e in frontend.yml still runs for everyone (incl. forks);
 # this job adds the "does it work on Vercel" layer for trusted PRs.
 #
-# SETUP REQUIRED (one-time, by a maintainer — this file alone does nothing until
-# these exist):
-#   1. Backend project, Preview scope:
-#        CORS_ALLOWED_ORIGINS = https://langner-git-*-at-ishikawa.vercel.app
-#          (matched by the serverapp glob; scoped to our own preview origins)
-#        INFERENCE_MODE = mock   (so grading is deterministic for the e2e asserts;
-#          previews don't exercise real LLM grading — acceptable trade-off)
-#        DB_* must point at the SAME preview Supabase this job seeds below.
-#   2. Repo secrets (Settings → Secrets → Actions): PREVIEW_DB_HOST/PORT/USER/
-#        PASSWORD/NAME and PREVIEW_TOKEN_SIGNING_KEY — the last MUST equal the
-#        backend Preview-scope TOKEN_SIGNING_KEY so the minted bearer validates.
-#   3. The frontend preview reaches the backend preview via next.config's
-#        VERCEL_BRANCH_URL derive (already in this PR).
-#   4. Flip repo variable E2E_PREVIEW_ENABLED = true (Settings → Variables).
-#        Until then this job is SKIPPED (neutral, never a red X) so it can't
-#        block PRs before the setup above exists.
+# WHY SECRETS AT ALL: three machines are involved — the Vercel frontend preview,
+# the Vercel backend preview, and THIS GitHub runner. The runner is a separate
+# box that does what Vercel never does: it connects directly to the preview
+# Postgres to seed deterministic content + history, and mints the e2e bearer
+# token (which the deployed backend then validates — so the signing key must be
+# the SAME one the backend uses). The runner can't read Vercel's env vars, so it
+# pulls them from Vercel at runtime instead of us duplicating them here.
+#
+# SETUP REQUIRED (one-time, by a maintainer):
+#   - In the BACKEND Vercel project, Preview scope (you set these to run previews
+#     anyway — this job just reuses them; nothing is duplicated into GitHub):
+#       CORS_ALLOWED_ORIGINS = https://langner-git-*-at-ishikawa.vercel.app
+#         (matched by the serverapp glob; scoped to our own preview origins)
+#       INFERENCE_MODE = mock   (deterministic grading for the e2e asserts)
+#       DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME → the preview Supabase
+#       TOKEN_SIGNING_KEY → the key the backend validates bearers with
+#   - ONE GitHub repo secret: VERCEL_TOKEN (a Vercel access token scoped to the
+#     team). That's the only thing stored in GitHub. Until it exists this job
+#     SKIPS cleanly (see the `gate` step) instead of failing a required check.
 #
 # CAVEAT: a preview may serve from a single warm instance, so this does NOT
 # deterministically reproduce the cross-instance "card not found" class — that
@@ -29,16 +32,18 @@ name: E2E (Vercel preview)
 on:
   pull_request:
 
+# Non-secret Vercel coordinates for `vercel env pull` (the backend project).
+# IDs are not secrets; only VERCEL_TOKEN is.
+env:
+  VERCEL_ORG_ID: team_MWC5I78A0ajH6HKGX4Dv9hzX
+  VERCEL_PROJECT_ID: prj_bTVNnSBxFdUPTP6L1ZcZtjRnzHeN
+
 jobs:
   e2e-preview:
-    # Same-repo PRs only (fork PRs get no secrets by design and must not run a
-    # fork's test code with secrets — forks are covered by the local e2e in
-    # frontend.yml), AND only once a maintainer has done the one-time setup and
-    # flipped E2E_PREVIEW_ENABLED=true. `vars` is available in job `if`, so until
-    # then the job is skipped (neutral), never a failing required check.
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      vars.E2E_PREVIEW_ENABLED == 'true'
+    # Same-repo PRs only: fork PRs get no secrets from GitHub (by design) and we
+    # must never run a fork's test code with secrets — forks are covered by the
+    # local e2e in frontend.yml instead.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     concurrency:
       # Serialize: all runs seed the one shared preview database.
@@ -47,7 +52,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Enablement = "is VERCEL_TOKEN set?". No separate feature flag to keep in
+      # sync: if the maintainer hasn't configured the token yet, every later step
+      # is skipped and the job ends green (neutral), never a red required check.
+      - name: Gate on VERCEL_TOKEN presence
+        id: gate
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VERCEL_TOKEN not configured — skipping preview e2e."
+          fi
+
       - name: Wait for the Vercel frontend preview to be READY
+        if: steps.gate.outputs.enabled == 'true'
         id: preview
         uses: actions/github-script@v7
         with:
@@ -77,31 +98,42 @@ jobs:
             throw new Error("timed out waiting for the frontend preview deployment");
 
       - uses: actions/setup-go@v5
+        if: steps.gate.outputs.enabled == 'true'
         with:
           go-version-file: backend/go.mod
 
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.enabled == 'true'
         with:
           node-version: 20
 
       - uses: pnpm/action-setup@v4
+        if: steps.gate.outputs.enabled == 'true'
 
       - name: Install frontend deps
+        if: steps.gate.outputs.enabled == 'true'
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
-      - name: Seed the preview database + mint the e2e token
+      # Single source of truth: pull the backend preview's own env (DB_* +
+      # TOKEN_SIGNING_KEY) from Vercel instead of duplicating it into GitHub.
+      # This also guarantees the token the runner mints below is signed with the
+      # SAME key the deployed backend validates with — no "must match" footgun.
+      - name: Pull backend preview env from Vercel
+        if: steps.gate.outputs.enabled == 'true'
         env:
-          DB_HOST: ${{ secrets.PREVIEW_DB_HOST }}
-          DB_PORT: ${{ secrets.PREVIEW_DB_PORT }}
-          DB_USER: ${{ secrets.PREVIEW_DB_USER }}
-          DB_PASSWORD: ${{ secrets.PREVIEW_DB_PASSWORD }}
-          DB_NAME: ${{ secrets.PREVIEW_DB_NAME }}
-          DB_TLS: require
-          TOKEN_SIGNING_KEY: ${{ secrets.PREVIEW_TOKEN_SIGNING_KEY }}
-        run: bash frontend/e2e/seed-remote.sh
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel@latest env pull .env.preview --environment=preview --token="$VERCEL_TOKEN" --yes
+
+      - name: Seed the preview database + mint the e2e token
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -a; . ./.env.preview; set +a   # DB_* + TOKEN_SIGNING_KEY from Vercel
+          export DB_TLS=require
+          bash frontend/e2e/seed-remote.sh
 
       - name: Run Playwright against the preview
+        if: steps.gate.outputs.enabled == 'true'
         working-directory: frontend
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.url }}
