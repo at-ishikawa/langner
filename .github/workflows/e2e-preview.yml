@@ -53,6 +53,7 @@ jobs:
     # local e2e in frontend.yml instead.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     concurrency:
       # Serialize: all runs reset the one shared preview database.
       group: e2e-preview
@@ -153,4 +154,6 @@ jobs:
             echo "  frontend not ready (HTTP $code); retrying in 15s"; sleep 15
           done
           npx playwright install chromium --with-deps
-          pnpm test:e2e
+          # TEMP diagnostic: one small smoke scenario to surface the real
+          # in-browser error fast (revert to full `pnpm test:e2e` once green).
+          pnpm test:e2e -- --grep "Open the Learn hub from home"

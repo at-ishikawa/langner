@@ -32,6 +32,22 @@ BeforeScenario(async () => {
   resetState();
 });
 
+// Surface in-browser failures (RPC/CORS/auth/JS) in the Playwright stdout so a
+// preview run that can't reach the backend is diagnosable from CI logs instead
+// of just timing out on a missing element. Cheap and harmless locally too.
+BeforeScenario(async ({ page }) => {
+  page.on("console", (msg) => {
+    if (msg.type() === "error") console.log(`[browser console.error] ${msg.text()}`);
+  });
+  page.on("pageerror", (err) => console.log(`[browser pageerror] ${err.message}`));
+  page.on("requestfailed", (req) =>
+    console.log(`[request failed] ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "?"}`),
+  );
+  page.on("response", (res) => {
+    if (res.status() >= 400) console.log(`[response ${res.status()}] ${res.request().method()} ${res.url()}`);
+  });
+});
+
 // Layer 3 coverage relies on TestStep.params?.url, which Playwright only
 // populates for explicit page.goto calls. Click-driven router.push navigations
 // (e.g. /quiz/standard after pressing "Start") never show up there.
