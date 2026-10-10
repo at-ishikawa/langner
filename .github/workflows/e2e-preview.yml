@@ -140,6 +140,10 @@ jobs:
         working-directory: frontend
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.urls.outputs.frontend }}
+          # Per-scenario reset (support/reset.ts) hits the seed endpoint over
+          # HTTP in preview mode instead of a local langner-admin + Postgres.
+          E2E_PREVIEW_BACKEND_URL: ${{ steps.urls.outputs.backend }}
+          E2E_SEED_SECRET: ${{ secrets.E2E_SEED_SECRET }}
         run: |
           # Wait for the frontend preview to answer before driving it.
           for i in $(seq 1 20); do
