@@ -6,11 +6,12 @@
 #
 # HOW IT SEEDS (no DB credentials on the runner): the backend exposes a
 # preview-only endpoint, POST /internal/e2e/seed, guarded by a shared secret
-# (E2E_SEED_SECRET). The runner curls it; the backend — which already holds the
-# DB creds + signing key — resets the preview's learning STATE to the e2e
-# baseline and returns a freshly-minted e2e bearer. The runner therefore needs
-# NO database credential, NO TOKEN_SIGNING_KEY, and NO Vercel token: just the one
-# shared secret it sends in the header.
+# (E2E_SEED_SECRET). The runner POSTs the notebook fixture CONTENT (a gzipped
+# tar of frontend/e2e/fixtures) to it; the backend — which already holds the DB
+# creds + signing key — imports that content, resets the preview's learning
+# STATE to the e2e baseline, and returns a freshly-minted e2e bearer. The runner
+# therefore needs NO database credential, NO TOKEN_SIGNING_KEY, and NO Vercel
+# token: just the one shared secret it sends in the header.
 #
 # SETUP REQUIRED (one-time, by a maintainer):
 #   1. Backend Vercel project, Preview scope (you set these to run previews
@@ -24,11 +25,7 @@
 #   2. ONE GitHub repo secret: E2E_SEED_SECRET — the SAME value as (1). It is the
 #      only secret in GitHub; until it is set this job SKIPS (green/neutral),
 #      never a red required check.
-#   3. CONTENT, once: the serverless backend has no fixture files on disk, so the
-#      endpoint resets STATE only. Import the e2e notebook CONTENT into the
-#      preview Supabase a single time (content survives the per-PR reset), from a
-#      checkout of this repo with the preview DB_* exported:
-#        langner-admin migrate seed-e2e --config config.e2e.yml
+# (Content is uploaded by the seed step below — no separate import run needed.)
 #
 # CAVEAT: a preview may serve from a single warm instance, so this does NOT
 # deterministically reproduce the cross-instance "card not found" class — that
@@ -129,10 +126,18 @@ jobs:
           E2E_SEED_SECRET: ${{ secrets.E2E_SEED_SECRET }}
         run: |
           set -euo pipefail
+          # The backend preview shares this PR's branch slug + account scope;
+          # derive its URL from the frontend URL (same mapping next.config uses).
           BACKEND_URL="${FRONTEND_URL/langner-git-/langner-api-git-}"
+          # Upload the fixture CONTENT so the serverless backend can import it
+          # (it has no fixtures on disk); tar the CONTENTS so families are
+          # top-level dirs (stories/, flashcards/, …).
+          tar czf /tmp/e2e-content.tgz -C frontend/e2e/fixtures .
           echo "Seeding ${BACKEND_URL}/internal/e2e/seed"
           resp="$(curl -fsS -X POST "${BACKEND_URL}/internal/e2e/seed" \
-            -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}")"
+            -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary @/tmp/e2e-content.tgz)"
           mkdir -p frontend/e2e/.auth
           printf '%s' "$(printf '%s' "$resp" | jq -r .token)" > frontend/e2e/.auth/access-token.txt
           test -s frontend/e2e/.auth/access-token.txt

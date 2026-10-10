@@ -366,7 +366,15 @@ func e2eSeedHandler(cfg *config.Config, db *sqlx.DB) http.HandlerFunc {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		if err := clicmd.PrepareE2EDatabase(r.Context(), cfg, db); err != nil {
+		// Optional request body: a gzipped tar of the notebook fixture content,
+		// uploaded by CI so the serverless backend (no fixtures on disk) can
+		// import the catalog. Empty body ⇒ skip import (catalog assumed present).
+		// Cap the body as a modest upload-bomb guard.
+		var content io.Reader
+		if r.ContentLength != 0 {
+			content = http.MaxBytesReader(w, r.Body, 64<<20)
+		}
+		if err := clicmd.PrepareE2EDatabase(r.Context(), cfg, db, content); err != nil {
 			slog.Error("e2e seed failed", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
