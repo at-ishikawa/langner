@@ -17,6 +17,9 @@
 #        backend Preview-scope TOKEN_SIGNING_KEY so the minted bearer validates.
 #   3. The frontend preview reaches the backend preview via next.config's
 #        VERCEL_BRANCH_URL derive (already in this PR).
+#   4. Flip repo variable E2E_PREVIEW_ENABLED = true (Settings → Variables).
+#        Until then this job is SKIPPED (neutral, never a red X) so it can't
+#        block PRs before the setup above exists.
 #
 # CAVEAT: a preview may serve from a single warm instance, so this does NOT
 # deterministically reproduce the cross-instance "card not found" class — that
@@ -28,10 +31,14 @@ on:
 
 jobs:
   e2e-preview:
-    # Same-repo PRs only. Fork PRs get no secrets from GitHub (by design) and we
-    # must never run a fork's test code with secrets — forks are covered by the
-    # local e2e in frontend.yml instead.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Same-repo PRs only (fork PRs get no secrets by design and must not run a
+    # fork's test code with secrets — forks are covered by the local e2e in
+    # frontend.yml), AND only once a maintainer has done the one-time setup and
+    # flipped E2E_PREVIEW_ENABLED=true. `vars` is available in job `if`, so until
+    # then the job is skipped (neutral), never a failing required check.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      vars.E2E_PREVIEW_ENABLED == 'true'
     runs-on: ubuntu-latest
     concurrency:
       # Serialize: all runs seed the one shared preview database.
