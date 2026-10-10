@@ -13,6 +13,13 @@
 # therefore needs NO database credential, NO TOKEN_SIGNING_KEY, and NO Vercel
 # token: just the one shared secret it sends in the header.
 #
+# ADDRESSING: the two previews are reached by their Vercel BRANCH-ALIAS URLs
+# (langner-git-<slug> / langner-api-git-<slug>, scope at-ishikawa) derived from
+# the branch name — the SAME aliases next.config's VERCEL_BRANCH_URL derive and
+# the CORS glob assume. (The GitHub deployment target_url is the immutable
+# per-deploy hash URL, which matches neither, so we do NOT use it.) Keep preview
+# branch names short so Vercel doesn't truncate+hash the slug.
+#
 # SETUP REQUIRED (one-time, by a maintainer):
 #   1. Backend Vercel project, Preview scope (you set these to run previews
 #      anyway):
@@ -35,11 +42,9 @@ name: E2E (Vercel preview)
 on:
   pull_request:
 
-# Least privilege for the built-in GITHUB_TOKEN: this job only reads deployment
-# status. (Fork PRs get a read-only token AND no secrets regardless.)
+# Least privilege for the built-in GITHUB_TOKEN: this job only checks out code.
 permissions:
   contents: read
-  deployments: read
 
 jobs:
   e2e-preview:
@@ -70,35 +75,20 @@ jobs:
             echo "::notice::E2E_SEED_SECRET not configured — skipping preview e2e."
           fi
 
-      - name: Wait for the Vercel frontend preview to be READY
+      # Vercel branch-alias URLs: <project>-git-<slug>-at-ishikawa.vercel.app,
+      # where <slug> is the branch name lowercased with non-alphanumerics folded
+      # to '-'. These are the aliases next.config derives and CORS allows.
+      - name: Resolve preview URLs from the branch slug
         if: steps.gate.outputs.enabled == 'true'
-        id: preview
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const sha = context.payload.pull_request.head.sha;
-            const deadline = Date.now() + 12 * 60 * 1000;
-            while (Date.now() < deadline) {
-              const deps = await github.rest.repos.listDeployments({
-                owner: context.repo.owner, repo: context.repo.repo, sha,
-              });
-              // Frontend project "langner"; exclude the "langner-api" backend env.
-              const dep = deps.data.find(
-                (d) => /langner/i.test(d.environment) && !/langner-api/i.test(d.environment),
-              );
-              if (dep) {
-                const statuses = await github.rest.repos.listDeploymentStatuses({
-                  owner: context.repo.owner, repo: context.repo.repo, deployment_id: dep.id,
-                });
-                const ready = statuses.data.find((s) => s.state === "success" && s.target_url);
-                if (ready) { core.setOutput("url", ready.target_url); return; }
-                if (statuses.data.some((s) => ["failure", "error"].includes(s.state))) {
-                  throw new Error("frontend preview deployment failed");
-                }
-              }
-              await new Promise((r) => setTimeout(r, 15000));
-            }
-            throw new Error("timed out waiting for the frontend preview deployment");
+        id: urls
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          slug=$(printf '%s' "$HEAD_REF" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+          echo "frontend=https://langner-git-${slug}-at-ishikawa.vercel.app" >> "$GITHUB_OUTPUT"
+          echo "backend=https://langner-api-git-${slug}-at-ishikawa.vercel.app" >> "$GITHUB_OUTPUT"
+          echo "Frontend: https://langner-git-${slug}-at-ishikawa.vercel.app"
+          echo "Backend:  https://langner-api-git-${slug}-at-ishikawa.vercel.app"
 
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.enabled == 'true'
@@ -115,26 +105,28 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
-      # Seed over HTTP: the backend preview resets its own DB + mints the bearer.
-      # The backend preview URL shares this PR's branch slug and account scope —
-      # derive it from the frontend URL by swapping the project-name prefix
-      # (langner-git- → langner-api-git-), the same mapping next.config uses.
       - name: Seed the preview via the backend endpoint + capture the e2e token
         if: steps.gate.outputs.enabled == 'true'
         env:
-          FRONTEND_URL: ${{ steps.preview.outputs.url }}
+          BACKEND_URL: ${{ steps.urls.outputs.backend }}
           E2E_SEED_SECRET: ${{ secrets.E2E_SEED_SECRET }}
         run: |
           set -euo pipefail
-          # The backend preview shares this PR's branch slug + account scope;
-          # derive its URL from the frontend URL (same mapping next.config uses).
-          BACKEND_URL="${FRONTEND_URL/langner-git-/langner-api-git-}"
-          # Upload the fixture CONTENT so the serverless backend can import it
-          # (it has no fixtures on disk); tar the CONTENTS so families are
-          # top-level dirs (stories/, flashcards/, …).
+          # Wait until the backend preview is up AND carries this PR's code: a GET
+          # to the endpoint returns 405 (method-not-allowed, checked before the
+          # secret) once mounted; 404 = not deployed yet / old code; 000 = not up.
+          echo "Waiting for ${BACKEND_URL}/internal/e2e/seed"
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${BACKEND_URL}/internal/e2e/seed" || echo 000)
+            if [ "$code" = "405" ]; then echo "backend ready"; break; fi
+            if [ "$i" = "40" ]; then echo "backend never became ready (last HTTP $code)"; exit 1; fi
+            echo "  not ready (HTTP $code); retrying in 15s"; sleep 15
+          done
+          # Upload the fixture CONTENT (the serverless backend has no fixtures on
+          # disk); tar the CONTENTS so families are top-level dirs. POST once so a
+          # real seed error fails fast with its message.
           tar czf /tmp/e2e-content.tgz -C frontend/e2e/fixtures .
-          echo "Seeding ${BACKEND_URL}/internal/e2e/seed"
-          resp="$(curl -fsS -X POST "${BACKEND_URL}/internal/e2e/seed" \
+          resp="$(curl --fail -sS -X POST "${BACKEND_URL}/internal/e2e/seed" \
             -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}" \
             -H "Content-Type: application/gzip" \
             --data-binary @/tmp/e2e-content.tgz)"
@@ -146,7 +138,14 @@ jobs:
         if: steps.gate.outputs.enabled == 'true'
         working-directory: frontend
         env:
-          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.url }}
+          PLAYWRIGHT_BASE_URL: ${{ steps.urls.outputs.frontend }}
         run: |
+          # Wait for the frontend preview to answer before driving it.
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${PLAYWRIGHT_BASE_URL}/" || echo 000)
+            if [ "$code" = "200" ]; then echo "frontend ready"; break; fi
+            if [ "$i" = "20" ]; then echo "frontend never became ready (last HTTP $code)"; exit 1; fi
+            echo "  frontend not ready (HTTP $code); retrying in 15s"; sleep 15
+          done
           npx playwright install chromium --with-deps
           pnpm test:e2e
