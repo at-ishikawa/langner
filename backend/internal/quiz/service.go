@@ -640,6 +640,34 @@ func buildWordDetail(note *notebook.Note, originMap map[string]notebook.Etymolog
 	}
 }
 
+// ResolveCardByNote rebuilds the standard (recognition) Card for a note WITHOUT
+// in-memory session state and WITHOUT the due filter, via the SAME loader Start
+// uses (includeUnstudied=true) — the serverless-safe submit path. See
+// ResolveReverseCardByNote for the rationale.
+func (s *Service) ResolveCardByNote(userID int64, note *notebook.NoteRecord) (Card, bool, error) {
+	seen := map[string]bool{}
+	var nbIDs []string
+	for _, nn := range note.NotebookNotes {
+		if nn.NotebookID != "" && !seen[nn.NotebookID] {
+			seen[nn.NotebookID] = true
+			nbIDs = append(nbIDs, nn.NotebookID)
+		}
+	}
+	if len(nbIDs) == 0 || note.SenseID == "" {
+		return Card{}, false, nil
+	}
+	cards, err := s.LoadCards(userID, nbIDs, true, nil)
+	if err != nil {
+		return Card{}, false, err
+	}
+	for _, c := range cards {
+		if c.ID == note.SenseID {
+			return c, true, nil
+		}
+	}
+	return Card{}, false, nil
+}
+
 // LoadCards returns filtered quiz cards for the given notebooks.
 // Returns *NotFoundError if any notebook ID does not exist.
 //
@@ -1395,6 +1423,37 @@ type ReverseContext struct {
 //
 // sectionTitlesByID narrows results to the listed sections per notebook (see
 // LoadCards). A nil/empty list for a notebook means "all sections".
+// ResolveReverseCardByNote rebuilds the ReverseCard for a note WITHOUT any
+// in-memory session state and WITHOUT the due filter, by re-running the SAME
+// loader Start uses (so concept-collapse / contexts stay consistent — no path
+// divergence, L2). It loads the note's notebooks with includeUnstudied=true (a
+// superset of anything Start could have shown) and returns the card whose
+// stable sense-id (ReverseCard.ID) matches. This is the serverless-safe submit
+// path: the card is reconstructed from the note's identity, not a process map.
+func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteRecord) (ReverseCard, bool, error) {
+	seen := map[string]bool{}
+	var nbIDs []string
+	for _, nn := range note.NotebookNotes {
+		if nn.NotebookID != "" && !seen[nn.NotebookID] {
+			seen[nn.NotebookID] = true
+			nbIDs = append(nbIDs, nn.NotebookID)
+		}
+	}
+	if len(nbIDs) == 0 || note.SenseID == "" {
+		return ReverseCard{}, false, nil
+	}
+	cards, err := s.LoadReverseCards(userID, nbIDs, false, true, nil)
+	if err != nil {
+		return ReverseCard{}, false, err
+	}
+	for _, c := range cards {
+		if c.ID == note.SenseID {
+			return c, true, nil
+		}
+	}
+	return ReverseCard{}, false, nil
+}
+
 func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
 	// DB mode: self-heal missing notes before serving (see LoadCards).
 	s.ensureNotes(notebookIDs)

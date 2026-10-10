@@ -65,7 +65,10 @@ func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name: "returns NOT_FOUND when any note is missing",
+			// A single unresolvable note must NOT abort the batch (serverless
+			// fix): it is skipped with a placeholder response and the rest are
+			// still graded.
+			name: "skips a missing note and still grades the rest",
 			answers: []*apiv1.SubmitAnswerRequest{
 				{NoteId: 1, Answer: "x", ResponseTimeMs: 500},
 				{NoteId: 999, Answer: "y", ResponseTimeMs: 500},
@@ -73,8 +76,23 @@ func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 			setupNoteStore: func(h *QuizHandler) {
 				h.noteStore[1] = quiz.Card{NotebookName: "n", Entry: "a", Meaning: "b"}
 			},
-			wantCode: connect.CodeNotFound,
-			wantErr:  true,
+			setupMock: func(m *mock_inference.MockClient) {
+				m.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, req inference.AnswerMeaningsRequest) (inference.AnswerMeaningsResponse, error) {
+						answers := make([]inference.AnswerMeaning, len(req.Expressions))
+						for i, expr := range req.Expressions {
+							answers[i] = inference.AnswerMeaning{
+								Expression:        expr.Expression,
+								Meaning:           expr.Meaning,
+								AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 3}},
+							}
+						}
+						return inference.AnswerMeaningsResponse{Answers: answers}, nil
+					},
+				).Times(1)
+			},
+			wantResponseCount: 2,
+			wantFirstCorrect:  true,
 		},
 		{
 			name: "grades all answers and preserves order",
@@ -177,8 +195,8 @@ func TestQuizHandler_BatchSubmitAnswers_Skip(t *testing.T) {
 	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
 		inference.AnswerMeaningsResponse{
 			Answers: []inference.AnswerMeaning{{
-				Expression: "word2",
-				Meaning:    "meaning2",
+				Expression:        "word2",
+				Meaning:           "meaning2",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 4}},
 			}},
 		}, nil,
@@ -328,10 +346,10 @@ func TestQuizHandler_BatchSubmitReverseAnswers_OneLLMCallForBatch(t *testing.T) 
 	resp, err := handler.BatchSubmitReverseAnswers(context.Background(),
 		connect.NewRequest(&apiv1.BatchSubmitReverseAnswersRequest{
 			Answers: []*apiv1.SubmitReverseAnswerRequest{
-				{NoteId: 1, Answer: "break the ice"},  // correct
+				{NoteId: 1, Answer: "break the ice"},     // correct
 				{NoteId: 2, Answer: "totally unrelated"}, // wrong
-				{NoteId: 4, IsSkipped: true},           // skipped -> no LLM, no per-item call
-				{NoteId: 3, Answer: "hit the sack"},    // correct
+				{NoteId: 4, IsSkipped: true},             // skipped -> no LLM, no per-item call
+				{NoteId: 3, Answer: "hit the sack"},      // correct
 			},
 		}),
 	)
@@ -477,7 +495,7 @@ func TestQuizHandler_BatchSubmitReverseAnswers_ReorderedResultsMapByIndex(t *tes
 	resp, err := handler.BatchSubmitReverseAnswers(context.Background(),
 		connect.NewRequest(&apiv1.BatchSubmitReverseAnswersRequest{
 			Answers: []*apiv1.SubmitReverseAnswerRequest{
-				{NoteId: 1, Answer: "break the ice"},    // correct
+				{NoteId: 1, Answer: "break the ice"},     // correct
 				{NoteId: 2, Answer: "hit the sack"},      // correct
 				{NoteId: 3, Answer: "totally unrelated"}, // wrong
 			},

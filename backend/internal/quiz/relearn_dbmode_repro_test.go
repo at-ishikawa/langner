@@ -22,6 +22,10 @@ func (r *rlNoteRepo) FindAll(context.Context) ([]notebook.NoteRecord, error) { r
 func (r *rlNoteRepo) FindByID(context.Context, int64) (*notebook.NoteRecord, error) {
 	return nil, nil
 }
+
+func (r *rlNoteRepo) FindIDsBySenseIDs(context.Context, []string) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
 func (r *rlNoteRepo) BatchCreate(context.Context, []*notebook.NoteRecord) error { return nil }
 func (r *rlNoteRepo) BatchUpdate(context.Context, []*notebook.NoteRecord, []notebook.NotebookNote) error {
 	return nil
