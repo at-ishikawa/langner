@@ -8,6 +8,8 @@ package serverapp
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +26,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/analytics"
 	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
+	"github.com/at-ishikawa/langner/internal/clicmd"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/datasync"
@@ -327,6 +330,17 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	mux.HandleFunc("/auth/token/refresh", authSetup.DeviceHandler.Refresh)
 	mux.HandleFunc("/auth/token/revoke", authSetup.DeviceHandler.Revoke)
 
+	// Preview-only e2e seed endpoint: mounted ONLY when E2E_SEED_SECRET is set
+	// (preview env; never in prod). Guarded by that shared secret, it resets the
+	// deployed preview's learning state to the e2e baseline and mints an e2e
+	// bearer, so CI can seed the running preview over HTTP without holding any
+	// database credential or signing key. Registered OUTSIDE the connect auth
+	// interceptor (like /auth/*) so the unauthenticated runner can call it.
+	if cfg.Server.E2ESeedSecret != "" && db != nil {
+		mux.HandleFunc("/internal/e2e/seed", e2eSeedHandler(cfg, db))
+		slog.Warn("e2e seed endpoint ENABLED at POST /internal/e2e/seed — preview only, guarded by E2E_SEED_SECRET")
+	}
+
 	rootHandler := h2c.NewHandler(mux, &http2.Server{})
 	// The ONLY auth path: populate the request context from the bearer access
 	// token for both the connect interceptor and /auth/me. Never rejects —
@@ -334,6 +348,38 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	rootHandler = server.AuthBearerMiddleware(rootHandler, authSetup.Tokens)
 
 	return corsMiddleware(rootHandler, cfg.Server.CORS.AllowedOrigins), authSetup, cleanup, nil
+}
+
+// e2eSeedHandler returns the preview-only seed endpoint. It requires the shared
+// secret in the X-E2E-Seed-Secret header (constant-time compared), resets the DB
+// to the e2e baseline (clicmd.PrepareE2EDatabase), mints an e2e bearer for the
+// configured admin account, and returns {"token","email"} as JSON. It is only
+// registered when E2E_SEED_SECRET is set, so prod never exposes it.
+func e2eSeedHandler(cfg *config.Config, db *sqlx.DB) http.HandlerFunc {
+	secret := []byte(cfg.Server.E2ESeedSecret)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-E2E-Seed-Secret")), secret) != 1 {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if err := clicmd.PrepareE2EDatabase(r.Context(), cfg, db); err != nil {
+			slog.Error("e2e seed failed", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		token, err := clicmd.IssueTestToken(r.Context(), cfg, db, cfg.Auth.InitialAdminEmail)
+		if err != nil {
+			slog.Error("e2e token mint failed", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"token": token, "email": cfg.Auth.InitialAdminEmail})
+	}
 }
 
 // sweepExpiredDeviceCodes deletes expired device rows every 10 minutes until

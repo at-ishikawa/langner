@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
@@ -338,27 +337,13 @@ func newAuthIssueTestTokenCommand() *cobra.Command {
 			}
 			defer func() { _ = db.Close() }()
 
-			if !cfg.Auth.Enabled() {
-				return fmt.Errorf("auth is not enabled in config (token_signing_key is unset)")
-			}
-			users := auth.NewUserRepository(db)
-			// Reuse the SAME row `auth provision`/import-db created for this email
-			// (find-or-create by the deterministic synthetic sub), so a token
-			// issued after provisioning resolves to the account that owns the
-			// backfilled pre-auth history. No email is stored (migration 024 keeps
-			// only google_sub + username — no PII).
-			userID, err := ensureUser(cmd.Context(), users, email)
+			// Mint via the shared helper (also used by the preview seed endpoint):
+			// it upserts the SAME row `auth provision`/import-db created for this
+			// email (deterministic synthetic sub), so the token resolves to the
+			// account that owns the backfilled history. No email is stored.
+			value, err := IssueTestToken(cmd.Context(), cfg, db, email)
 			if err != nil {
-				return fmt.Errorf("upsert test user: %w", err)
-			}
-
-			tokens, err := auth.NewTokenSigner(auth.DecodeKey(cfg.Auth.TokenSigningKey))
-			if err != nil {
-				return fmt.Errorf("token signing key: %w", err)
-			}
-			value, err := tokens.Sign(userID, time.Now())
-			if err != nil {
-				return fmt.Errorf("sign access token: %w", err)
+				return err
 			}
 			fmt.Println(value)
 			return nil

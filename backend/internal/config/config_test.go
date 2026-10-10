@@ -347,3 +347,31 @@ func TestConfigLoader_Load_ValidTemplateFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, templatePath, cfg.Templates.StoryNotebookTemplate)
 }
+
+func TestConfigLoader_Load_E2ESeedSecretEnv(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	t.Run("unset leaves e2e seed secret empty (endpoint not mounted)", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(configPath, []byte("# Empty config\n"), 0644))
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.Equal(t, "", cfg.Server.E2ESeedSecret)
+	})
+
+	t.Run("E2E_SEED_SECRET env populates server.e2e_seed_secret", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(configPath, []byte("# Empty config\n"), 0644))
+		t.Setenv("E2E_SEED_SECRET", "preview-only-shared-secret")
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.Equal(t, "preview-only-shared-secret", cfg.Server.E2ESeedSecret)
+	})
+}
