@@ -154,3 +154,18 @@ func (mr *MockNoteRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*MockNoteRepository)(nil).FindByID), ctx, id)
 }
+
+// FindIDsBySenseIDs mocks base method.
+func (m *MockNoteRepository) FindIDsBySenseIDs(ctx context.Context, senseIDs []string) (map[string]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindIDsBySenseIDs", ctx, senseIDs)
+	ret0, _ := ret[0].(map[string]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindIDsBySenseIDs indicates an expected call of FindIDsBySenseIDs.
+func (mr *MockNoteRepositoryMockRecorder) FindIDsBySenseIDs(ctx, senseIDs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindIDsBySenseIDs", reflect.TypeOf((*MockNoteRepository)(nil).FindIDsBySenseIDs), ctx, senseIDs)
+}
