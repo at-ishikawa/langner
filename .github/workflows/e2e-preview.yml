@@ -126,12 +126,15 @@ jobs:
           # disk); tar the CONTENTS so families are top-level dirs. POST once so a
           # real seed error fails fast with its message.
           tar czf /tmp/e2e-content.tgz -C frontend/e2e/fixtures .
-          resp="$(curl --fail -sS -X POST "${BACKEND_URL}/internal/e2e/seed" \
+          code=$(curl -sS -o /tmp/seed-resp.txt -w '%{http_code}' -X POST "${BACKEND_URL}/internal/e2e/seed" \
             -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}" \
             -H "Content-Type: application/gzip" \
-            --data-binary @/tmp/e2e-content.tgz)"
+            --data-binary @/tmp/e2e-content.tgz)
+          if [ "$code" != "200" ]; then
+            echo "seed failed (HTTP $code); response body:"; cat /tmp/seed-resp.txt; echo; exit 1
+          fi
           mkdir -p frontend/e2e/.auth
-          printf '%s' "$(printf '%s' "$resp" | jq -r .token)" > frontend/e2e/.auth/access-token.txt
+          printf '%s' "$(jq -r .token < /tmp/seed-resp.txt)" > frontend/e2e/.auth/access-token.txt
           test -s frontend/e2e/.auth/access-token.txt
 
       - name: Run Playwright against the preview
