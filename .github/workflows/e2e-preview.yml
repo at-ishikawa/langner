@@ -112,27 +112,25 @@ jobs:
           E2E_SEED_SECRET: ${{ secrets.E2E_SEED_SECRET }}
         run: |
           set -euo pipefail
-          # Wait until the backend preview is up AND carries this PR's code: a GET
-          # to the endpoint returns 405 (method-not-allowed, checked before the
-          # secret) once mounted; 404 = not deployed yet / old code; 000 = not up.
-          echo "Waiting for ${BACKEND_URL}/internal/e2e/seed"
-          for i in $(seq 1 40); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "${BACKEND_URL}/internal/e2e/seed" || echo 000)
-            if [ "$code" = "405" ]; then echo "backend ready"; break; fi
-            if [ "$i" = "40" ]; then echo "backend never became ready (last HTTP $code)"; exit 1; fi
-            echo "  not ready (HTTP $code); retrying in 15s"; sleep 15
-          done
           # Upload the fixture CONTENT (the serverless backend has no fixtures on
-          # disk); tar the CONTENTS so families are top-level dirs. POST once so a
-          # real seed error fails fast with its message.
+          # disk); tar the CONTENTS so families are top-level dirs.
           tar czf /tmp/e2e-content.tgz -C frontend/e2e/fixtures .
-          code=$(curl -sS -o /tmp/seed-resp.txt -w '%{http_code}' -X POST "${BACKEND_URL}/internal/e2e/seed" \
-            -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}" \
-            -H "Content-Type: application/gzip" \
-            --data-binary @/tmp/e2e-content.tgz)
-          if [ "$code" != "200" ]; then
-            echo "seed failed (HTTP $code); response body:"; cat /tmp/seed-resp.txt; echo; exit 1
-          fi
+          echo "Seeding ${BACKEND_URL}/internal/e2e/seed"
+          # Retry the POST through the backend preview's build/alias-flip window:
+          # 404 = not deployed yet, 000 = not up, 500 = old code / DB warming up.
+          # Each failed attempt prints its (truncated) body so a persistent real
+          # error is still visible rather than hidden behind retries.
+          ok=
+          for i in $(seq 1 20); do
+            code=$(curl -sS -o /tmp/seed-resp.txt -w '%{http_code}' -X POST "${BACKEND_URL}/internal/e2e/seed" \
+              -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}" \
+              -H "Content-Type: application/gzip" \
+              --data-binary @/tmp/e2e-content.tgz || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i/20: HTTP $code"; head -c 600 /tmp/seed-resp.txt 2>/dev/null; echo
+            sleep 15
+          done
+          if [ -z "$ok" ]; then echo "seed never succeeded (last HTTP $code)"; exit 1; fi
           mkdir -p frontend/e2e/.auth
           printf '%s' "$(jq -r .token < /tmp/seed-resp.txt)" > frontend/e2e/.auth/access-token.txt
           test -s frontend/e2e/.auth/access-token.txt
