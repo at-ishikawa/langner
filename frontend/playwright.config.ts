@@ -62,7 +62,12 @@ export default defineConfig({
     ["./e2e/reporters/coverage-reporter.ts"],
   ],
   use: {
-    baseURL: `http://localhost:${FRONTEND_PORT}`,
+    // In PREVIEW mode (PLAYWRIGHT_BASE_URL set by the e2e-preview CI job) the
+    // app under test is the deployed Vercel frontend, which talks to the
+    // deployed backend — so the exact same scenarios run against real serverless
+    // + DB-backed wiring, the environment where filesystem-vs-DB and cold-start
+    // bugs actually live. Locally it stays localhost with the spawned servers.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${FRONTEND_PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     // No storageState: auth is a bearer held in the SPA's memory, seeded per
@@ -76,7 +81,9 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: [
+  // Preview mode drives the deployed Vercel app, so spawn no local servers; the
+  // e2e-preview CI job seeds the preview DB and writes the token file first.
+  webServer: process.env.PLAYWRIGHT_BASE_URL ? [] : [
     {
       command: "bash e2e/seed-and-serve.sh",
       env: seedEnv,

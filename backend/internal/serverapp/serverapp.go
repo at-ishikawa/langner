@@ -423,23 +423,66 @@ func parseSameSite(s string) http.SameSite {
 	}
 }
 
+// matchGlobOrigin matches a `*`-glob pattern against an origin, anchored at both
+// ends. Only `*` is special (any run of chars); everything else is literal. Used
+// so a single Preview-scope CORS entry can match this project's per-branch
+// preview origins (langner-git-<slug>-at-ishikawa.vercel.app) without an open `*`.
+func matchGlobOrigin(pattern, origin string) bool {
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == origin
+	}
+	if !strings.HasPrefix(origin, parts[0]) {
+		return false
+	}
+	rest := origin[len(parts[0]):]
+	for _, mid := range parts[1 : len(parts)-1] {
+		idx := strings.Index(rest, mid)
+		if idx < 0 {
+			return false
+		}
+		rest = rest[idx+len(mid):]
+	}
+	last := parts[len(parts)-1]
+	return len(rest) >= len(last) && strings.HasSuffix(rest, last)
+}
+
 // corsMiddleware serves explicit CORS for bearer-authenticated RPCs. Auth is a
 // header (`Authorization: Bearer`), not a cookie, so NO
 // Access-Control-Allow-Credentials is sent. It reflects the request Origin when
 // it is configured (or when "*" is configured) and always allows Authorization.
 func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 	allowAll := false
-	allowed := make(map[string]bool, len(allowedOrigins))
+	exact := make(map[string]bool, len(allowedOrigins))
+	var patterns []string
 	for _, o := range allowedOrigins {
-		if o == "*" {
+		switch {
+		case o == "*":
 			allowAll = true
-			break
+		case strings.Contains(o, "*"):
+			// A `*`-glob entry (e.g. https://langner-git-*-at-ishikawa.vercel.app)
+			// lets Preview scope allow this project's per-branch preview origins
+			// without opening CORS to every site — the branch slug varies per PR
+			// but the account-scoped suffix anchors it to our own deployments.
+			patterns = append(patterns, o)
+		default:
+			exact[o] = true
 		}
-		allowed[o] = true
+	}
+	originAllowed := func(origin string) bool {
+		if allowAll || exact[origin] {
+			return true
+		}
+		for _, p := range patterns {
+			if matchGlobOrigin(p, origin) {
+				return true
+			}
+		}
+		return false
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && (allowAll || allowed[origin]) {
+		if origin != "" && originAllowed(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}

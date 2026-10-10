@@ -10,11 +10,32 @@ import type { NextConfig } from "next";
 // Next server can't route to) would time out. It therefore defaults to a
 // locally-reachable backend and is overridden with AUTH_PROXY_TARGET when the
 // backend lives elsewhere but is still reachable from the Next server (prod/Vercel).
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-const authProxyTarget = process.env.AUTH_PROXY_TARGET ?? "http://localhost:8080";
+// On a Vercel PREVIEW, the backend is this PR's own backend preview deployment,
+// whose URL isn't known ahead of time. Both projects share the same branch slug
+// and account scope, so derive the backend's branch URL from THIS (frontend)
+// deployment's VERCEL_BRANCH_URL by swapping the project-name prefix:
+//   langner-git-<slug>-at-ishikawa.vercel.app → langner-api-git-<slug>-...
+// Used when NEXT_PUBLIC_API_BASE_URL / AUTH_PROXY_TARGET aren't set explicitly.
+// (Very long/odd branch names can get truncated+hashed by Vercel, breaking the
+// swap — keep preview branch names short, or set the env vars explicitly.)
+function derivePreviewBackendURL(): string | undefined {
+  if (process.env.VERCEL_ENV !== "preview") return undefined;
+  const branchURL = process.env.VERCEL_BRANCH_URL; // host only, no scheme
+  if (!branchURL || !branchURL.startsWith("langner-git-")) return undefined;
+  return `https://${branchURL.replace(/^langner-git-/, "langner-api-git-")}`;
+}
+
+const previewBackendURL = derivePreviewBackendURL();
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? previewBackendURL;
+const authProxyTarget =
+  process.env.AUTH_PROXY_TARGET ?? previewBackendURL ?? "http://localhost:8080";
 const apiHost = apiBaseUrl ? new URL(apiBaseUrl).hostname : undefined;
 
 const nextConfig: NextConfig = {
+  // Inject the (possibly derived) API base into the client bundle so the browser
+  // calls this PR's backend preview. Cross-origin RPCs rely on the backend's
+  // Preview-scope CORS allowing the frontend preview origin (glob in serverapp).
+  env: apiBaseUrl ? { NEXT_PUBLIC_API_BASE_URL: apiBaseUrl } : {},
   allowedDevOrigins: apiHost ? [apiHost] : [],
   async rewrites() {
     // Proxy ONLY the cookie-bearing auth endpoints onto this origin: the Google

@@ -1,0 +1,103 @@
+# Runs the EXISTING Playwright e2e suite against the deployed Vercel PREVIEW for
+# this PR — the real serverless + DB-backed environment where filesystem-vs-DB
+# and env-wiring bugs actually surface (a single-process local e2e cannot catch
+# those). The local e2e in frontend.yml still runs for everyone (incl. forks);
+# this job adds the "does it work on Vercel" layer for trusted PRs.
+#
+# SETUP REQUIRED (one-time, by a maintainer — this file alone does nothing until
+# these exist):
+#   1. Backend project, Preview scope:
+#        CORS_ALLOWED_ORIGINS = https://langner-git-*-at-ishikawa.vercel.app
+#          (matched by the serverapp glob; scoped to our own preview origins)
+#        INFERENCE_MODE = mock   (so grading is deterministic for the e2e asserts;
+#          previews don't exercise real LLM grading — acceptable trade-off)
+#        DB_* must point at the SAME preview Supabase this job seeds below.
+#   2. Repo secrets (Settings → Secrets → Actions): PREVIEW_DB_HOST/PORT/USER/
+#        PASSWORD/NAME and PREVIEW_TOKEN_SIGNING_KEY — the last MUST equal the
+#        backend Preview-scope TOKEN_SIGNING_KEY so the minted bearer validates.
+#   3. The frontend preview reaches the backend preview via next.config's
+#        VERCEL_BRANCH_URL derive (already in this PR).
+#
+# CAVEAT: a preview may serve from a single warm instance, so this does NOT
+# deterministically reproduce the cross-instance "card not found" class — that
+# stays guarded by the Go handler tests. This job's job is the wiring/env class.
+name: E2E (Vercel preview)
+
+on:
+  pull_request:
+
+jobs:
+  e2e-preview:
+    # Same-repo PRs only. Fork PRs get no secrets from GitHub (by design) and we
+    # must never run a fork's test code with secrets — forks are covered by the
+    # local e2e in frontend.yml instead.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    concurrency:
+      # Serialize: all runs seed the one shared preview database.
+      group: e2e-preview
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for the Vercel frontend preview to be READY
+        id: preview
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.pull_request.head.sha;
+            const deadline = Date.now() + 12 * 60 * 1000;
+            while (Date.now() < deadline) {
+              const deps = await github.rest.repos.listDeployments({
+                owner: context.repo.owner, repo: context.repo.repo, sha,
+              });
+              // Frontend project "langner"; exclude the "langner-api" backend env.
+              const dep = deps.data.find(
+                (d) => /langner/i.test(d.environment) && !/langner-api/i.test(d.environment),
+              );
+              if (dep) {
+                const statuses = await github.rest.repos.listDeploymentStatuses({
+                  owner: context.repo.owner, repo: context.repo.repo, deployment_id: dep.id,
+                });
+                const ready = statuses.data.find((s) => s.state === "success" && s.target_url);
+                if (ready) { core.setOutput("url", ready.target_url); return; }
+                if (statuses.data.some((s) => ["failure", "error"].includes(s.state))) {
+                  throw new Error("frontend preview deployment failed");
+                }
+              }
+              await new Promise((r) => setTimeout(r, 15000));
+            }
+            throw new Error("timed out waiting for the frontend preview deployment");
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Seed the preview database + mint the e2e token
+        env:
+          DB_HOST: ${{ secrets.PREVIEW_DB_HOST }}
+          DB_PORT: ${{ secrets.PREVIEW_DB_PORT }}
+          DB_USER: ${{ secrets.PREVIEW_DB_USER }}
+          DB_PASSWORD: ${{ secrets.PREVIEW_DB_PASSWORD }}
+          DB_NAME: ${{ secrets.PREVIEW_DB_NAME }}
+          DB_TLS: require
+          TOKEN_SIGNING_KEY: ${{ secrets.PREVIEW_TOKEN_SIGNING_KEY }}
+        run: bash frontend/e2e/seed-remote.sh
+
+      - name: Run Playwright against the preview
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.url }}
+        run: |
+          npx playwright install chromium --with-deps
+          pnpm test:e2e
