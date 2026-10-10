@@ -112,10 +112,12 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.enabled == 'true'
         with:
-          node-version: 20
+          node-version-file: frontend/.node-version
 
       - uses: pnpm/action-setup@v4
         if: steps.gate.outputs.enabled == 'true'
+        with:
+          version: 10
 
       - name: Install frontend deps
         if: steps.gate.outputs.enabled == 'true'
