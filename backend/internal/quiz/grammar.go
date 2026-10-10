@@ -35,6 +35,25 @@ type GrammarBlank struct {
 	Status    string
 }
 
+// LoadAllGrammarPosts loads every due grammar post for the user across ALL
+// grammar notebooks (no section filter). The stateless submit path uses it to
+// re-resolve a blank by its stable id on a cold/different instance.
+func (s *Service) LoadAllGrammarPosts(userID int64) ([]GrammarPost, error) {
+	reader, err := s.newReader()
+	if err != nil {
+		return nil, fmt.Errorf("new reader: %w", err)
+	}
+	var posts []GrammarPost
+	for _, id := range reader.GrammarStoryIDs() {
+		loaded, err := s.LoadGrammarPosts(userID, id, nil)
+		if err != nil {
+			return nil, err
+		}
+		posts = append(posts, loaded...)
+	}
+	return posts, nil
+}
+
 // LoadGrammarPosts loads the story entries that have at least one due mistake,
 // each with its due blanks. It merges each entry's prose (a story notebook) with
 // its corrections (the grammars notebook) by entry title, and filters blanks by

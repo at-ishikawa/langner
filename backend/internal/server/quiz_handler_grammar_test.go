@@ -99,11 +99,14 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	require.NotEmpty(t, got[0].Expressions[0].LearnedLogs)
 }
 
-func TestQuizHandler_SubmitGrammarPost_NotFound(t *testing.T) {
+// An unresolvable blank id is non-fatal: it is skipped with a placeholder
+// result instead of aborting the whole post (serverless statelessness fix).
+func TestQuizHandler_SubmitGrammarPost_UnresolvableBlankIsSkipped(t *testing.T) {
 	handler, _ := newGrammarHandler(t)
-	_, err := handler.SubmitGrammarPost(context.Background(), connect.NewRequest(&apiv1.SubmitGrammarPostRequest{
+	resp, err := handler.SubmitGrammarPost(context.Background(), connect.NewRequest(&apiv1.SubmitGrammarPostRequest{
 		Answers: []*apiv1.GrammarBlankAnswer{{NoteId: 999999, Answer: "John"}},
 	}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetResults(), 1)
+	assert.False(t, resp.Msg.GetResults()[0].GetCorrect())
 }
