@@ -26,9 +26,15 @@ function derivePreviewBackendURL(): string | undefined {
 }
 
 const previewBackendURL = derivePreviewBackendURL();
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? previewBackendURL;
+// On a Vercel PREVIEW the derived sibling-backend URL WINS over any
+// project-level NEXT_PUBLIC_API_BASE_URL / AUTH_PROXY_TARGET — those point at
+// production and are applied to every environment, so without this a preview
+// frontend would call the prod backend (cross-origin /auth/me → CORS blocked →
+// bounced to sign-in). Off preview (previewBackendURL undefined) the explicit
+// env vars are used, then the localhost default.
+const apiBaseUrl = previewBackendURL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
 const authProxyTarget =
-  process.env.AUTH_PROXY_TARGET ?? previewBackendURL ?? "http://localhost:8080";
+  previewBackendURL ?? process.env.AUTH_PROXY_TARGET ?? "http://localhost:8080";
 const apiHost = apiBaseUrl ? new URL(apiBaseUrl).hostname : undefined;
 
 const nextConfig: NextConfig = {
