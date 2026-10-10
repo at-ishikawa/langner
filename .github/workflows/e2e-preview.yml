@@ -32,6 +32,13 @@ name: E2E (Vercel preview)
 on:
   pull_request:
 
+# Least privilege for the built-in GITHUB_TOKEN: this job only reads deployment
+# status. (Fork PRs get a read-only token AND no secrets regardless, but scoping
+# it explicitly is good hygiene and documents intent.)
+permissions:
+  contents: read
+  deployments: read
+
 # Non-secret Vercel coordinates for `vercel env pull` (the backend project).
 # IDs are not secrets; only VERCEL_TOKEN is.
 env:
