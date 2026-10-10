@@ -155,5 +155,7 @@ jobs:
           done
           npx playwright install chromium --with-deps
           # TEMP diagnostic: one small smoke scenario to surface the real
-          # in-browser error fast (revert to full `pnpm test:e2e` once green).
-          pnpm test:e2e -- --grep "Open the Learn hub from home"
+          # in-browser error fast (revert to `pnpm test:e2e` once green).
+          # Call playwright directly so --grep is the grep option, not a file arg.
+          pnpm exec bddgen
+          pnpm exec playwright test --grep "Open the Learn hub from home"
