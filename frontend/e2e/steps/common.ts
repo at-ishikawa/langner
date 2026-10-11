@@ -14,12 +14,20 @@ BeforeScenario(async ({ page }) => {
   page.on("request", (r) => {
     if (r.url().includes("/api.v1.")) started.set(r.url() + r.method(), Date.now());
   });
-  page.on("response", (res) => {
+  page.on("response", async (res) => {
     const u = res.url();
     if (!u.includes("/api.v1.")) return;
     const t = started.get(u + res.request().method());
     const ms = t ? Date.now() - t : -1;
-    console.log(`[rpc ${res.status()} ${ms}ms] ${u.split("/api.v1.")[1] ?? u}`);
+    let extra = "";
+    if (res.status() >= 400) {
+      try {
+        extra = " body=" + (await res.text()).slice(0, 400);
+      } catch {
+        /* body already consumed */
+      }
+    }
+    console.log(`[rpc ${res.status()} ${ms}ms] ${u.split("/api.v1.")[1] ?? u}${extra}`);
   });
   page.on("requestfailed", (r) => {
     if (r.url().includes("/api.v1.") || r.url().includes("/internal/"))
