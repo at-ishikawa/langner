@@ -59,6 +59,44 @@ func (s *Service) LoadAllGrammarPosts(userID int64) ([]GrammarPost, error) {
 // its corrections (the grammars notebook) by entry title, and filters blanks by
 // SM-2 (due when unseen or forward review is due). When entryTitles is non-empty
 // only those entries (by title) are included; empty means every entry.
+// GrammarMistakeRef is a correction's stable identity plus its notebook id —
+// everything the server needs to recompute the correction's stable note_id for
+// cross-instance Override / Skip / Resume resolution. Unlike LoadAllGrammarPosts
+// (which drops not-yet-due and excluded corrections), this covers EVERY
+// correction, because an override targets a mistake that was just answered and
+// is therefore no longer due.
+type GrammarMistakeRef struct {
+	NotebookID string
+	EntryID    string
+	SenseID    string
+	Incorrect  string
+}
+
+// AllGrammarMistakeRefs enumerates every grammar correction across all journals
+// the user can see, due or not, for id-based resolution on a cold instance.
+func (s *Service) AllGrammarMistakeRefs(userID int64) ([]GrammarMistakeRef, error) {
+	reader, err := s.newReader()
+	if err != nil {
+		return nil, fmt.Errorf("new reader: %w", err)
+	}
+	var refs []GrammarMistakeRef
+	for _, id := range reader.GrammarStoryIDs() {
+		mistakes, err := s.LoadGrammarMistakes(userID, id, nil)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range mistakes {
+			refs = append(refs, GrammarMistakeRef{
+				NotebookID: id,
+				EntryID:    m.EntryID,
+				SenseID:    m.SenseID,
+				Incorrect:  m.Incorrect,
+			})
+		}
+	}
+	return refs, nil
+}
+
 func (s *Service) LoadGrammarPosts(userID int64, notebookID string, entryTitles []string) ([]GrammarPost, error) {
 	var entryFilter map[string]struct{}
 	if len(entryTitles) > 0 {
