@@ -136,6 +136,31 @@ jobs:
           printf '%s' "$(jq -r .token < /tmp/seed-resp.txt)" > frontend/e2e/.auth/access-token.txt
           test -s frontend/e2e/.auth/access-token.txt
 
+      - name: Warm the preview (pay cold-start + content materialization up front)
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          FRONTEND_URL: ${{ steps.urls.outputs.frontend }}
+          BACKEND_URL: ${{ steps.urls.outputs.backend }}
+        run: |
+          # Scale-to-zero serverless cold starts (cold Go binary + per-instance
+          # DB-content materialization + first DB connection) are the dominant
+          # cost and otherwise land INSIDE a scenario's timed assertion. Hit the
+          # frontend and an authenticated backend content RPC (GetQuizOptions,
+          # which forces content materialization) a few times first so later
+          # scenarios ride warm instances. Best-effort: never fails the job.
+          set -uo pipefail
+          token=$(cat frontend/e2e/.auth/access-token.txt)
+          for i in $(seq 1 6); do
+            curl -s -o /dev/null --max-time 60 "${FRONTEND_URL}/" || true
+            curl -s -o /dev/null --max-time 60 -X POST "${BACKEND_URL}/api.v1.QuizService/GetQuizOptions" \
+              -H "Authorization: Bearer ${token}" \
+              -H "Content-Type: application/json" \
+              -H "Connect-Protocol-Version: 1" \
+              -d '{}' || true
+            sleep 2
+          done
+          echo "warm-up done"
+
       - name: Run Playwright against the preview
         if: steps.gate.outputs.enabled == 'true'
         working-directory: frontend
