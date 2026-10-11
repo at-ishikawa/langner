@@ -21,31 +21,36 @@ import (
 )
 
 // PrepareE2EDatabase brings a database to the deterministic e2e baseline for the
-// preview seed endpoint, where the deployed server has NO fixture files on disk:
+// preview seed endpoint, where the deployed server has NO fixture files on disk.
 //
-//  1. apply the schema (idempotent),
-//  2. OPTIONALLY import notebook CONTENT from a gzipped-tar archive the caller
-//     uploads (content != nil) — this is how the serverless backend gets the
-//     fixtures without a filesystem copy or a separate admin run,
-//  3. provision the allowlist/admin accounts, and
-//  4. reset the learning STATE to the seeded fixtures (truncate e2eStateTables +
-//     reseed the history from the Go fixtures in seed_e2e.go — no filesystem).
+// When content != nil (the once-per-run INITIAL seed, which uploads a gzipped
+// tar of the fixtures) it does the full setup: apply the schema, import the
+// CONTENT from the archive — the only way the serverless backend gets the
+// fixtures without a filesystem copy — and provision the allowlist/admin
+// accounts. When content == nil (a per-scenario RESET) all three are skipped —
+// schema, catalog, and users already exist.
 //
-// content may be nil (skip import) when the catalog is already present; the
-// final guard then fails clearly if notebook_files is still empty. Idempotent:
-// ImportShippedBundle upserts, so re-uploading the same content on every PR run
-// is a no-op beyond the hash check.
+// In BOTH cases it resets the learning STATE to the seeded baseline (truncate
+// e2eStateTables + reseed the history from the Go fixtures in seed_e2e.go, no
+// filesystem). Idempotent: ImportShippedBundle upserts, so re-uploading the same
+// content is a no-op beyond the hash check.
 func PrepareE2EDatabase(ctx context.Context, cfg *config.Config, db *sqlx.DB, content io.Reader) error {
-	if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
-		return fmt.Errorf("apply schema: %w", err)
-	}
+	// FULL setup only when content is uploaded (the once-per-run initial seed):
+	// schema migrate, import content, provision accounts. Per-scenario resets
+	// send NO content and skip all three — schema, catalog, and users already
+	// exist — so a reset is just a cheap TRUNCATE + reseed. Running migrate (a
+	// session-level advisory lock) and provision on every one of ~35 resets
+	// churned pooler connections and returned 500 mid-suite.
 	if content != nil {
+		if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+			return fmt.Errorf("apply schema: %w", err)
+		}
 		if _, err := importContentFromTar(ctx, cfg, db, content); err != nil {
 			return fmt.Errorf("import notebook content: %w", err)
 		}
-	}
-	if err := provisionAuth(ctx, cfg, db); err != nil {
-		return fmt.Errorf("provision auth: %w", err)
+		if err := provisionAuth(ctx, cfg, db); err != nil {
+			return fmt.Errorf("provision auth: %w", err)
+		}
 	}
 	ownerID, err := resolveSeedOwnerID(ctx, cfg, db)
 	if err != nil {
@@ -58,14 +63,16 @@ func PrepareE2EDatabase(ctx context.Context, cfg *config.Config, db *sqlx.DB, co
 	if err := seedE2EHistory(ctx, db, ownerID); err != nil {
 		return fmt.Errorf("seed e2e history: %w", err)
 	}
-	// Content is a prerequisite for quizzing; without it (no upload AND an empty
-	// catalog) fail with an actionable message instead of opaque e2e failures.
-	var files int
-	if err := db.GetContext(ctx, &files, "SELECT COUNT(*) FROM notebook_files"); err != nil {
-		return fmt.Errorf("check notebook content: %w", err)
-	}
-	if files == 0 {
-		return fmt.Errorf("notebook_files is empty — upload the fixture content archive with the seed request (CI does this), or import it once with `langner-admin migrate seed-e2e`")
+	// On the initial seed, verify content landed: without it there is nothing to
+	// quiz, so fail with an actionable message instead of opaque e2e failures.
+	if content != nil {
+		var files int
+		if err := db.GetContext(ctx, &files, "SELECT COUNT(*) FROM notebook_files"); err != nil {
+			return fmt.Errorf("check notebook content: %w", err)
+		}
+		if files == 0 {
+			return fmt.Errorf("notebook_files is empty — upload the fixture content archive with the seed request (CI does this), or import it once with `langner-admin migrate seed-e2e`")
+		}
 	}
 	return nil
 }
