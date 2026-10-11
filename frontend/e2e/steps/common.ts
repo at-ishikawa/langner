@@ -3,51 +3,7 @@ import { createBdd } from "playwright-bdd";
 import { resetState } from "../support/reset";
 import { readToken } from "../global-setup";
 
-const { Given, When, Then, BeforeScenario, AfterScenario } = createBdd();
-
-// --- TEMP preview diagnostics (remove once green): show, per scenario, every
-// backend RPC with status+duration, any console/page/request error, and — on a
-// failed scenario — the page URL + visible text. Distinguishes a hung/slow
-// submit RPC from a page that never hydrated (handlers not attached → stuck).
-BeforeScenario(async ({ page }) => {
-  const started = new Map<string, number>();
-  page.on("request", (r) => {
-    if (r.url().includes("/api.v1.")) started.set(r.url() + r.method(), Date.now());
-  });
-  page.on("response", async (res) => {
-    const u = res.url();
-    if (!u.includes("/api.v1.")) return;
-    const t = started.get(u + res.request().method());
-    const ms = t ? Date.now() - t : -1;
-    let extra = "";
-    if (res.status() >= 400) {
-      try {
-        extra = " body=" + (await res.text()).slice(0, 400);
-      } catch {
-        /* body already consumed */
-      }
-    }
-    console.log(`[rpc ${res.status()} ${ms}ms] ${u.split("/api.v1.")[1] ?? u}${extra}`);
-  });
-  page.on("requestfailed", (r) => {
-    if (r.url().includes("/api.v1.") || r.url().includes("/internal/"))
-      console.log(`[reqfail] ${r.method()} ${r.url()} — ${r.failure()?.errorText ?? "?"}`);
-  });
-  page.on("console", (m) => {
-    if (m.type() === "error") console.log(`[console.error] ${m.text()}`);
-  });
-  page.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
-});
-
-AfterScenario(async ({ page }) => {
-  const info = test.info();
-  if (info.status === info.expectedStatus) return;
-  try {
-    console.log(`[FAIL ${page.url()}]\n${(await page.locator("body").innerText({ timeout: 3000 })).slice(0, 1500)}\n[/FAIL]`);
-  } catch (e) {
-    console.log(`[FAIL page dump error] ${String(e)}`);
-  }
-});
+const { Given, When, Then, BeforeScenario } = createBdd();
 
 // Seed the SPA's in-memory bearer BEFORE any navigation: auth is a bearer held
 // in memory (no cookie), so we inject the seed user's access token into

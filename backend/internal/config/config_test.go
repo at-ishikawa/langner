@@ -329,6 +329,37 @@ func TestConfigLoader_Load_InferenceModeEnvOverride(t *testing.T) {
 	})
 }
 
+func TestConfigLoader_Load_MockInferenceDisablesShuffle(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	t.Run("INFERENCE_MODE=mock forces quiz.disable_shuffle (deterministic e2e order)", func(t *testing.T) {
+		// Even with shuffle explicitly enabled in the file, mock mode wins: the
+		// serverless preview loads config from env only and can't carry
+		// config.e2e.yml's disable_shuffle, so the mode derives it.
+		require.NoError(t, os.WriteFile(configPath, []byte("quiz:\n  disable_shuffle: false\n"), 0644))
+		t.Setenv("INFERENCE_MODE", "mock")
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.True(t, cfg.Quiz.DisableShuffle, "mock inference must disable card shuffle")
+	})
+
+	t.Run("non-mock leaves shuffle on by default (prod shuffles)", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(configPath, []byte("inference:\n  mode: openai\n"), 0644))
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.False(t, cfg.Quiz.DisableShuffle, "live inference must keep shuffle enabled")
+	})
+}
+
 func TestConfigLoader_Load_ValidTemplateFile(t *testing.T) {
 	tempDir := t.TempDir()
 

@@ -368,6 +368,16 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	applyEnvExtras(&cfg)
 	cfg.Notebooks.applyBaseDirectory()
 
+	// Mock inference is a deterministic test/e2e mode (substring grader, never
+	// used in prod). Card/origin order must be deterministic there too, else
+	// order-asserting e2e scenarios ("the first card is …") flake. The
+	// serverless preview loads config from env only and can't carry
+	// config.e2e.yml's `quiz.disable_shuffle: true`, so derive it from the mode
+	// rather than requiring a separate env var.
+	if cfg.Inference.Mode == "mock" {
+		cfg.Quiz.DisableShuffle = true
+	}
+
 	if err := loader.validator.Struct(cfg); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
 		var errorMsgs []string
