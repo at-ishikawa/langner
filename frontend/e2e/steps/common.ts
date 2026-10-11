@@ -3,7 +3,22 @@ import { createBdd } from "playwright-bdd";
 import { resetState } from "../support/reset";
 import { readToken } from "../global-setup";
 
-const { Given, When, Then, BeforeScenario } = createBdd();
+const { Given, When, Then, BeforeScenario, AfterScenario } = createBdd();
+
+// On a failed scenario, dump the page URL + visible body text to stdout so a
+// preview failure (where we can't open the trace artifact) is diagnosable from
+// the CI log — shows whether the result card rendered, an error/empty state, or
+// a redirect. Diagnostic only; no effect on passing runs.
+AfterScenario(async ({ page }) => {
+  const info = test.info();
+  if (info.status === info.expectedStatus) return;
+  try {
+    const text = await page.locator("body").innerText({ timeout: 2000 });
+    console.log(`[FAIL page ${page.url()}]\n${text.slice(0, 2000)}\n[/FAIL page]`);
+  } catch (e) {
+    console.log(`[FAIL page dump error] ${String(e)}`);
+  }
+});
 
 // Seed the SPA's in-memory bearer BEFORE any navigation: auth is a bearer held
 // in memory (no cookie), so we inject the seed user's access token into
