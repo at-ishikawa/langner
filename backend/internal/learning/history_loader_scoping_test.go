@@ -22,9 +22,6 @@ func (r *scopeNoteRepo) FindByID(context.Context, int64) (*notebook.NoteRecord, 
 func (r *scopeNoteRepo) FindIDsBySenseIDs(context.Context, []string) (map[string]int64, error) {
 	return map[string]int64{}, nil
 }
-func (r *scopeNoteRepo) FindByNotebooks(context.Context, []string) ([]notebook.NoteRecord, error) {
-	return nil, nil
-}
 func (r *scopeNoteRepo) BatchCreate(context.Context, []*notebook.NoteRecord) error { return nil }
 func (r *scopeNoteRepo) BatchUpdate(context.Context, []*notebook.NoteRecord, []notebook.NotebookNote) error {
 	return nil

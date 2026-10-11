@@ -110,53 +110,6 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 	return connect.NewResponse(&apiv1.GetQuizOptionsResponse{Notebooks: protoSummaries}), nil
 }
 
-// resolveNoteIDs loads the DB notes for the quizzed notebooks and returns two
-// lookup maps: sense_id → note id (for id-bearing cards) and usage → note id
-// (for id-less cards, which carry no sense_id and are keyed by their usage). A
-// nil repository (YAML/no-DB mode) or a load error yields empty maps, so every
-// card falls back to an ephemeral session id — the existing safety net. label
-// names the quiz kind in the warning log.
-func (h *QuizHandler) resolveNoteIDs(ctx context.Context, notebookIDs []string, label string) (bySense, byUsage map[string]int64) {
-	bySense = map[string]int64{}
-	byUsage = map[string]int64{}
-	if h.noteRepository == nil {
-		return bySense, byUsage
-	}
-	notes, err := h.noteRepository.FindByNotebooks(ctx, notebookIDs)
-	if err != nil {
-		slog.Warn(label+": note-id resolution failed; using session ids", "error", err)
-		return bySense, byUsage
-	}
-	for _, n := range notes {
-		if n.SenseID != "" {
-			bySense[n.SenseID] = n.ID
-		} else {
-			byUsage[n.Usage] = n.ID
-		}
-	}
-	return bySense, byUsage
-}
-
-// realCardNoteID returns the DB note id for a card: id-bearing cards (senseID
-// != "") match by sense_id; id-less cards match by their expression against the
-// usage map. A non-positive result means "no real id — use a session id".
-func realCardNoteID(senseID, expr string, bySense, byUsage map[string]int64) int64 {
-	if senseID != "" {
-		return bySense[senseID]
-	}
-	return byUsage[expr]
-}
-
-// cardExpression is the expression a standard Card is keyed by: its original
-// entry when present, else its entry (mirrors how an id-less note's usage is
-// stored, see ResolveCardByNote).
-func cardExpression(card quiz.Card) string {
-	if card.OriginalEntry != "" {
-		return card.OriginalEntry
-	}
-	return card.Entry
-}
-
 func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.StartQuizRequest]) (*connect.Response[apiv1.StartQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
@@ -174,19 +127,26 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load cards: %w", err))
 	}
-	// Stamp each card with its REAL DB note id so the submit path can
-	// re-resolve it statelessly (serverless-safe: start and submit can hit
-	// different instances, so an in-memory session store is unreliable).
-	// id-bearing cards resolve by sense_id; id-less cards (empty sense_id, keyed
-	// by usage) resolve by their stable usage identity. Cards that still have no
-	// real id fall back to an ephemeral session id held in the in-memory store.
-	bySense, byUsage := h.resolveNoteIDs(ctx, notebookIDs, "quiz")
+	realIDs := map[string]int64{}
+	if h.noteRepository != nil {
+		senseIDs := make([]string, 0, len(cards))
+		for _, c := range cards {
+			if c.ID != "" {
+				senseIDs = append(senseIDs, c.ID)
+			}
+		}
+		if m, merr := h.noteRepository.FindIDsBySenseIDs(ctx, senseIDs); merr != nil {
+			slog.Warn("quiz: sense-id→note-id map failed; using session ids", "error", merr)
+		} else {
+			realIDs = m
+		}
+	}
 	localStore := make(map[int64]quiz.Card)
 	nextID := sessionIDBase + 1
 	var flashcards []*apiv1.Flashcard
 	for _, card := range cards {
-		noteID := realCardNoteID(card.ID, cardExpression(card), bySense, byUsage)
-		if noteID <= 0 {
+		noteID, ok := realIDs[card.ID]
+		if !ok || noteID <= 0 {
 			noteID = nextID
 			nextID++
 			localStore[noteID] = card
@@ -320,18 +280,29 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 	}
 	// Stamp each card with its REAL DB note id so the submit path can
 	// re-resolve it statelessly (serverless-safe: start and submit can hit
-	// different instances, so an in-memory session store is unreliable).
-	// id-bearing cards resolve by sense_id; id-less cards (empty sense_id, keyed
-	// by usage) resolve by their stable usage identity (the reverse card's
-	// Expression). Cards that still have no real id fall back to an ephemeral
+	// different instances, so an in-memory session store is unreliable). Cards
+	// without a real id (legacy id-less entries) fall back to an ephemeral
 	// session id held in the in-memory store, as before.
-	bySense, byUsage := h.resolveNoteIDs(ctx, notebookIDs, "reverse quiz")
+	realIDs := map[string]int64{}
+	if h.noteRepository != nil {
+		senseIDs := make([]string, 0, len(cards))
+		for _, c := range cards {
+			if c.ID != "" {
+				senseIDs = append(senseIDs, c.ID)
+			}
+		}
+		if m, merr := h.noteRepository.FindIDsBySenseIDs(ctx, senseIDs); merr != nil {
+			slog.Warn("reverse quiz: sense-id→note-id map failed; using session ids", "error", merr)
+		} else {
+			realIDs = m
+		}
+	}
 	localStore := make(map[int64]quiz.ReverseCard)
 	nextID := sessionIDBase + 1
 	var flashcards []*apiv1.ReverseFlashcard
 	for _, card := range cards {
-		noteID := realCardNoteID(card.ID, card.Expression, bySense, byUsage)
-		if noteID <= 0 {
+		noteID, ok := realIDs[card.ID]
+		if !ok || noteID <= 0 {
 			noteID = nextID
 			nextID++
 			localStore[noteID] = card

@@ -30,9 +30,6 @@ func (f *fakeNoteRepo) FindByID(context.Context, int64) (*notebook.NoteRecord, e
 func (f *fakeNoteRepo) FindIDsBySenseIDs(context.Context, []string) (map[string]int64, error) {
 	return map[string]int64{}, nil
 }
-func (f *fakeNoteRepo) FindByNotebooks(context.Context, []string) ([]notebook.NoteRecord, error) {
-	return nil, nil
-}
 func (f *fakeNoteRepo) BatchCreate(context.Context, []*notebook.NoteRecord) error { return nil }
 func (f *fakeNoteRepo) BatchUpdate(context.Context, []*notebook.NoteRecord, []notebook.NotebookNote) error {
 	return nil

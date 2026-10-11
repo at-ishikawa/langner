@@ -26,16 +26,6 @@ func (r *rlNoteRepo) FindByID(context.Context, int64) (*notebook.NoteRecord, err
 func (r *rlNoteRepo) FindIDsBySenseIDs(context.Context, []string) (map[string]int64, error) {
 	return map[string]int64{}, nil
 }
-
-// FindByNotebooks mirrors FindAll: this fake stands in for the DB note repo
-// inside DBHistoryStore, which prefers the notebook-scoped read (the
-// notebookScopedNotes capability) when the repo implements it. Returning nil
-// here would make history reconstruction find no notes. The test's single note
-// belongs to the only notebook ever queried, so returning all notes matches the
-// real scoped read.
-func (r *rlNoteRepo) FindByNotebooks(context.Context, []string) ([]notebook.NoteRecord, error) {
-	return r.notes, nil
-}
 func (r *rlNoteRepo) BatchCreate(context.Context, []*notebook.NoteRecord) error { return nil }
 func (r *rlNoteRepo) BatchUpdate(context.Context, []*notebook.NoteRecord, []notebook.NotebookNote) error {
 	return nil
