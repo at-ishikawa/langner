@@ -199,6 +199,35 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	noteRepo := repos.Note
 	historyStore := repos.HistoryStore
 
+	// Notebook CONTENT directories every reader below walks. With a database,
+	// content is served from Postgres (DBContentSource materializes it to a temp
+	// tree); WITHOUT one, the configured on-disk directories are used. Resolving
+	// these ONCE and sharing them means analytics meaning/grammar resolution,
+	// ensure-on-serve, and notebook detail all read from the SAME place — so on a
+	// DB-only/serverless deploy, where cfg.Notebooks.* are empty, they resolve
+	// content from the DB instead of the absent filesystem (the #88/#89 class).
+	// Dirs() is fingerprint-cached, so one call shared across readers is cheap.
+	var dbFileRepo *notebook.NotebookFileRepository
+	var dbContentSource *notebook.DBContentSource
+	contentDirs := notebook.ContentDirs{
+		Stories:     cfg.Notebooks.StoriesDirectories,
+		Flashcards:  cfg.Notebooks.FlashcardsDirectories,
+		Books:       cfg.Notebooks.BooksDirectories,
+		Definitions: cfg.Notebooks.DefinitionsDirectories,
+		Etymology:   cfg.Notebooks.EtymologyDirectories,
+		Journals:    cfg.Notebooks.JournalsDirectories,
+		Grammars:    cfg.Notebooks.GrammarsDirectories,
+	}
+	if db != nil {
+		dbFileRepo = notebook.NewNotebookFileRepository(db)
+		dbContentSource = notebook.NewDBContentSource(dbFileRepo)
+		if dirs, derr := dbContentSource.Dirs(context.Background()); derr != nil {
+			slog.Warn("DB content dirs unavailable; readers fall back to filesystem dirs", "error", derr)
+		} else {
+			contentDirs = dirs
+		}
+	}
+
 	// Analytics reads through the same learning-history seam the quiz service
 	// uses: the DB-backed store when a database is connected, else the on-disk
 	// YAML learning_notes files.
@@ -207,17 +236,17 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	// quiz.Service.newReader) so a grammar attempt's notebook — a journal —
 	// resolves here too; LoadGrammars then attaches the corrections themselves,
 	// which resolveGrammar needs to turn a correction id back into its text.
-	analyticsStoryDirectories := append(append([]string{}, cfg.Notebooks.StoriesDirectories...), cfg.Notebooks.JournalsDirectories...)
+	analyticsStoryDirectories := append(append([]string{}, contentDirs.Stories...), contentDirs.Journals...)
 	if reader, err := notebook.NewReader(
 		analyticsStoryDirectories,
-		cfg.Notebooks.FlashcardsDirectories,
-		cfg.Notebooks.BooksDirectories,
-		cfg.Notebooks.DefinitionsDirectories,
-		cfg.Notebooks.EtymologyDirectories,
+		contentDirs.Flashcards,
+		contentDirs.Books,
+		contentDirs.Definitions,
+		contentDirs.Etymology,
 		dictionaryMap,
 	); err != nil {
 		slog.Warn("analytics meaning lookup disabled — notebook reader init failed", "error", err)
-	} else if err := reader.LoadGrammars(cfg.Notebooks.GrammarsDirectories); err != nil {
+	} else if err := reader.LoadGrammars(contentDirs.Grammars); err != nil {
 		slog.Warn("analytics grammar meaning lookup disabled — LoadGrammars failed", "error", err)
 	} else {
 		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
@@ -244,30 +273,24 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	// CONTENT from the DB content source — never the filesystem. YAML-only mode
 	// (no DB) leaves these nil, so the reader uses the configured directories and
 	// the push/pull/list RPCs return Unimplemented.
-	var dbFileRepo *notebook.NotebookFileRepository
-	var dbContentSource *notebook.DBContentSource
-	if db != nil {
-		dbFileRepo = notebook.NewNotebookFileRepository(db)
-		dbContentSource = notebook.NewDBContentSource(dbFileRepo)
+	// DB content serving (DB mode only): install the content source on the quiz
+	// service and wire ensure-on-serve from the SAME shared contentDirs resolved
+	// above — one content path across analytics / quiz / ensure, no filesystem.
+	if dbContentSource != nil {
 		svc.SetContentSource(dbContentSource)
 
-		// Ensure-on-serve creates notes rows additively when a notebook's content
-		// is served. It reads from the SAME materialized DB content the quiz
-		// serves, so dev/e2e/prod share one content path with no filesystem read.
-		if dirs, derr := dbContentSource.Dirs(context.Background()); derr != nil {
-			slog.Warn("ensure-on-serve disabled — DB content dirs unavailable", "error", derr)
-		} else if ensureReader, rerr := notebook.NewReader(
-			dirs.Stories,
-			dirs.Flashcards,
-			dirs.Books,
-			dirs.Definitions,
-			dirs.Etymology,
+		if ensureReader, rerr := notebook.NewReader(
+			contentDirs.Stories,
+			contentDirs.Flashcards,
+			contentDirs.Books,
+			contentDirs.Definitions,
+			contentDirs.Etymology,
 			dictionaryMap,
 		); rerr != nil {
 			slog.Warn("ensure-on-serve disabled — notebook reader init failed", "error", rerr)
 		} else {
-			_ = ensureReader.LoadJournals(dirs.Journals)
-			_ = ensureReader.LoadGrammars(dirs.Grammars)
+			_ = ensureReader.LoadJournals(contentDirs.Journals)
+			_ = ensureReader.LoadGrammars(contentDirs.Grammars)
 			noteSource := notebook.NewYAMLNoteRepository(ensureReader)
 			ensurer := datasync.NewImporter(noteRepo, nil, noteSource, nil, nil, nil, io.Discard)
 			svc.SetNoteEnsurer(ensurer)
