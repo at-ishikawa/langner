@@ -69,15 +69,15 @@ export default defineConfig({
   retries: PREVIEW ? 2 : 0,
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",
-  expect: { timeout: PREVIEW ? 20_000 : 5_000 },
+  expect: { timeout: PREVIEW ? 45_000 : 5_000 },
   reporter: [
     ["list"],
     ["html", { open: "never" }],
     ["./e2e/reporters/coverage-reporter.ts"],
   ],
   use: {
-    actionTimeout: PREVIEW ? 20_000 : 0,
-    navigationTimeout: PREVIEW ? 30_000 : 0,
+    actionTimeout: PREVIEW ? 30_000 : 0,
+    navigationTimeout: PREVIEW ? 45_000 : 0,
     // In PREVIEW mode (PLAYWRIGHT_BASE_URL set by the e2e-preview CI job) the
     // app under test is the deployed Vercel frontend, which talks to the
     // deployed backend — so the exact same scenarios run against real serverless
