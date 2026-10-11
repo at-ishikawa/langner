@@ -61,6 +61,12 @@ const PREVIEW = Boolean(process.env.PLAYWRIGHT_BASE_URL);
 export default defineConfig({
   testDir,
   timeout: PREVIEW ? 120_000 : 60_000,
+  // Against the deployed preview, a cold serverless function + pooled DB
+  // connection can occasionally stall a first request past the (already
+  // generous) timeout. Retry twice there so irreducible cold-start latency is
+  // surfaced as "flaky" rather than failing the run — a test that is genuinely
+  // broken still fails on every attempt. Local (deterministic) keeps 0 retries.
+  retries: PREVIEW ? 2 : 0,
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",
   expect: { timeout: PREVIEW ? 20_000 : 5_000 },
