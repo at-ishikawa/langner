@@ -42,7 +42,7 @@ func PrepareE2EDatabase(ctx context.Context, cfg *config.Config, db *sqlx.DB, co
 	// session-level advisory lock) and provision on every one of ~35 resets
 	// churned pooler connections and returned 500 mid-suite.
 	if content != nil {
-		if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+		if err := migrateViaSessionPooler(cfg, db); err != nil {
 			return fmt.Errorf("apply schema: %w", err)
 		}
 		if _, err := importContentFromTar(ctx, cfg, db, content); err != nil {
@@ -163,6 +163,26 @@ func extractTarGz(r io.Reader, dest string) error {
 		}
 	}
 	return nil
+}
+
+// migrateViaSessionPooler applies the schema migration. golang-migrate holds a
+// session-level advisory lock, which Supabase's TRANSACTION pooler (6543, used
+// for the request-heavy runtime pool) does not preserve across statements — so
+// when the runtime is on 6543 we open a dedicated SESSION-pooler (5432, same
+// host) connection just for the migration and run it there. Any other port
+// (direct/session already) migrates on the runtime pool as-is.
+func migrateViaSessionPooler(cfg *config.Config, runtime *sqlx.DB) error {
+	if cfg.Database.Port != 6543 {
+		return database.Migrate(runtime, schemas.Migrations, "migrations")
+	}
+	sessionCfg := cfg.Database
+	sessionCfg.Port = 5432
+	sdb, err := database.Open(sessionCfg)
+	if err != nil {
+		return fmt.Errorf("open session pooler (5432) for migration: %w", err)
+	}
+	defer func() { _ = sdb.Close() }()
+	return database.Migrate(sdb, schemas.Migrations, "migrations")
 }
 
 // IssueTestToken mints a langner access JWT for email (upserting its user row via

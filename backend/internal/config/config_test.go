@@ -382,8 +382,8 @@ func TestConfigLoader_Load_PostgresURLEnv(t *testing.T) {
 	require.NoError(t, os.WriteFile(configPath, []byte("# Empty config\n"), 0644))
 
 	// Vercel's Supabase integration provides POSTGRES_URL (transaction pooler,
-	// port 6543). The loader should adopt it and switch to the session pooler
-	// (5432) so golang-migrate's advisory lock works.
+	// port 6543). The loader adopts it AS GIVEN — 6543 is right for the runtime
+	// pool; the seed endpoint migrates over its own session (5432) connection.
 	t.Setenv("POSTGRES_URL", "postgres://postgres.abcref:s3cr3t%2Fpw@aws-1-us-west-2.pooler.supabase.com:6543/postgres?sslmode=require")
 
 	loader, err := NewConfigLoader(configPath)
@@ -392,7 +392,7 @@ func TestConfigLoader_Load_PostgresURLEnv(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "aws-1-us-west-2.pooler.supabase.com", cfg.Database.Host)
-	assert.Equal(t, 5432, cfg.Database.Port) // 6543 transaction → 5432 session
+	assert.Equal(t, 6543, cfg.Database.Port) // transaction pooler kept for runtime
 	assert.Equal(t, "postgres.abcref", cfg.Database.Username)
 	assert.Equal(t, "s3cr3t/pw", cfg.Database.Password) // percent-decoded
 	assert.Equal(t, "postgres", cfg.Database.Database)

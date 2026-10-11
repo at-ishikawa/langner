@@ -64,11 +64,12 @@ func applyEnvExtras(cfg *Config) {
 // DB_HOST/DB_USER/etc. No URL present ⇒ no-op (discrete DB_* / file config stand).
 //
 // POSTGRES_URL (the IPv4 pooler) is preferred over POSTGRES_URL_NON_POOLING (the
-// IPv6-only direct host, unreachable from Vercel's IPv4 functions). Supabase's
-// TRANSACTION pooler (port 6543) breaks golang-migrate's session-level advisory
-// lock, so we rewrite it to the SESSION pooler (port 5432, same IPv4 host), which
-// supports the lock and is equally reachable — making the seed endpoint's schema
-// migrate work. TLS is forced on (Supabase requires sslmode=require).
+// IPv6-only direct host, unreachable from Vercel's IPv4 functions). The port is
+// kept AS GIVEN — the TRANSACTION pooler (6543) is correct for the request-heavy
+// serverless RUNTIME (many short connections). golang-migrate needs session-level
+// advisory locks, so the one place that migrates (the e2e seed endpoint) opens
+// its OWN session-pooler (5432) connection instead; see clicmd.PrepareE2EDatabase.
+// TLS is forced on (Supabase requires sslmode=require).
 func applyPostgresURL(cfg *Config) {
 	raw := os.Getenv("POSTGRES_URL")
 	if raw == "" {
@@ -82,11 +83,7 @@ func applyPostgresURL(cfg *Config) {
 		return
 	}
 	cfg.Database.Host = u.Hostname()
-	port := u.Port()
-	if port == "6543" { // transaction pooler → session pooler (advisory locks)
-		port = "5432"
-	}
-	if p, perr := strconv.Atoi(port); perr == nil && p > 0 {
+	if p, perr := strconv.Atoi(u.Port()); perr == nil && p > 0 {
 		cfg.Database.Port = p
 	}
 	if db := strings.TrimPrefix(u.Path, "/"); db != "" {
