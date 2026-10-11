@@ -20,6 +20,11 @@ type NoteRepository interface {
 	// globally unique). Used to stamp quiz cards with their real note id so the
 	// submit path can re-resolve them statelessly (no in-memory session store).
 	FindIDsBySenseIDs(ctx context.Context, senseIDs []string) (map[string]int64, error)
+	// FindByNotebooks returns the notes linked to ANY of notebookIDs, each with
+	// all its notebook_notes links. Used at quiz Start to stamp cards — both
+	// id-bearing (matched by sense_id) and id-less (matched by usage) — with
+	// their real DB note id so the stateless submit path can re-resolve them.
+	FindByNotebooks(ctx context.Context, notebookIDs []string) ([]NoteRecord, error)
 	BatchCreate(ctx context.Context, notes []*NoteRecord) error
 	BatchUpdate(ctx context.Context, notes []*NoteRecord, newNotebookNotes []NotebookNote) error
 	Create(ctx context.Context, note *NoteRecord) error

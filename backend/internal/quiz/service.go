@@ -653,7 +653,7 @@ func (s *Service) ResolveCardByNote(userID int64, note *notebook.NoteRecord) (Ca
 			nbIDs = append(nbIDs, nn.NotebookID)
 		}
 	}
-	if len(nbIDs) == 0 || note.SenseID == "" {
+	if len(nbIDs) == 0 {
 		return Card{}, false, nil
 	}
 	cards, err := s.LoadCards(userID, nbIDs, true, nil)
@@ -661,7 +661,20 @@ func (s *Service) ResolveCardByNote(userID int64, note *notebook.NoteRecord) (Ca
 		return Card{}, false, err
 	}
 	for _, c := range cards {
-		if c.ID == note.SenseID {
+		if note.SenseID != "" {
+			// id-bearing card: match by stable sense_id.
+			if c.ID == note.SenseID {
+				return c, true, nil
+			}
+			continue
+		}
+		// id-less card (no sense_id): match by its expression against the
+		// note's usage — the same (usage) identity it is stored under.
+		cardExpr := c.OriginalEntry
+		if cardExpr == "" {
+			cardExpr = c.Entry
+		}
+		if c.ID == "" && cardExpr == note.Usage {
 			return c, true, nil
 		}
 	}
@@ -1439,7 +1452,7 @@ func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteReco
 			nbIDs = append(nbIDs, nn.NotebookID)
 		}
 	}
-	if len(nbIDs) == 0 || note.SenseID == "" {
+	if len(nbIDs) == 0 {
 		return ReverseCard{}, false, nil
 	}
 	cards, err := s.LoadReverseCards(userID, nbIDs, false, true, nil)
@@ -1447,7 +1460,16 @@ func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteReco
 		return ReverseCard{}, false, err
 	}
 	for _, c := range cards {
-		if c.ID == note.SenseID {
+		if note.SenseID != "" {
+			// id-bearing card: match by stable sense_id.
+			if c.ID == note.SenseID {
+				return c, true, nil
+			}
+			continue
+		}
+		// id-less card (no sense_id): match by its expression against the
+		// note's usage — the same (usage) identity it is stored under.
+		if c.ID == "" && c.Expression == note.Usage {
 			return c, true, nil
 		}
 	}

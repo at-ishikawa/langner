@@ -47,6 +47,9 @@ func (m *MultiNoteRepository) FindByID(ctx context.Context, id int64) (*NoteReco
 func (m *MultiNoteRepository) FindIDsBySenseIDs(ctx context.Context, senseIDs []string) (map[string]int64, error) {
 	return m.secondary.FindIDsBySenseIDs(ctx, senseIDs)
 }
+func (m *MultiNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []string) ([]NoteRecord, error) {
+	return m.secondary.FindByNotebooks(ctx, notebookIDs)
+}
 
 func (m *MultiNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord) error {
 	if err := m.primary.BatchCreate(ctx, notes); err != nil {

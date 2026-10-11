@@ -106,6 +106,12 @@ func (r *YAMLNoteRepository) FindIDsBySenseIDs(_ context.Context, _ []string) (m
 	return map[string]int64{}, nil
 }
 
+// FindByNotebooks is unsupported for YAML (no DB notes). Returns nil so the
+// interface is satisfied; the DB side (MultiNoteRepository.secondary) answers it.
+func (r *YAMLNoteRepository) FindByNotebooks(_ context.Context, _ []string) ([]NoteRecord, error) {
+	return nil, nil
+}
+
 // FindAll reads all story and flashcard notebooks, converts each YAML Note
 // to a NoteRecord, and deduplicates by (Usage, Entry) key.
 func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
