@@ -51,17 +51,27 @@ const seedEnv: Record<string, string> = {
   TOKEN_FILE,
 };
 
+// PREVIEW mode drives the DEPLOYED Vercel app, where a cold serverless function
+// + Supabase pooler round-trip can take several seconds — far longer than a
+// localhost server. Give assertions, actions, navigations, and the whole test
+// generous timeouts there so cold-start latency doesn't masquerade as a failure;
+// local keeps the snappy defaults.
+const PREVIEW = Boolean(process.env.PLAYWRIGHT_BASE_URL);
+
 export default defineConfig({
   testDir,
-  timeout: 60000,
+  timeout: PREVIEW ? 120_000 : 60_000,
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",
+  expect: { timeout: PREVIEW ? 20_000 : 5_000 },
   reporter: [
     ["list"],
     ["html", { open: "never" }],
     ["./e2e/reporters/coverage-reporter.ts"],
   ],
   use: {
+    actionTimeout: PREVIEW ? 20_000 : 0,
+    navigationTimeout: PREVIEW ? 30_000 : 0,
     // In PREVIEW mode (PLAYWRIGHT_BASE_URL set by the e2e-preview CI job) the
     // app under test is the deployed Vercel frontend, which talks to the
     // deployed backend — so the exact same scenarios run against real serverless
