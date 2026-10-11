@@ -3,22 +3,7 @@ import { createBdd } from "playwright-bdd";
 import { resetState } from "../support/reset";
 import { readToken } from "../global-setup";
 
-const { Given, When, Then, BeforeScenario, AfterScenario } = createBdd();
-
-// On a failed scenario, dump the page URL + visible body text to stdout so a
-// preview failure (where we can't open the trace artifact) is diagnosable from
-// the CI log — shows whether the result card rendered, an error/empty state, or
-// a redirect. Diagnostic only; no effect on passing runs.
-AfterScenario(async ({ page }) => {
-  const info = test.info();
-  if (info.status === info.expectedStatus) return;
-  try {
-    const text = await page.locator("body").innerText({ timeout: 2000 });
-    console.log(`[FAIL page ${page.url()}]\n${text.slice(0, 2000)}\n[/FAIL page]`);
-  } catch (e) {
-    console.log(`[FAIL page dump error] ${String(e)}`);
-  }
-});
+const { Given, When, Then, BeforeScenario } = createBdd();
 
 // Seed the SPA's in-memory bearer BEFORE any navigation: auth is a bearer held
 // in memory (no cookie), so we inject the seed user's access token into
@@ -45,22 +30,6 @@ BeforeScenario(async ({ page }) => {
 // already sees baseline data.
 BeforeScenario(async () => {
   resetState();
-});
-
-// Surface in-browser failures (RPC/CORS/auth/JS) in the Playwright stdout so a
-// preview run that can't reach the backend is diagnosable from CI logs instead
-// of just timing out on a missing element. Cheap and harmless locally too.
-BeforeScenario(async ({ page }) => {
-  page.on("console", (msg) => {
-    if (msg.type() === "error") console.log(`[browser console.error] ${msg.text()}`);
-  });
-  page.on("pageerror", (err) => console.log(`[browser pageerror] ${err.message}`));
-  page.on("requestfailed", (req) =>
-    console.log(`[request failed] ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "?"}`),
-  );
-  page.on("response", (res) => {
-    if (res.status() >= 400) console.log(`[response ${res.status()}] ${res.request().method()} ${res.url()}`);
-  });
 });
 
 // Layer 3 coverage relies on TestStep.params?.url, which Playwright only
