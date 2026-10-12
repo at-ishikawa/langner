@@ -22,6 +22,7 @@ service NotebookService {
   rpc PushNotebook(PushNotebookRequest) returns (PushNotebookResponse);
   rpc PullNotebook(PullNotebookRequest) returns (PullNotebookResponse);
   rpc ListMyNotebooks(ListMyNotebooksRequest) returns (ListMyNotebooksResponse);
+  rpc DeleteNotebook(DeleteNotebookRequest) returns (DeleteNotebookResponse);
 }
 
 // NotebookFile is one raw YAML file of a pushed bundle. path is relative to the
@@ -44,6 +45,16 @@ message PushNotebookRequest {
 message PushNotebookResponse {
   string notebook_id = 1;                // the minted / confirmed nb_ id
   map<string, int32> imported_rows = 2;  // per-table counts from the importer
+}
+
+message DeleteNotebookRequest {
+  // The nb_ id (or claimed human id) of a notebook the caller owns. Find it
+  // with `langner notebooks list`.
+  string notebook_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message DeleteNotebookResponse {
+  string notebook_id = 1; // the deleted id (echoed for confirmation)
 }
 
 message PullNotebookRequest {

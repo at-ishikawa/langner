@@ -60,6 +60,9 @@ const (
 	// NotebookServiceListMyNotebooksProcedure is the fully-qualified name of the NotebookService's
 	// ListMyNotebooks RPC.
 	NotebookServiceListMyNotebooksProcedure = "/api.v1.NotebookService/ListMyNotebooks"
+	// NotebookServiceDeleteNotebookProcedure is the fully-qualified name of the NotebookService's
+	// DeleteNotebook RPC.
+	NotebookServiceDeleteNotebookProcedure = "/api.v1.NotebookService/DeleteNotebook"
 )
 
 // NotebookServiceClient is a client for the api.v1.NotebookService service.
@@ -78,6 +81,7 @@ type NotebookServiceClient interface {
 	PushNotebook(context.Context, *connect.Request[v1.PushNotebookRequest]) (*connect.Response[v1.PushNotebookResponse], error)
 	PullNotebook(context.Context, *connect.Request[v1.PullNotebookRequest]) (*connect.Response[v1.PullNotebookResponse], error)
 	ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error)
+	DeleteNotebook(context.Context, *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error)
 }
 
 // NewNotebookServiceClient constructs a client for the api.v1.NotebookService service. By default,
@@ -145,6 +149,12 @@ func NewNotebookServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(notebookServiceMethods.ByName("ListMyNotebooks")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteNotebook: connect.NewClient[v1.DeleteNotebookRequest, v1.DeleteNotebookResponse](
+			httpClient,
+			baseURL+NotebookServiceDeleteNotebookProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("DeleteNotebook")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -159,6 +169,7 @@ type notebookServiceClient struct {
 	pushNotebook         *connect.Client[v1.PushNotebookRequest, v1.PushNotebookResponse]
 	pullNotebook         *connect.Client[v1.PullNotebookRequest, v1.PullNotebookResponse]
 	listMyNotebooks      *connect.Client[v1.ListMyNotebooksRequest, v1.ListMyNotebooksResponse]
+	deleteNotebook       *connect.Client[v1.DeleteNotebookRequest, v1.DeleteNotebookResponse]
 }
 
 // GetNotebookDetail calls api.v1.NotebookService.GetNotebookDetail.
@@ -206,6 +217,11 @@ func (c *notebookServiceClient) ListMyNotebooks(ctx context.Context, req *connec
 	return c.listMyNotebooks.CallUnary(ctx, req)
 }
 
+// DeleteNotebook calls api.v1.NotebookService.DeleteNotebook.
+func (c *notebookServiceClient) DeleteNotebook(ctx context.Context, req *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error) {
+	return c.deleteNotebook.CallUnary(ctx, req)
+}
+
 // NotebookServiceHandler is an implementation of the api.v1.NotebookService service.
 type NotebookServiceHandler interface {
 	GetNotebookDetail(context.Context, *connect.Request[v1.GetNotebookDetailRequest]) (*connect.Response[v1.GetNotebookDetailResponse], error)
@@ -222,6 +238,7 @@ type NotebookServiceHandler interface {
 	PushNotebook(context.Context, *connect.Request[v1.PushNotebookRequest]) (*connect.Response[v1.PushNotebookResponse], error)
 	PullNotebook(context.Context, *connect.Request[v1.PullNotebookRequest]) (*connect.Response[v1.PullNotebookResponse], error)
 	ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error)
+	DeleteNotebook(context.Context, *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error)
 }
 
 // NewNotebookServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -285,6 +302,12 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 		connect.WithSchema(notebookServiceMethods.ByName("ListMyNotebooks")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notebookServiceDeleteNotebookHandler := connect.NewUnaryHandler(
+		NotebookServiceDeleteNotebookProcedure,
+		svc.DeleteNotebook,
+		connect.WithSchema(notebookServiceMethods.ByName("DeleteNotebook")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.NotebookService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NotebookServiceGetNotebookDetailProcedure:
@@ -305,6 +328,8 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 			notebookServicePullNotebookHandler.ServeHTTP(w, r)
 		case NotebookServiceListMyNotebooksProcedure:
 			notebookServiceListMyNotebooksHandler.ServeHTTP(w, r)
+		case NotebookServiceDeleteNotebookProcedure:
+			notebookServiceDeleteNotebookHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -348,4 +373,8 @@ func (UnimplementedNotebookServiceHandler) PullNotebook(context.Context, *connec
 
 func (UnimplementedNotebookServiceHandler) ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.ListMyNotebooks is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) DeleteNotebook(context.Context, *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.DeleteNotebook is not implemented"))
 }

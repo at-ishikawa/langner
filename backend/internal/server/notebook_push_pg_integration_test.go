@@ -348,3 +348,96 @@ func TestPushNotebook_UpdatesExistingOwnedId_LivePostgres_Integration(t *testing
 	}))
 	require.Error(t, err, "a non-owner cannot update someone else's notebook by declaring its id")
 }
+
+// TestPushNotebook_NameMatchUpdatesExisting pins the duplicate-notebook fix:
+// re-pushing an edited bundle with the SAME display name updates the existing
+// notebook in place (same id) instead of minting a second same-named notebook
+// (the reported regression: adding a chapter and re-pushing created a copy).
+func TestPushNotebook_NameMatchUpdatesExisting_LivePostgres_Integration(t *testing.T) {
+	f := newPushFixture(t)
+	ownerCtx := testutil.WithTestUser(context.Background(), f.ownerID)
+
+	first, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind: "Flashcard", Name: "Common English Idioms", Files: exampleIdiomBundle(t),
+	}))
+	require.NoError(t, err)
+	nbID := first.Msg.NotebookId
+	require.True(t, strings.HasPrefix(nbID, notebook.NotebookIDPrefix))
+
+	// Re-push the same-named bundle (as if a unit was added): must UPDATE the
+	// same notebook, not mint a new one.
+	second, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind: "Flashcard", Name: "Common English Idioms", Files: exampleIdiomBundle(t),
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, nbID, second.Msg.NotebookId, "same-named re-push must update the existing notebook, not duplicate it")
+
+	list, err := f.notebookHandler.ListMyNotebooks(ownerCtx, connect.NewRequest(&apiv1.ListMyNotebooksRequest{}))
+	require.NoError(t, err)
+	assert.Len(t, list.Msg.Notebooks, 1, "exactly one notebook after two same-named pushes")
+}
+
+// TestPushNotebook_AmbiguousNameRefuses: when the owner ALREADY has two
+// same-named notebooks (the broken state the old push could produce), a push of
+// that name refuses with FailedPrecondition rather than guessing which to
+// overwrite — pointing the user at --id / delete.
+func TestPushNotebook_AmbiguousNameRefuses_LivePostgres_Integration(t *testing.T) {
+	f := newPushFixture(t)
+	ownerCtx := testutil.WithTestUser(context.Background(), f.ownerID)
+	fileRepo := notebook.NewNotebookFileRepository(f.db)
+
+	owner := f.ownerID
+	for _, id := range []string{"nb_dup_a", "nb_dup_b"} {
+		require.NoError(t, fileRepo.PushBundle(context.Background(), notebook.UserNotebook{
+			NotebookID: id, OwnerUserID: &owner, Visibility: notebook.VisibilityPrivate,
+			Source: "user", Kind: "Flashcard", DisplayName: "Dup Name",
+		}, []notebook.NotebookFile{{Path: "index.yml", Content: []byte("kind: Flashcard\nname: \"Dup Name\"\n")}}))
+	}
+
+	dupFiles := []*apiv1.NotebookFile{
+		{Path: "index.yml", Content: []byte("kind: Flashcard\nid: dup-src\nname: \"Dup Name\"\nnotebooks:\n  - ./cards.yml\n")},
+		{Path: "cards.yml", Content: []byte("- usage: alpha\n  entry: alpha\n  meaning: first\n")},
+	}
+	_, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind: "Flashcard", Name: "Dup Name", Files: dupFiles,
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+}
+
+// TestDeleteNotebook: owner deletes a notebook (gone from list, blobs removed);
+// a non-owner is refused; a missing id is NotFound.
+func TestDeleteNotebook_LivePostgres_Integration(t *testing.T) {
+	f := newPushFixture(t)
+	ctx := context.Background()
+	ownerCtx := testutil.WithTestUser(ctx, f.ownerID)
+
+	pushed, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{
+		Kind: "Flashcard", Name: "Common English Idioms", Files: exampleIdiomBundle(t),
+	}))
+	require.NoError(t, err)
+	nbID := pushed.Msg.NotebookId
+
+	_, err = f.notebookHandler.DeleteNotebook(testutil.WithTestUser(ctx, f.nonOwnerID),
+		connect.NewRequest(&apiv1.DeleteNotebookRequest{NotebookId: nbID}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+	_, err = f.notebookHandler.DeleteNotebook(ownerCtx,
+		connect.NewRequest(&apiv1.DeleteNotebookRequest{NotebookId: "nb_does_not_exist"}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+
+	del, err := f.notebookHandler.DeleteNotebook(ownerCtx,
+		connect.NewRequest(&apiv1.DeleteNotebookRequest{NotebookId: nbID}))
+	require.NoError(t, err)
+	assert.Equal(t, nbID, del.Msg.NotebookId)
+
+	list, err := f.notebookHandler.ListMyNotebooks(ownerCtx, connect.NewRequest(&apiv1.ListMyNotebooksRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, list.Msg.Notebooks)
+
+	var files int
+	require.NoError(t, f.db.Get(&files, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = $1`, nbID))
+	assert.Zero(t, files, "notebook_files removed on delete")
+}

@@ -118,14 +118,24 @@ func (h *NotebookHandler) PushNotebook(
 
 	// Resolve the notebook id (create-or-update). Policy: a fresh push MINTS a
 	// new nb_ id and ignores the author's declared id (ids are server-owned for
-	// new notebooks). The ONE exception is an UPDATE — when the id already
-	// exists AND the caller owns it, push updates it in place, preserving the id
-	// (so learning history stays attached) and its source ('shipped' stays
-	// 'shipped'). An explicit --id must be an existing owned notebook.
+	// new notebooks). It UPDATES an existing notebook in place — preserving its id
+	// (so learning history stays attached) and source ('shipped' stays 'shipped')
+	// — in three cases, in order: (1) an explicit --id the caller owns; (2) a
+	// declared id that already exists and the caller owns (a claimed shipped
+	// notebook); (3) the caller already owns exactly one notebook with the SAME
+	// display name (the natural "edit and re-push" workflow — re-pushing an
+	// updated bundle updates that notebook instead of creating a same-named
+	// duplicate). Only when none of these match does push mint a fresh id.
 	declaredID := strings.TrimSpace(meta.ID)
 	notebookID := strings.TrimSpace(msg.NotebookId)
 	storedSource := "user"
 	visibility := notebook.VisibilityPrivate
+
+	// Display name (used both as the stored name and as the name-match key).
+	name := meta.Name
+	if strings.TrimSpace(name) == "" {
+		name = strings.TrimSpace(msg.Name)
+	}
 
 	// claimExisting resolves id as an update target: (claimed=true) when it
 	// exists and the caller owns it (adopting its source/visibility), an error
@@ -149,6 +159,42 @@ func (h *NotebookHandler) PushNotebook(
 		return true, nil
 	}
 
+	// claimByName resolves an update target by display name among the caller's
+	// OWN notebooks. 0 matches → (claimed=false, mint a fresh id). Exactly 1 →
+	// update it in place. >1 → the name is already ambiguous (a pre-existing
+	// duplicate), so refuse and point at --id / delete rather than guess which to
+	// overwrite. Name-matching is what makes an edited bundle re-push update the
+	// same notebook instead of creating a second one with the same name.
+	claimByName := func(displayName string) (bool, error) {
+		if strings.TrimSpace(displayName) == "" {
+			return false, nil
+		}
+		owned, lerr := h.fileRepo.ListUserNotebooks(ctx, userID)
+		if lerr != nil {
+			return false, connect.NewError(connect.CodeInternal, lerr)
+		}
+		var matched []notebook.UserNotebook
+		for _, n := range owned {
+			if n.DisplayName == displayName {
+				matched = append(matched, n)
+			}
+		}
+		switch len(matched) {
+		case 0:
+			return false, nil
+		case 1:
+			notebookID = matched[0].NotebookID
+			if s := strings.TrimSpace(matched[0].Source); s != "" {
+				storedSource = s
+			}
+			visibility = matched[0].Visibility
+			return true, nil
+		default:
+			return false, connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("you have %d notebooks named %q; re-push with --id <nb_id> to pick one, or delete the duplicate with `langner notebooks delete <nb_id>`", len(matched), displayName))
+		}
+	}
+
 	switch {
 	case notebookID != "":
 		claimed, cerr := claimExisting(notebookID)
@@ -158,19 +204,28 @@ func (h *NotebookHandler) PushNotebook(
 		if !claimed {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
 		}
-	case declaredID != "":
-		claimed, cerr := claimExisting(declaredID)
-		if cerr != nil {
-			return nil, cerr
+	default:
+		// No explicit --id: try a declared id the caller owns (claimed shipped
+		// notebook), else match by display name, else mint a fresh id.
+		claimed := false
+		if declaredID != "" {
+			c, cerr := claimExisting(declaredID)
+			if cerr != nil {
+				return nil, cerr
+			}
+			claimed = c
+		}
+		if !claimed {
+			c, cerr := claimByName(name)
+			if cerr != nil {
+				return nil, cerr
+			}
+			claimed = c
 		}
 		if !claimed {
 			if notebookID, err = notebook.MintNotebookID(); err != nil {
 				return nil, connect.NewError(connect.CodeInternal, err)
 			}
-		}
-	default:
-		if notebookID, err = notebook.MintNotebookID(); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	}
 
@@ -190,10 +245,6 @@ func (h *NotebookHandler) PushNotebook(
 		// Family placement is per-file for a composite notebook; the single
 		// `kind` column would mislabel it, so leave it empty (display only).
 		kind = ""
-	}
-	name := meta.Name
-	if strings.TrimSpace(name) == "" {
-		name = strings.TrimSpace(msg.Name)
 	}
 
 	nb := notebook.UserNotebook{
@@ -376,4 +427,39 @@ func (h *NotebookHandler) ListMyNotebooks(
 		})
 	}
 	return connect.NewResponse(&apiv1.ListMyNotebooksResponse{Notebooks: entries}), nil
+}
+
+// DeleteNotebook permanently removes a notebook the caller owns — its stored
+// files, per-notebook memberships, and ownership row (shared notes are left
+// intact). Used to clean up duplicates. NotFound when the id doesn't exist;
+// PermissionDenied when it exists but belongs to someone else.
+func (h *NotebookHandler) DeleteNotebook(
+	ctx context.Context,
+	req *connect.Request[apiv1.DeleteNotebookRequest],
+) (*connect.Response[apiv1.DeleteNotebookResponse], error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if h.db == nil || h.fileRepo == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("per-user notebooks require a configured database"))
+	}
+	id := strings.TrimSpace(req.Msg.GetNotebookId())
+	if id == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("notebook_id is required"))
+	}
+	owner, _, _, found, gerr := h.fileRepo.GetNotebookOwnership(ctx, id)
+	if gerr != nil {
+		return nil, connect.NewError(connect.CodeInternal, gerr)
+	}
+	if !found {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", id))
+	}
+	if owner == nil || *owner != userID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("not the owner of %s", id))
+	}
+	if err := h.fileRepo.DeleteUserNotebook(ctx, id); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete notebook: %w", err))
+	}
+	return connect.NewResponse(&apiv1.DeleteNotebookResponse{NotebookId: id}), nil
 }
