@@ -16,5 +16,10 @@
     # No examples so the "List words missing context" Reverse-mode toggle has
     # exactly one card to surface.
     - expression: "lose one's temper"
+      # Explicit id so the note carries a stable sense_id — like ALL real
+      # notebooks (prod has zero id-less notes). An id-less card has no stable
+      # cross-instance identity, so its quiz submit can't re-resolve on a
+      # different serverless instance (it sticks on the question card).
+      id: lose-ones-temper
       meaning: "to become angry"
       part_of_speech: "phrase"

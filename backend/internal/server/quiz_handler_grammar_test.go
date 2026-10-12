@@ -99,6 +99,48 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	require.NotEmpty(t, got[0].Expressions[0].LearnedLogs)
 }
 
+// Override on a grammar blank must succeed even when the override RPC lands on
+// a DIFFERENT (cold) serverless instance than the one that served the quiz. The
+// grammar store is per-instance, so resolveCardInfo must re-resolve the stable
+// grammarBlankID hash statelessly — rebuild the posts, re-hash, match — exactly
+// as the submit path does, instead of 404ing through a notes FindByID that can
+// never map a hash to a row. This is the cross-instance "note not found" bug.
+func TestQuizHandler_OverrideGrammar_CrossInstance(t *testing.T) {
+	ctx := context.Background()
+	handlerA, _ := newGrammarHandler(t)
+
+	start, err := handlerA.StartGrammarQuiz(ctx, connect.NewRequest(&apiv1.StartGrammarQuizRequest{
+		NotebookIds: []string{"journal"},
+	}))
+	require.NoError(t, err)
+	blank := start.Msg.GetPosts()[0].GetBlanks()[0]
+
+	sub, err := handlerA.SubmitGrammarPost(ctx, connect.NewRequest(&apiv1.SubmitGrammarPostRequest{
+		Answers: []*apiv1.GrammarBlankAnswer{{NoteId: blank.GetNoteId(), Answer: "John", ResponseTimeMs: 1000}},
+	}))
+	require.NoError(t, err)
+	res := sub.Msg.GetResults()[0]
+	require.NotEmpty(t, res.GetLearnedAt())
+
+	// A second handler sharing the SAME service models a cold instance: its
+	// grammarStore is empty, so the quiz note_id minted on handlerA is a pure
+	// store miss here — the path that used to 404.
+	handlerB := NewQuizHandler(handlerA.svc)
+	_, inStore := handlerB.grammarStore[blank.GetNoteId()]
+	require.False(t, inStore, "cold instance must not hold the blank in its per-instance store")
+
+	markIncorrect := false
+	ov, err := handlerB.OverrideAnswer(ctx, connect.NewRequest(&apiv1.OverrideAnswerRequest{
+		NoteId:      blank.GetNoteId(),
+		SenseId:     "note-the-john",
+		QuizType:    apiv1.QuizType_QUIZ_TYPE_GRAMMAR,
+		LearnedAt:   res.GetLearnedAt(),
+		MarkCorrect: &markIncorrect,
+	}))
+	require.NoError(t, err, "cross-instance grammar override must resolve statelessly, not 404")
+	assert.NotEmpty(t, ov.Msg.GetOriginalStatus(), "override must have found and flipped the just-written log")
+}
+
 // An unresolvable blank id is non-fatal: it is skipped with a placeholder
 // result instead of aborting the whole post (serverless statelessness fix).
 func TestQuizHandler_SubmitGrammarPost_UnresolvableBlankIsSkipped(t *testing.T) {

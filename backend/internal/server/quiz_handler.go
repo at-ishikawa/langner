@@ -556,32 +556,75 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 		return &info, nil
 	}
 	h.mu.Unlock()
+
+	// A real (small, stable) DB note id resolves directly — a vocabulary word
+	// Excluded/Overridden from the Learn page or a cold instance. Carry the DB
+	// note id so the deliberate Exclude (SkipWord/ResumeWord) can target this
+	// exact note in DB mode — homograph-safe — without re-resolving by expression.
+	if h.noteRepository != nil {
+		if noteRecord, err := h.noteRepository.FindByID(ctx, noteID); err == nil {
+			var notebookName, group, subgroup string
+			if len(noteRecord.NotebookNotes) > 0 {
+				nn := noteRecord.NotebookNotes[0]
+				notebookName = nn.NotebookID
+				group = nn.Group
+				subgroup = nn.Subgroup
+			}
+			if notebookName == "" {
+				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d has no linked notebook", noteID))
+			}
+			expression := noteRecord.Entry
+			if expression == "" {
+				expression = noteRecord.Usage
+			}
+			info := quiz.CardInfo{NotebookName: notebookName, StoryTitle: group, SceneTitle: subgroup, Expression: expression, NoteID: noteRecord.ID}
+			return &info, nil
+		}
+	}
+
+	// Store miss on a grammar/relearn id. The grammar/relearn stores are
+	// per-instance, so on a cold/different serverless instance Override / Skip /
+	// Resume must re-resolve the id the SAME stateless way the submit paths do
+	// (resolveGrammarBlank / resolveRelearnCard: rebuild the posts/pool, re-hash
+	// by the stable content hash, match) instead of 404ing — otherwise a "Mark as
+	// Correct" / Exclude lands on a note_id that FindByID can't map (the id is a
+	// grammarBlankID/relearnCardID hash, not a notes row) and the RPC 404s only
+	// when the override happens to hit a different instance than the quiz did.
+	if h.svc != nil {
+		userID, _ := auth.UserIDFromContext(ctx)
+		// Grammar: match the stable grammarBlankID hash against EVERY correction
+		// (due or not) — the override fires AFTER the answer saved, so the blank
+		// is no longer due and resolveGrammarBlank's due-only re-materialization
+		// would miss it.
+		if refs, err := h.svc.AllGrammarMistakeRefs(userID); err == nil {
+			for _, r := range refs {
+				if grammarBlankID(r.NotebookID, r.EntryID, quiz.GrammarBlank{SenseID: r.SenseID, Incorrect: r.Incorrect}) == noteID {
+					return &quiz.CardInfo{
+						NotebookName: r.NotebookID,
+						StoryTitle:   notebook.JournalStoryTitle,
+						Expression:   r.SenseID,
+						ID:           r.SenseID,
+					}, nil
+				}
+			}
+		}
+		if rc, ok := h.resolveRelearnCard(ctx, userID, noteID); ok {
+			if rc.IsGrammar() {
+				return &quiz.CardInfo{
+					NotebookName: rc.NotebookName,
+					StoryTitle:   notebook.JournalStoryTitle,
+					Expression:   rc.GrammarCard().SenseID,
+					ID:           rc.GrammarCard().SenseID,
+				}, nil
+			}
+			return &quiz.CardInfo{NotebookName: rc.NotebookName, Expression: rc.Entry}, nil
+		}
+	}
+
 	if h.noteRepository == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found: no active quiz session and no database configured", noteID))
 	}
-	noteRecord, err := h.noteRepository.FindByID(ctx, noteID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in database: %w", noteID, err))
-	}
-	var notebookName, group, subgroup string
-	if len(noteRecord.NotebookNotes) > 0 {
-		nn := noteRecord.NotebookNotes[0]
-		notebookName = nn.NotebookID
-		group = nn.Group
-		subgroup = nn.Subgroup
-	}
-	if notebookName == "" {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d has no linked notebook", noteID))
-	}
-	expression := noteRecord.Entry
-	if expression == "" {
-		expression = noteRecord.Usage
-	}
-	// Carry the DB note id so the deliberate Exclude (SkipWord/ResumeWord) can
-	// target this exact note in DB mode — homograph-safe — without re-resolving
-	// by expression.
-	info := quiz.CardInfo{NotebookName: notebookName, StoryTitle: group, SceneTitle: subgroup, Expression: expression, NoteID: noteRecord.ID}
-	return &info, nil
+	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in database", noteID))
 }
 
 func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {

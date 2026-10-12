@@ -11,6 +11,10 @@ const NAME = process.env.LANGNER_TEST_DB_NAME ?? "langner_e2e";
 
 export default async function globalTeardown() {
   if (process.env.LANGNER_KEEP_TEST_DB === "1") return;
+  // PREVIEW mode: the DB is the remote preview Supabase (managed externally,
+  // reset per scenario via the seed endpoint) and there is no local Postgres to
+  // drop — skip teardown entirely.
+  if (process.env.E2E_PREVIEW_BACKEND_URL) return;
   const conn = new Client({
     host: HOST,
     port: PORT,

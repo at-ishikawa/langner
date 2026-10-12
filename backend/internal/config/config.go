@@ -15,6 +15,12 @@ import (
 type ServerConfig struct {
 	Port int        `mapstructure:"port"`
 	CORS CORSConfig `mapstructure:"cors"`
+	// E2ESeedSecret, when non-empty, mounts the preview-only e2e seed endpoint
+	// (POST /internal/e2e/seed) guarded by this shared secret so CI can reset the
+	// deployed preview's learning state and mint an e2e bearer WITHOUT holding any
+	// database credential or signing key. Unset (prod) ⇒ the endpoint is never
+	// mounted. Env-bound to E2E_SEED_SECRET; treat it as a secret.
+	E2ESeedSecret string `mapstructure:"e2e_seed_secret"`
 }
 
 type CORSConfig struct {
@@ -327,6 +333,12 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to bind TOKEN_SIGNING_KEY environment variable: %w", err)
 	}
 
+	// Preview-only e2e seed endpoint guard (secret; env-bound only, like the
+	// other secrets above). Unset ⇒ the endpoint is not mounted.
+	if err := v.BindEnv("server.e2e_seed_secret", "E2E_SEED_SECRET"); err != nil {
+		return nil, fmt.Errorf("failed to bind E2E_SEED_SECRET environment variable: %w", err)
+	}
+
 	// Non-secret settings are env-overridable too (see nonSecretEnvBindings), so a
 	// serverless/PaaS deploy can run with no config.yml. BindEnv both registers the
 	// key for Unmarshal and lets viper's precedence make env win over the file.
@@ -355,6 +367,16 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	// env-provided values are validated too.
 	applyEnvExtras(&cfg)
 	cfg.Notebooks.applyBaseDirectory()
+
+	// Mock inference is a deterministic test/e2e mode (substring grader, never
+	// used in prod). Card/origin order must be deterministic there too, else
+	// order-asserting e2e scenarios ("the first card is …") flake. The
+	// serverless preview loads config from env only and can't carry
+	// config.e2e.yml's `quiz.disable_shuffle: true`, so derive it from the mode
+	// rather than requiring a separate env var.
+	if cfg.Inference.Mode == "mock" {
+		cfg.Quiz.DisableShuffle = true
+	}
 
 	if err := loader.validator.Struct(cfg); err != nil {
 		validationErrors := err.(validator.ValidationErrors)

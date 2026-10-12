@@ -8,6 +8,8 @@ package serverapp
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +26,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/analytics"
 	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
+	"github.com/at-ishikawa/langner/internal/clicmd"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/datasync"
@@ -196,6 +199,35 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	noteRepo := repos.Note
 	historyStore := repos.HistoryStore
 
+	// Notebook CONTENT directories every reader below walks. With a database,
+	// content is served from Postgres (DBContentSource materializes it to a temp
+	// tree); WITHOUT one, the configured on-disk directories are used. Resolving
+	// these ONCE and sharing them means analytics meaning/grammar resolution,
+	// ensure-on-serve, and notebook detail all read from the SAME place — so on a
+	// DB-only/serverless deploy, where cfg.Notebooks.* are empty, they resolve
+	// content from the DB instead of the absent filesystem (the #88/#89 class).
+	// Dirs() is fingerprint-cached, so one call shared across readers is cheap.
+	var dbFileRepo *notebook.NotebookFileRepository
+	var dbContentSource *notebook.DBContentSource
+	contentDirs := notebook.ContentDirs{
+		Stories:     cfg.Notebooks.StoriesDirectories,
+		Flashcards:  cfg.Notebooks.FlashcardsDirectories,
+		Books:       cfg.Notebooks.BooksDirectories,
+		Definitions: cfg.Notebooks.DefinitionsDirectories,
+		Etymology:   cfg.Notebooks.EtymologyDirectories,
+		Journals:    cfg.Notebooks.JournalsDirectories,
+		Grammars:    cfg.Notebooks.GrammarsDirectories,
+	}
+	if db != nil {
+		dbFileRepo = notebook.NewNotebookFileRepository(db)
+		dbContentSource = notebook.NewDBContentSource(dbFileRepo)
+		if dirs, derr := dbContentSource.Dirs(context.Background()); derr != nil {
+			slog.Warn("DB content dirs unavailable; readers fall back to filesystem dirs", "error", derr)
+		} else {
+			contentDirs = dirs
+		}
+	}
+
 	// Analytics reads through the same learning-history seam the quiz service
 	// uses: the DB-backed store when a database is connected, else the on-disk
 	// YAML learning_notes files.
@@ -204,17 +236,17 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	// quiz.Service.newReader) so a grammar attempt's notebook — a journal —
 	// resolves here too; LoadGrammars then attaches the corrections themselves,
 	// which resolveGrammar needs to turn a correction id back into its text.
-	analyticsStoryDirectories := append(append([]string{}, cfg.Notebooks.StoriesDirectories...), cfg.Notebooks.JournalsDirectories...)
+	analyticsStoryDirectories := append(append([]string{}, contentDirs.Stories...), contentDirs.Journals...)
 	if reader, err := notebook.NewReader(
 		analyticsStoryDirectories,
-		cfg.Notebooks.FlashcardsDirectories,
-		cfg.Notebooks.BooksDirectories,
-		cfg.Notebooks.DefinitionsDirectories,
-		cfg.Notebooks.EtymologyDirectories,
+		contentDirs.Flashcards,
+		contentDirs.Books,
+		contentDirs.Definitions,
+		contentDirs.Etymology,
 		dictionaryMap,
 	); err != nil {
 		slog.Warn("analytics meaning lookup disabled — notebook reader init failed", "error", err)
-	} else if err := reader.LoadGrammars(cfg.Notebooks.GrammarsDirectories); err != nil {
+	} else if err := reader.LoadGrammars(contentDirs.Grammars); err != nil {
 		slog.Warn("analytics grammar meaning lookup disabled — LoadGrammars failed", "error", err)
 	} else {
 		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
@@ -241,30 +273,24 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	// CONTENT from the DB content source — never the filesystem. YAML-only mode
 	// (no DB) leaves these nil, so the reader uses the configured directories and
 	// the push/pull/list RPCs return Unimplemented.
-	var dbFileRepo *notebook.NotebookFileRepository
-	var dbContentSource *notebook.DBContentSource
-	if db != nil {
-		dbFileRepo = notebook.NewNotebookFileRepository(db)
-		dbContentSource = notebook.NewDBContentSource(dbFileRepo)
+	// DB content serving (DB mode only): install the content source on the quiz
+	// service and wire ensure-on-serve from the SAME shared contentDirs resolved
+	// above — one content path across analytics / quiz / ensure, no filesystem.
+	if dbContentSource != nil {
 		svc.SetContentSource(dbContentSource)
 
-		// Ensure-on-serve creates notes rows additively when a notebook's content
-		// is served. It reads from the SAME materialized DB content the quiz
-		// serves, so dev/e2e/prod share one content path with no filesystem read.
-		if dirs, derr := dbContentSource.Dirs(context.Background()); derr != nil {
-			slog.Warn("ensure-on-serve disabled — DB content dirs unavailable", "error", derr)
-		} else if ensureReader, rerr := notebook.NewReader(
-			dirs.Stories,
-			dirs.Flashcards,
-			dirs.Books,
-			dirs.Definitions,
-			dirs.Etymology,
+		if ensureReader, rerr := notebook.NewReader(
+			contentDirs.Stories,
+			contentDirs.Flashcards,
+			contentDirs.Books,
+			contentDirs.Definitions,
+			contentDirs.Etymology,
 			dictionaryMap,
 		); rerr != nil {
 			slog.Warn("ensure-on-serve disabled — notebook reader init failed", "error", rerr)
 		} else {
-			_ = ensureReader.LoadJournals(dirs.Journals)
-			_ = ensureReader.LoadGrammars(dirs.Grammars)
+			_ = ensureReader.LoadJournals(contentDirs.Journals)
+			_ = ensureReader.LoadGrammars(contentDirs.Grammars)
 			noteSource := notebook.NewYAMLNoteRepository(ensureReader)
 			ensurer := datasync.NewImporter(noteRepo, nil, noteSource, nil, nil, nil, io.Discard)
 			svc.SetNoteEnsurer(ensurer)
@@ -327,6 +353,17 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	mux.HandleFunc("/auth/token/refresh", authSetup.DeviceHandler.Refresh)
 	mux.HandleFunc("/auth/token/revoke", authSetup.DeviceHandler.Revoke)
 
+	// Preview-only e2e seed endpoint: mounted ONLY when E2E_SEED_SECRET is set
+	// (preview env; never in prod). Guarded by that shared secret, it resets the
+	// deployed preview's learning state to the e2e baseline and mints an e2e
+	// bearer, so CI can seed the running preview over HTTP without holding any
+	// database credential or signing key. Registered OUTSIDE the connect auth
+	// interceptor (like /auth/*) so the unauthenticated runner can call it.
+	if cfg.Server.E2ESeedSecret != "" && db != nil {
+		mux.HandleFunc("/internal/e2e/seed", e2eSeedHandler(cfg, db))
+		slog.Warn("e2e seed endpoint ENABLED at POST /internal/e2e/seed — preview only, guarded by E2E_SEED_SECRET")
+	}
+
 	rootHandler := h2c.NewHandler(mux, &http2.Server{})
 	// The ONLY auth path: populate the request context from the bearer access
 	// token for both the connect interceptor and /auth/me. Never rejects —
@@ -334,6 +371,46 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	rootHandler = server.AuthBearerMiddleware(rootHandler, authSetup.Tokens)
 
 	return corsMiddleware(rootHandler, cfg.Server.CORS.AllowedOrigins), authSetup, cleanup, nil
+}
+
+// e2eSeedHandler returns the preview-only seed endpoint. It requires the shared
+// secret in the X-E2E-Seed-Secret header (constant-time compared), resets the DB
+// to the e2e baseline (clicmd.PrepareE2EDatabase), mints an e2e bearer for the
+// configured admin account, and returns {"token","email"} as JSON. It is only
+// registered when E2E_SEED_SECRET is set, so prod never exposes it.
+func e2eSeedHandler(cfg *config.Config, db *sqlx.DB) http.HandlerFunc {
+	secret := []byte(cfg.Server.E2ESeedSecret)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-E2E-Seed-Secret")), secret) != 1 {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		// Optional request body: a gzipped tar of the notebook fixture content,
+		// uploaded by CI so the serverless backend (no fixtures on disk) can
+		// import the catalog. Empty body ⇒ skip import (catalog assumed present).
+		// Cap the body as a modest upload-bomb guard.
+		var content io.Reader
+		if r.ContentLength != 0 {
+			content = http.MaxBytesReader(w, r.Body, 64<<20)
+		}
+		if err := clicmd.PrepareE2EDatabase(r.Context(), cfg, db, content); err != nil {
+			slog.Error("e2e seed failed", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		token, err := clicmd.IssueTestToken(r.Context(), cfg, db, cfg.Auth.InitialAdminEmail)
+		if err != nil {
+			slog.Error("e2e token mint failed", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"token": token, "email": cfg.Auth.InitialAdminEmail})
+	}
 }
 
 // sweepExpiredDeviceCodes deletes expired device rows every 10 minutes until
@@ -423,23 +500,66 @@ func parseSameSite(s string) http.SameSite {
 	}
 }
 
+// matchGlobOrigin matches a `*`-glob pattern against an origin, anchored at both
+// ends. Only `*` is special (any run of chars); everything else is literal. Used
+// so a single Preview-scope CORS entry can match this project's per-branch
+// preview origins (langner-git-<slug>-at-ishikawa.vercel.app) without an open `*`.
+func matchGlobOrigin(pattern, origin string) bool {
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == origin
+	}
+	if !strings.HasPrefix(origin, parts[0]) {
+		return false
+	}
+	rest := origin[len(parts[0]):]
+	for _, mid := range parts[1 : len(parts)-1] {
+		idx := strings.Index(rest, mid)
+		if idx < 0 {
+			return false
+		}
+		rest = rest[idx+len(mid):]
+	}
+	last := parts[len(parts)-1]
+	return len(rest) >= len(last) && strings.HasSuffix(rest, last)
+}
+
 // corsMiddleware serves explicit CORS for bearer-authenticated RPCs. Auth is a
 // header (`Authorization: Bearer`), not a cookie, so NO
 // Access-Control-Allow-Credentials is sent. It reflects the request Origin when
 // it is configured (or when "*" is configured) and always allows Authorization.
 func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 	allowAll := false
-	allowed := make(map[string]bool, len(allowedOrigins))
+	exact := make(map[string]bool, len(allowedOrigins))
+	var patterns []string
 	for _, o := range allowedOrigins {
-		if o == "*" {
+		switch {
+		case o == "*":
 			allowAll = true
-			break
+		case strings.Contains(o, "*"):
+			// A `*`-glob entry (e.g. https://langner-git-*-at-ishikawa.vercel.app)
+			// lets Preview scope allow this project's per-branch preview origins
+			// without opening CORS to every site — the branch slug varies per PR
+			// but the account-scoped suffix anchors it to our own deployments.
+			patterns = append(patterns, o)
+		default:
+			exact[o] = true
 		}
-		allowed[o] = true
+	}
+	originAllowed := func(origin string) bool {
+		if allowAll || exact[origin] {
+			return true
+		}
+		for _, p := range patterns {
+			if matchGlobOrigin(p, origin) {
+				return true
+			}
+		}
+		return false
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && (allowAll || allowed[origin]) {
+		if origin != "" && originAllowed(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}

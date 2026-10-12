@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -43,6 +44,7 @@ var nonSecretEnvBindings = [][]string{
 // StringToSlice hook splits on "," but does not trim), so `A, B` yields
 // ["A","B"] not ["A"," B"].
 func applyEnvExtras(cfg *Config) {
+	applyPostgresURL(cfg)
 	mergeKVInto(&cfg.Database.Params, os.Getenv("DB_PARAMS"))
 	cfg.Server.CORS.AllowedOrigins = trimList(cfg.Server.CORS.AllowedOrigins)
 	cfg.Auth.AllowedEmails = trimList(cfg.Auth.AllowedEmails)
@@ -52,6 +54,50 @@ func applyEnvExtras(cfg *Config) {
 	if ints, ok := intsFromCSV(os.Getenv("QUIZ_FIXED_INTERVALS")); ok {
 		cfg.Quiz.FixedIntervals = ints
 	}
+}
+
+// applyPostgresURL populates the database connection fields from a Postgres
+// connection URL when one is present in the environment — the shape Vercel's
+// Supabase/Postgres integration provides (POSTGRES_URL / POSTGRES_URL_NON_POOLING)
+// rather than discrete DB_* vars. When set it OVERRIDES the discrete DB_* values,
+// so an environment wired by the integration "just works" without also setting
+// DB_HOST/DB_USER/etc. No URL present ⇒ no-op (discrete DB_* / file config stand).
+//
+// POSTGRES_URL (the IPv4 pooler) is preferred over POSTGRES_URL_NON_POOLING (the
+// IPv6-only direct host, unreachable from Vercel's IPv4 functions). The port is
+// kept AS GIVEN — the TRANSACTION pooler (6543) is correct for the request-heavy
+// serverless RUNTIME (many short connections). golang-migrate needs session-level
+// advisory locks, so the one place that migrates (the e2e seed endpoint) opens
+// its OWN session-pooler (5432) connection instead; see clicmd.PrepareE2EDatabase.
+// TLS is forced on (Supabase requires sslmode=require).
+func applyPostgresURL(cfg *Config) {
+	raw := os.Getenv("POSTGRES_URL")
+	if raw == "" {
+		raw = os.Getenv("POSTGRES_URL_NON_POOLING")
+	}
+	if raw == "" {
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return
+	}
+	cfg.Database.Host = u.Hostname()
+	if p, perr := strconv.Atoi(u.Port()); perr == nil && p > 0 {
+		cfg.Database.Port = p
+	}
+	if db := strings.TrimPrefix(u.Path, "/"); db != "" {
+		cfg.Database.Database = db
+	}
+	if u.User != nil {
+		if name := u.User.Username(); name != "" {
+			cfg.Database.Username = name
+		}
+		if pw, ok := u.User.Password(); ok {
+			cfg.Database.Password = pw
+		}
+	}
+	cfg.Database.TLS = true
 }
 
 // intsFromCSV parses a comma-separated int list ("1, 7, 30"), trimming each and

@@ -329,6 +329,37 @@ func TestConfigLoader_Load_InferenceModeEnvOverride(t *testing.T) {
 	})
 }
 
+func TestConfigLoader_Load_MockInferenceDisablesShuffle(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	t.Run("INFERENCE_MODE=mock forces quiz.disable_shuffle (deterministic e2e order)", func(t *testing.T) {
+		// Even with shuffle explicitly enabled in the file, mock mode wins: the
+		// serverless preview loads config from env only and can't carry
+		// config.e2e.yml's disable_shuffle, so the mode derives it.
+		require.NoError(t, os.WriteFile(configPath, []byte("quiz:\n  disable_shuffle: false\n"), 0644))
+		t.Setenv("INFERENCE_MODE", "mock")
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.True(t, cfg.Quiz.DisableShuffle, "mock inference must disable card shuffle")
+	})
+
+	t.Run("non-mock leaves shuffle on by default (prod shuffles)", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(configPath, []byte("inference:\n  mode: openai\n"), 0644))
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.False(t, cfg.Quiz.DisableShuffle, "live inference must keep shuffle enabled")
+	})
+}
+
 func TestConfigLoader_Load_ValidTemplateFile(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -346,4 +377,55 @@ func TestConfigLoader_Load_ValidTemplateFile(t *testing.T) {
 	cfg, err := loader.Load()
 	require.NoError(t, err)
 	assert.Equal(t, templatePath, cfg.Templates.StoryNotebookTemplate)
+}
+
+func TestConfigLoader_Load_E2ESeedSecretEnv(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	t.Run("unset leaves e2e seed secret empty (endpoint not mounted)", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(configPath, []byte("# Empty config\n"), 0644))
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.Equal(t, "", cfg.Server.E2ESeedSecret)
+	})
+
+	t.Run("E2E_SEED_SECRET env populates server.e2e_seed_secret", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(configPath, []byte("# Empty config\n"), 0644))
+		t.Setenv("E2E_SEED_SECRET", "preview-only-shared-secret")
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.Equal(t, "preview-only-shared-secret", cfg.Server.E2ESeedSecret)
+	})
+}
+
+func TestConfigLoader_Load_PostgresURLEnv(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("# Empty config\n"), 0644))
+
+	// Vercel's Supabase integration provides POSTGRES_URL (transaction pooler,
+	// port 6543). The loader adopts it AS GIVEN — 6543 is right for the runtime
+	// pool; the seed endpoint migrates over its own session (5432) connection.
+	t.Setenv("POSTGRES_URL", "postgres://postgres.abcref:s3cr3t%2Fpw@aws-1-us-west-2.pooler.supabase.com:6543/postgres?sslmode=require")
+
+	loader, err := NewConfigLoader(configPath)
+	require.NoError(t, err)
+	cfg, err := loader.Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, "aws-1-us-west-2.pooler.supabase.com", cfg.Database.Host)
+	assert.Equal(t, 6543, cfg.Database.Port) // transaction pooler kept for runtime
+	assert.Equal(t, "postgres.abcref", cfg.Database.Username)
+	assert.Equal(t, "s3cr3t/pw", cfg.Database.Password) // percent-decoded
+	assert.Equal(t, "postgres", cfg.Database.Database)
+	assert.True(t, cfg.Database.TLS)
 }
