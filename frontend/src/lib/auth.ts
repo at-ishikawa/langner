@@ -12,14 +12,22 @@ import { tryRefreshSession } from "./refresh";
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
-export interface AuthUser {
-  username: string;
-  // LLM-credential status (never the key itself). hasApiKey gates the quiz-start
-  // banner; provider/model show the current registration; availableProviders
-  // drives the Settings provider picker.
-  hasApiKey: boolean;
+// LlmCredential is one registered provider (never the key itself). primary marks
+// the provider grading uses first; the other configured provider is the
+// automatic rate-limit/quota fallback.
+export interface LlmCredential {
   provider: string;
   model: string;
+  primary: boolean;
+}
+
+export interface AuthUser {
+  username: string;
+  // hasApiKey gates the quiz-start banner (any provider configured);
+  // credentials lists each registered provider; availableProviders drives the
+  // Settings rows.
+  hasApiKey: boolean;
+  credentials: LlmCredential[];
   availableProviders: string[];
 }
 
@@ -27,8 +35,7 @@ interface MeResponse {
   authenticated: boolean;
   username?: string;
   hasApiKey?: boolean;
-  provider?: string;
-  model?: string;
+  credentials?: LlmCredential[];
   availableProviders?: string[];
 }
 
@@ -67,20 +74,12 @@ export async function getMe(): Promise<AuthUser | null> {
   return {
     username: data.username,
     hasApiKey: data.hasApiKey ?? false,
-    provider: data.provider ?? "",
-    model: data.model ?? "",
+    credentials: data.credentials ?? [],
     availableProviders: data.availableProviders ?? [],
   };
 }
 
-// setLlmCredential registers (or replaces) the user's LLM provider + API key
-// (+ optional model). The key is sent once and never read back. Authenticated
-// with the in-memory bearer access token, like every other API call.
-export async function setLlmCredential(params: {
-  provider: string;
-  apiKey: string;
-  model: string;
-}): Promise<void> {
+async function postCredential(body: Record<string, unknown>, failMsg: string): Promise<void> {
   const token = getAccessToken();
   const res = await fetch(`${API_BASE}/auth/llm-credential`, {
     method: "POST",
@@ -88,21 +87,42 @@ export async function setLlmCredential(params: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = (await res.text()).trim();
-    throw new Error(text || "Failed to save API key");
+    throw new Error(text || failMsg);
   }
 }
 
-// deleteLlmCredential clears the user's stored LLM credential.
-export async function deleteLlmCredential(): Promise<void> {
+// setLlmCredential registers (or rotates) one provider's API key (+ optional
+// model). The key is sent once and never read back. primary makes it the
+// provider grading uses first (the other configured provider is the fallback).
+export async function setLlmCredential(params: {
+  provider: string;
+  apiKey: string;
+  model: string;
+  primary?: boolean;
+}): Promise<void> {
+  await postCredential(params, "Failed to save API key");
+}
+
+// setPrimaryProvider makes an already-registered provider the primary, without
+// re-entering its key.
+export async function setPrimaryProvider(provider: string): Promise<void> {
+  await postCredential({ provider, primary: true }, "Failed to set primary provider");
+}
+
+// deleteLlmCredential removes one provider's stored credential.
+export async function deleteLlmCredential(provider: string): Promise<void> {
   const token = getAccessToken();
-  const res = await fetch(`${API_BASE}/auth/llm-credential`, {
-    method: "DELETE",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await fetch(
+    `${API_BASE}/auth/llm-credential?provider=${encodeURIComponent(provider)}`,
+    {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  );
   if (!res.ok) {
     const text = (await res.text()).trim();
     throw new Error(text || "Failed to remove API key");
