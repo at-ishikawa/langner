@@ -1,6 +1,3 @@
-OPENAI_API_KEY ?=
-GEMINI_API_KEY ?=
-INFERENCE_MODE ?=
 API_BASE_URL ?= http://localhost:8080
 # Server-side target the Next dev server proxies /auth to; defaults to a
 # locally-reachable backend (see frontend/Makefile / next.config.ts).
@@ -22,25 +19,6 @@ setup:
 	$(MAKE) proto
 	$(MAKE) db-migrate
 
-# check-api-key guards the dev targets, requiring the API key for the selected
-# INFERENCE_MODE (default openai): mock needs no key, gemini needs
-# GEMINI_API_KEY, openai/unset needs OPENAI_API_KEY.
-.PHONY: check-api-key
-check-api-key:
-	@case "$(INFERENCE_MODE)" in \
-		mock) ;; \
-		gemini) \
-			if [ -z "$(GEMINI_API_KEY)" ]; then \
-				echo "ERROR: GEMINI_API_KEY is not set (INFERENCE_MODE=gemini)"; \
-				exit 1; \
-			fi ;; \
-		*) \
-			if [ -z "$(OPENAI_API_KEY)" ]; then \
-				echo "ERROR: OPENAI_API_KEY is not set"; \
-				exit 1; \
-			fi ;; \
-	esac
-
 # `make dev` runs with auth ALWAYS ON (there is no ungated mode). The server
 # fails fast without TOKEN_SIGNING_KEY and requires Postgres, so we start the
 # database and generate a DEV-ONLY signing key into a GITIGNORED file (this repo
@@ -50,16 +28,23 @@ check-api-key:
 # google_client_id, redirect_url, frontend_url, and allowed_emails in your
 # config file (see the auth: block in config.example.yml), plus
 # GOOGLE_CLIENT_SECRET exported in your environment.
+#
+# Grading is PER-USER: there is no system OPENAI_API_KEY/GEMINI_API_KEY. Register
+# your own provider key in the app's Settings page (the dev CREDENTIAL_ENCRYPTION_KEY
+# generated below backs that), or run `INFERENCE_MODE=mock make dev` for the
+# deterministic offline grader.
 AUTH_DEV_ENV := .dev-auth.env
 
 .PHONY: dev-backend
-dev-backend: check-api-key
+dev-backend:
 	docker compose up -d --wait
 	$(MAKE) -C backend build
 	@if [ ! -f $(AUTH_DEV_ENV) ]; then \
-		printf 'TOKEN_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)" > $(AUTH_DEV_ENV); \
-		echo "Generated DEV-ONLY TOKEN_SIGNING_KEY -> $(AUTH_DEV_ENV) (gitignored). Google sign-in also needs google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET in the env."; \
+		{ printf 'TOKEN_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)"; \
+		  printf 'CREDENTIAL_ENCRYPTION_KEY=%s\n' "$$(openssl rand -hex 32)"; } > $(AUTH_DEV_ENV); \
+		echo "Generated DEV-ONLY TOKEN_SIGNING_KEY + CREDENTIAL_ENCRYPTION_KEY -> $(AUTH_DEV_ENV) (gitignored). Google sign-in also needs google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET in the env."; \
 	fi
+	@grep -q '^CREDENTIAL_ENCRYPTION_KEY=' $(AUTH_DEV_ENV) || printf 'CREDENTIAL_ENCRYPTION_KEY=%s\n' "$$(openssl rand -hex 32)" >> $(AUTH_DEV_ENV)
 	set -a; . ./$(AUTH_DEV_ENV); set +a; ./langner-server
 
 .PHONY: dev-frontend
@@ -69,7 +54,7 @@ dev-frontend:
 BUF_VERSION ?= v1.66.0
 
 .PHONY: dev
-dev: check-api-key
+dev:
 	$(MAKE) -j2 dev-backend dev-frontend
 
 .PHONY: proto
