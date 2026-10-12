@@ -581,7 +581,9 @@ func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		// DELETE is needed for the browser "Remove key" call (DELETE
+		// /auth/llm-credential); the rest of the API is GET/POST (connect RPCs).
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Connect-Protocol-Version, Authorization")
 		w.Header().Set("Access-Control-Max-Age", "3600")
 
