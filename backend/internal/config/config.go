@@ -387,6 +387,14 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	// rather than requiring a separate env var.
 	if cfg.Inference.Mode == "mock" {
 		cfg.Quiz.DisableShuffle = true
+		// Mock mode is e2e/tests only. Provide a FIXED 32-byte test key when none
+		// is set so the per-user LLM credential flow (register/remove in Settings)
+		// can be exercised end-to-end without a real secret — the serverless
+		// preview loads config from env only and can't carry config.e2e.yml. Never
+		// prod: prod runs INFERENCE_MODE=user and sets a real CREDENTIAL_ENCRYPTION_KEY.
+		if cfg.Auth.CredentialEncryptionKey == "" {
+			cfg.Auth.CredentialEncryptionKey = "e2e-fixed-credential-key-aes256!"
+		}
 	}
 
 	if err := loader.validator.Struct(cfg); err != nil {
