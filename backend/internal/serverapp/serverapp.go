@@ -346,6 +346,10 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	mux.HandleFunc("/auth/google/callback", authSetup.Handler.Callback)
 	mux.HandleFunc("/auth/logout", authSetup.Handler.Logout)
 	mux.HandleFunc("/auth/me", authSetup.Handler.Me)
+	// POST/DELETE register/clear the signed-in user's own LLM API key (the
+	// Settings page). Behind the same bearer middleware as /auth/me; the handler
+	// itself 503s when credential storage is unconfigured.
+	mux.HandleFunc("/auth/llm-credential", authSetup.Handler.LLMCredential)
 	mux.HandleFunc("/auth/device/code", authSetup.DeviceHandler.RequestCode)
 	mux.HandleFunc("/auth/device/token", authSetup.DeviceHandler.Token)
 	mux.HandleFunc("/auth/device/deny", authSetup.DeviceHandler.Deny)
