@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -126,13 +127,30 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load cards: %w", err))
 	}
+	realIDs := map[string]int64{}
+	if h.noteRepository != nil {
+		senseIDs := make([]string, 0, len(cards))
+		for _, c := range cards {
+			if c.ID != "" {
+				senseIDs = append(senseIDs, c.ID)
+			}
+		}
+		if m, merr := h.noteRepository.FindIDsBySenseIDs(ctx, senseIDs); merr != nil {
+			slog.Warn("quiz: sense-id→note-id map failed; using session ids", "error", merr)
+		} else {
+			realIDs = m
+		}
+	}
 	localStore := make(map[int64]quiz.Card)
 	nextID := sessionIDBase + 1
 	var flashcards []*apiv1.Flashcard
 	for _, card := range cards {
-		noteID := nextID
-		nextID++
-		localStore[noteID] = card
+		noteID, ok := realIDs[card.ID]
+		if !ok || noteID <= 0 {
+			noteID = nextID
+			nextID++
+			localStore[noteID] = card
+		}
 		var examples []*apiv1.Example
 		for _, ex := range card.Examples {
 			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker, Highlight: ex.Highlight})
@@ -155,9 +173,7 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	}
 	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
-	h.mu.Lock()
-	card, ok := h.noteStore[noteID]
-	h.mu.Unlock()
+	card, ok := h.resolveCard(ctx, userID, noteID)
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID))
 	}
@@ -262,13 +278,35 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load reverse cards: %w", err))
 	}
+	// Stamp each card with its REAL DB note id so the submit path can
+	// re-resolve it statelessly (serverless-safe: start and submit can hit
+	// different instances, so an in-memory session store is unreliable). Cards
+	// without a real id (legacy id-less entries) fall back to an ephemeral
+	// session id held in the in-memory store, as before.
+	realIDs := map[string]int64{}
+	if h.noteRepository != nil {
+		senseIDs := make([]string, 0, len(cards))
+		for _, c := range cards {
+			if c.ID != "" {
+				senseIDs = append(senseIDs, c.ID)
+			}
+		}
+		if m, merr := h.noteRepository.FindIDsBySenseIDs(ctx, senseIDs); merr != nil {
+			slog.Warn("reverse quiz: sense-id→note-id map failed; using session ids", "error", merr)
+		} else {
+			realIDs = m
+		}
+	}
 	localStore := make(map[int64]quiz.ReverseCard)
 	nextID := sessionIDBase + 1
 	var flashcards []*apiv1.ReverseFlashcard
 	for _, card := range cards {
-		noteID := nextID
-		nextID++
-		localStore[noteID] = card
+		noteID, ok := realIDs[card.ID]
+		if !ok || noteID <= 0 {
+			noteID = nextID
+			nextID++
+			localStore[noteID] = card
+		}
 		var contexts []*apiv1.ContextSentence
 		for _, c := range card.Contexts {
 			contexts = append(contexts, &apiv1.ContextSentence{Context: c.Context, MaskedContext: c.MaskedContext})
@@ -286,15 +324,69 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&apiv1.StartReverseQuizResponse{Flashcards: flashcards}), nil
 }
 
+// resolveReverseCard returns the ReverseCard a submit answer refers to. A real
+// DB note id (< sessionIDBase) is re-resolved STATELESSLY via the loader, so the
+// submit works even on a different/cold serverless instance than the one that
+// started the quiz. A legacy ephemeral session id (>= sessionIDBase) is read
+// from the in-memory store (same-instance only, as before).
+func (h *QuizHandler) resolveReverseCard(ctx context.Context, userID, noteID int64) (quiz.ReverseCard, bool) {
+	// Fast path: the card is still in this instance's store (warm instance, or a
+	// legacy ephemeral session id). Checked first so same-instance submits and
+	// tests that inject the store keep working.
+	h.mu.Lock()
+	card, ok := h.reverseStore[noteID]
+	h.mu.Unlock()
+	if ok {
+		return card, true
+	}
+	// Stateless path: a real DB note id (< sessionIDBase) re-resolves via the
+	// loader, so the submit works on a different/cold instance. A session id
+	// (>= sessionIDBase) only ever lives in the store — a miss is a miss.
+	if noteID <= 0 || noteID >= sessionIDBase || h.noteRepository == nil {
+		return quiz.ReverseCard{}, false
+	}
+	note, err := h.noteRepository.FindByID(ctx, noteID)
+	if err != nil || note == nil {
+		return quiz.ReverseCard{}, false
+	}
+	resolved, found, err := h.svc.ResolveReverseCardByNote(userID, note)
+	if err != nil || !found {
+		return quiz.ReverseCard{}, false
+	}
+	return resolved, true
+}
+
+// resolveCard is the standard-quiz analogue of resolveReverseCard: store-first
+// (warm instance / legacy session id), else a real DB note id re-resolves via
+// the loader so the submit works on a cold/different serverless instance.
+func (h *QuizHandler) resolveCard(ctx context.Context, userID, noteID int64) (quiz.Card, bool) {
+	h.mu.Lock()
+	card, ok := h.noteStore[noteID]
+	h.mu.Unlock()
+	if ok {
+		return card, true
+	}
+	if noteID <= 0 || noteID >= sessionIDBase || h.noteRepository == nil {
+		return quiz.Card{}, false
+	}
+	note, err := h.noteRepository.FindByID(ctx, noteID)
+	if err != nil || note == nil {
+		return quiz.Card{}, false
+	}
+	resolved, found, err := h.svc.ResolveCardByNote(userID, note)
+	if err != nil || !found {
+		return quiz.Card{}, false
+	}
+	return resolved, true
+}
+
 func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitReverseAnswerRequest]) (*connect.Response[apiv1.SubmitReverseAnswerResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
 	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
-	h.mu.Lock()
-	card, ok := h.reverseStore[noteID]
-	h.mu.Unlock()
+	card, ok := h.resolveReverseCard(ctx, userID, noteID)
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID))
 	}
@@ -367,6 +459,16 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 	h.mu.Lock()
 	cards := h.freeformCards
 	h.mu.Unlock()
+	if len(cards) == 0 {
+		// Serverless-safe: the deck isn't in this instance's memory (a cold or
+		// different instance than StartFreeformQuiz). Re-load it statelessly so
+		// the typed word can still be graded against the user's words.
+		reloaded, lerr := h.svc.LoadAllWords(userID)
+		if lerr != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load words: %w", lerr))
+		}
+		cards = reloaded
+	}
 	grade, err := h.svc.GradeFreeformAnswer(ctx, userID, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
 	if err != nil {
 		return nil, mapGradeError(err)
@@ -454,32 +556,75 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 		return &info, nil
 	}
 	h.mu.Unlock()
+
+	// A real (small, stable) DB note id resolves directly — a vocabulary word
+	// Excluded/Overridden from the Learn page or a cold instance. Carry the DB
+	// note id so the deliberate Exclude (SkipWord/ResumeWord) can target this
+	// exact note in DB mode — homograph-safe — without re-resolving by expression.
+	if h.noteRepository != nil {
+		if noteRecord, err := h.noteRepository.FindByID(ctx, noteID); err == nil {
+			var notebookName, group, subgroup string
+			if len(noteRecord.NotebookNotes) > 0 {
+				nn := noteRecord.NotebookNotes[0]
+				notebookName = nn.NotebookID
+				group = nn.Group
+				subgroup = nn.Subgroup
+			}
+			if notebookName == "" {
+				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d has no linked notebook", noteID))
+			}
+			expression := noteRecord.Entry
+			if expression == "" {
+				expression = noteRecord.Usage
+			}
+			info := quiz.CardInfo{NotebookName: notebookName, StoryTitle: group, SceneTitle: subgroup, Expression: expression, NoteID: noteRecord.ID}
+			return &info, nil
+		}
+	}
+
+	// Store miss on a grammar/relearn id. The grammar/relearn stores are
+	// per-instance, so on a cold/different serverless instance Override / Skip /
+	// Resume must re-resolve the id the SAME stateless way the submit paths do
+	// (resolveGrammarBlank / resolveRelearnCard: rebuild the posts/pool, re-hash
+	// by the stable content hash, match) instead of 404ing — otherwise a "Mark as
+	// Correct" / Exclude lands on a note_id that FindByID can't map (the id is a
+	// grammarBlankID/relearnCardID hash, not a notes row) and the RPC 404s only
+	// when the override happens to hit a different instance than the quiz did.
+	if h.svc != nil {
+		userID, _ := auth.UserIDFromContext(ctx)
+		// Grammar: match the stable grammarBlankID hash against EVERY correction
+		// (due or not) — the override fires AFTER the answer saved, so the blank
+		// is no longer due and resolveGrammarBlank's due-only re-materialization
+		// would miss it.
+		if refs, err := h.svc.AllGrammarMistakeRefs(userID); err == nil {
+			for _, r := range refs {
+				if grammarBlankID(r.NotebookID, r.EntryID, quiz.GrammarBlank{SenseID: r.SenseID, Incorrect: r.Incorrect}) == noteID {
+					return &quiz.CardInfo{
+						NotebookName: r.NotebookID,
+						StoryTitle:   notebook.JournalStoryTitle,
+						Expression:   r.SenseID,
+						ID:           r.SenseID,
+					}, nil
+				}
+			}
+		}
+		if rc, ok := h.resolveRelearnCard(ctx, userID, noteID); ok {
+			if rc.IsGrammar() {
+				return &quiz.CardInfo{
+					NotebookName: rc.NotebookName,
+					StoryTitle:   notebook.JournalStoryTitle,
+					Expression:   rc.GrammarCard().SenseID,
+					ID:           rc.GrammarCard().SenseID,
+				}, nil
+			}
+			return &quiz.CardInfo{NotebookName: rc.NotebookName, Expression: rc.Entry}, nil
+		}
+	}
+
 	if h.noteRepository == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found: no active quiz session and no database configured", noteID))
 	}
-	noteRecord, err := h.noteRepository.FindByID(ctx, noteID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in database: %w", noteID, err))
-	}
-	var notebookName, group, subgroup string
-	if len(noteRecord.NotebookNotes) > 0 {
-		nn := noteRecord.NotebookNotes[0]
-		notebookName = nn.NotebookID
-		group = nn.Group
-		subgroup = nn.Subgroup
-	}
-	if notebookName == "" {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d has no linked notebook", noteID))
-	}
-	expression := noteRecord.Entry
-	if expression == "" {
-		expression = noteRecord.Usage
-	}
-	// Carry the DB note id so the deliberate Exclude (SkipWord/ResumeWord) can
-	// target this exact note in DB mode — homograph-safe — without re-resolving
-	// by expression.
-	info := quiz.CardInfo{NotebookName: notebookName, StoryTitle: group, SceneTitle: subgroup, Expression: expression, NoteID: noteRecord.ID}
-	return &info, nil
+	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in database", noteID))
 }
 
 func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {

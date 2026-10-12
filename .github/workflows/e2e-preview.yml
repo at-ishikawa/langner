@@ -1,0 +1,182 @@
+# Runs the EXISTING Playwright e2e suite against the deployed Vercel PREVIEW for
+# this PR — the real serverless + DB-backed environment where filesystem-vs-DB
+# and env-wiring bugs actually surface (a single-process local e2e cannot catch
+# those). The local e2e in frontend.yml still runs for everyone (incl. forks);
+# this job adds the "does it work on Vercel" layer for trusted PRs.
+#
+# HOW IT SEEDS (no DB credentials on the runner): the backend exposes a
+# preview-only endpoint, POST /internal/e2e/seed, guarded by a shared secret
+# (E2E_SEED_SECRET). The runner POSTs the notebook fixture CONTENT (a gzipped
+# tar of frontend/e2e/fixtures) to it; the backend — which already holds the DB
+# creds + signing key — imports that content, resets the preview's learning
+# STATE to the e2e baseline, and returns a freshly-minted e2e bearer. The runner
+# therefore needs NO database credential, NO TOKEN_SIGNING_KEY, and NO Vercel
+# token: just the one shared secret it sends in the header.
+#
+# ADDRESSING: the two previews are reached by their Vercel BRANCH-ALIAS URLs
+# (langner-git-<slug> / langner-api-git-<slug>, scope at-ishikawa) derived from
+# the branch name — the SAME aliases next.config's VERCEL_BRANCH_URL derive and
+# the CORS glob assume. (The GitHub deployment target_url is the immutable
+# per-deploy hash URL, which matches neither, so we do NOT use it.) Keep preview
+# branch names short so Vercel doesn't truncate+hash the slug.
+#
+# SETUP REQUIRED (one-time, by a maintainer):
+#   1. Backend Vercel project, Preview scope (you set these to run previews
+#      anyway):
+#        E2E_SEED_SECRET = <a long random string>   (mounts + guards the endpoint)
+#        INFERENCE_MODE = mock                       (deterministic grading)
+#        TOKEN_SIGNING_KEY, DB_HOST/PORT/USER/PASSWORD/NAME → the preview Supabase
+#        AUTH_INITIAL_ADMIN_EMAIL = e2e@example.com  (the account the token/history use)
+#        AUTH_ALLOWED_EMAILS = e2e@example.com
+#        CORS_ALLOWED_ORIGINS = https://langner-git-*-at-ishikawa.vercel.app
+#   2. ONE GitHub repo secret: E2E_SEED_SECRET — the SAME value as (1). It is the
+#      only secret in GitHub; until it is set this job SKIPS (green/neutral),
+#      never a red required check.
+# (Content is uploaded by the seed step below — no separate import run needed.)
+#
+# CAVEAT: a preview may serve from a single warm instance, so this does NOT
+# deterministically reproduce the cross-instance "card not found" class — that
+# stays guarded by the Go handler tests. This job's job is the wiring/env class.
+name: E2E (Vercel preview)
+
+on:
+  pull_request:
+
+# Least privilege for the built-in GITHUB_TOKEN: this job only checks out code.
+permissions:
+  contents: read
+
+jobs:
+  e2e-preview:
+    # Same-repo PRs only: fork PRs get no secrets from GitHub (by design) and we
+    # must never run a fork's test code with secrets — forks are covered by the
+    # local e2e in frontend.yml instead.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      # Serialize: all runs reset the one shared preview database.
+      group: e2e-preview
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      # Enablement = "is E2E_SEED_SECRET set?". No separate feature flag to keep
+      # in sync: if the maintainer hasn't configured the secret yet, every later
+      # step is skipped and the job ends green (neutral), never a red check.
+      - name: Gate on E2E_SEED_SECRET presence
+        id: gate
+        env:
+          E2E_SEED_SECRET: ${{ secrets.E2E_SEED_SECRET }}
+        run: |
+          if [ -n "$E2E_SEED_SECRET" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::E2E_SEED_SECRET not configured — skipping preview e2e."
+          fi
+
+      # Vercel branch-alias URLs: <project>-git-<slug>-at-ishikawa.vercel.app,
+      # where <slug> is the branch name lowercased with non-alphanumerics folded
+      # to '-'. These are the aliases next.config derives and CORS allows.
+      - name: Resolve preview URLs from the branch slug
+        if: steps.gate.outputs.enabled == 'true'
+        id: urls
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          slug=$(printf '%s' "$HEAD_REF" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+          echo "frontend=https://langner-git-${slug}-at-ishikawa.vercel.app" >> "$GITHUB_OUTPUT"
+          echo "backend=https://langner-api-git-${slug}-at-ishikawa.vercel.app" >> "$GITHUB_OUTPUT"
+          echo "Frontend: https://langner-git-${slug}-at-ishikawa.vercel.app"
+          echo "Backend:  https://langner-api-git-${slug}-at-ishikawa.vercel.app"
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          node-version-file: frontend/.node-version
+
+      - uses: pnpm/action-setup@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          version: 10
+
+      - name: Install frontend deps
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Seed the preview via the backend endpoint + capture the e2e token
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          BACKEND_URL: ${{ steps.urls.outputs.backend }}
+          E2E_SEED_SECRET: ${{ secrets.E2E_SEED_SECRET }}
+        run: |
+          set -euo pipefail
+          # Upload the fixture CONTENT (the serverless backend has no fixtures on
+          # disk); tar the CONTENTS so families are top-level dirs.
+          tar czf /tmp/e2e-content.tgz -C frontend/e2e/fixtures .
+          echo "Seeding ${BACKEND_URL}/internal/e2e/seed"
+          # Retry the POST through the backend preview's build/alias-flip window:
+          # 404 = not deployed yet, 000 = not up, 500 = old code / DB warming up.
+          # Each failed attempt prints its (truncated) body so a persistent real
+          # error is still visible rather than hidden behind retries.
+          ok=
+          for i in $(seq 1 20); do
+            code=$(curl -sS -o /tmp/seed-resp.txt -w '%{http_code}' -X POST "${BACKEND_URL}/internal/e2e/seed" \
+              -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}" \
+              -H "Content-Type: application/gzip" \
+              --data-binary @/tmp/e2e-content.tgz || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i/20: HTTP $code"; head -c 600 /tmp/seed-resp.txt 2>/dev/null; echo
+            sleep 15
+          done
+          if [ -z "$ok" ]; then echo "seed never succeeded (last HTTP $code)"; exit 1; fi
+          mkdir -p frontend/e2e/.auth
+          printf '%s' "$(jq -r .token < /tmp/seed-resp.txt)" > frontend/e2e/.auth/access-token.txt
+          test -s frontend/e2e/.auth/access-token.txt
+
+      - name: Warm the preview (pay cold-start + content materialization up front)
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          FRONTEND_URL: ${{ steps.urls.outputs.frontend }}
+          BACKEND_URL: ${{ steps.urls.outputs.backend }}
+        run: |
+          # Scale-to-zero serverless cold starts (cold Go binary + per-instance
+          # DB-content materialization + first DB connection) are the dominant
+          # cost and otherwise land INSIDE a scenario's timed assertion. Hit the
+          # frontend and an authenticated backend content RPC (GetQuizOptions,
+          # which forces content materialization) a few times first so later
+          # scenarios ride warm instances. Best-effort: never fails the job.
+          set -uo pipefail
+          token=$(cat frontend/e2e/.auth/access-token.txt)
+          for i in $(seq 1 6); do
+            curl -s -o /dev/null --max-time 60 "${FRONTEND_URL}/" || true
+            curl -s -o /dev/null --max-time 60 -X POST "${BACKEND_URL}/api.v1.QuizService/GetQuizOptions" \
+              -H "Authorization: Bearer ${token}" \
+              -H "Content-Type: application/json" \
+              -H "Connect-Protocol-Version: 1" \
+              -d '{}' || true
+            sleep 2
+          done
+          echo "warm-up done"
+
+      - name: Run Playwright against the preview
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.urls.outputs.frontend }}
+          # Per-scenario reset (support/reset.ts) hits the seed endpoint over
+          # HTTP in preview mode instead of a local langner-admin + Postgres.
+          E2E_PREVIEW_BACKEND_URL: ${{ steps.urls.outputs.backend }}
+          E2E_SEED_SECRET: ${{ secrets.E2E_SEED_SECRET }}
+        run: |
+          # Wait for the frontend preview to answer before driving it.
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${PLAYWRIGHT_BASE_URL}/" || echo 000)
+            if [ "$code" = "200" ]; then echo "frontend ready"; break; fi
+            if [ "$i" = "20" ]; then echo "frontend never became ready (last HTTP $code)"; exit 1; fi
+            echo "  frontend not ready (HTTP $code); retrying in 15s"; sleep 15
+          done
+          npx playwright install chromium --with-deps
+          pnpm test:e2e

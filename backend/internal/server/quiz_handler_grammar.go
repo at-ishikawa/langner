@@ -3,6 +3,9 @@ package server
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"io"
+	"log/slog"
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
@@ -12,6 +15,53 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
+
+// grammarBlankID derives a STABLE note_id from a blank's identity (notebook,
+// entry, correction sense, mistaken span), so the same blank always hashes to
+// the same id. The submit path re-resolves by this id on a cold/different
+// serverless instance (rebuild the posts, re-hash, match) instead of relying on
+// the in-memory grammarStore — the same stateless scheme relearn uses.
+func grammarBlankID(notebookID, entryID string, blank quiz.GrammarBlank) int64 {
+	h := fnv.New64a()
+	_, _ = io.WriteString(h, notebookID)
+	_, _ = io.WriteString(h, "\x1f")
+	_, _ = io.WriteString(h, entryID)
+	_, _ = io.WriteString(h, "\x1f")
+	_, _ = io.WriteString(h, blank.SenseID)
+	_, _ = io.WriteString(h, "\x1f")
+	_, _ = io.WriteString(h, blank.Incorrect)
+	return int64(h.Sum64() >> 1)
+}
+
+// resolveGrammarBlank returns the context for a submitted blank. Store-first
+// (warm instance), else re-resolve statelessly: rebuild every grammar post for
+// the user and re-hash to find the blank whose grammarBlankID matches.
+func (h *QuizHandler) resolveGrammarBlank(userID, noteID int64) (grammarBlankCtx, bool) {
+	h.mu.Lock()
+	bc, ok := h.grammarStore[noteID]
+	h.mu.Unlock()
+	if ok {
+		return bc, true
+	}
+	posts, err := h.svc.LoadAllGrammarPosts(userID)
+	if err != nil {
+		return grammarBlankCtx{}, false
+	}
+	for _, p := range posts {
+		for _, b := range p.Blanks {
+			if grammarBlankID(p.NotebookID, p.EntryID, b) == noteID {
+				return grammarBlankCtx{
+					notebookID:   p.NotebookID,
+					notebookName: p.NotebookName,
+					entryID:      p.EntryID,
+					content:      p.Content,
+					blank:        b,
+				}, true
+			}
+		}
+	}
+	return grammarBlankCtx{}, false
+}
 
 // grammarBlankCtx is everything the handler needs to grade, save, and override
 // one blank, kept per ephemeral note_id for the current session.
@@ -52,8 +102,7 @@ func (h *QuizHandler) StartGrammarQuiz(
 	for _, post := range posts {
 		protoBlanks := make([]*apiv1.GrammarBlank, 0, len(post.Blanks))
 		for _, blank := range post.Blanks {
-			noteID := h.nextID
-			h.nextID++
+			noteID := grammarBlankID(post.NotebookID, post.EntryID, blank)
 			h.grammarStore[noteID] = grammarBlankCtx{
 				notebookID:   post.NotebookID,
 				notebookName: post.NotebookName,
@@ -102,16 +151,18 @@ func (h *QuizHandler) SubmitGrammarPost(
 	answers := req.Msg.GetAnswers()
 	userID, _ := auth.UserIDFromContext(ctx)
 
-	// Resolve every blank's context up front (guarded map read).
+	// Resolve every blank's context up front — store-first, else stateless
+	// re-resolve by the blank's stable id. An unresolvable blank is skipped
+	// (non-fatal) so one bad item can't abort the whole post's grading.
 	ctxs := make([]grammarBlankCtx, len(answers))
+	resolved := make([]bool, len(answers))
 	for i, a := range answers {
-		h.mu.Lock()
-		bc, ok := h.grammarStore[a.GetNoteId()]
-		h.mu.Unlock()
-		if !ok {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("grammar blank %d not found", a.GetNoteId()))
+		if bc, ok := h.resolveGrammarBlank(userID, a.GetNoteId()); ok {
+			ctxs[i] = bc
+			resolved[i] = true
+		} else {
+			slog.Warn("grammar submit: blank not resolved; skipping item", "note_id", a.GetNoteId())
 		}
-		ctxs[i] = bc
 	}
 
 	// Grade concurrently — the only step that may hit the LLM. Deterministic
@@ -121,6 +172,10 @@ func (h *QuizHandler) SubmitGrammarPost(
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(grammarGradeConcurrency)
 	for i, a := range answers {
+		if !resolved[i] {
+			grades[i] = skippedGradeResult()
+			continue
+		}
 		if a.GetIsSkipped() {
 			grades[i] = skippedGradeResult()
 			continue
@@ -142,6 +197,11 @@ func (h *QuizHandler) SubmitGrammarPost(
 	// them serialized and in order.
 	results := make([]*apiv1.GrammarBlankResult, len(answers))
 	for i, a := range answers {
+		if !resolved[i] {
+			// Unresolvable blank: return a placeholder, save nothing.
+			results[i] = &apiv1.GrammarBlankResult{NoteId: a.GetNoteId(), Correct: false}
+			continue
+		}
 		bc := ctxs[i]
 		learnedAt, nextReviewDate, err := h.svc.SaveGrammarBlankInfo(ctx, userID, bc.notebookID, bc.blank.SenseID, grades[i], a.GetResponseTimeMs())
 		if err != nil {

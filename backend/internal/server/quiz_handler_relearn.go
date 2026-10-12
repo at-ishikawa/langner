@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"log/slog"
 	"time"
 
 	"connectrpc.com/connect"
@@ -150,6 +151,31 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&apiv1.StartRelearnQuizResponse{Cards: protoCards}), nil
 }
 
+// resolveRelearnCard returns the relearn card a submit refers to. Store-first
+// (warm instance), else it re-resolves STATELESSLY: relearnCardID is a stable
+// content hash, so rebuilding the pool on any instance and re-hashing finds the
+// same card — the serverless fix (start and submit can hit different instances).
+// The pool is rebuilt over the MAX window so it is a superset of whatever window
+// StartRelearnQuiz used (the submit request carries no window).
+func (h *QuizHandler) resolveRelearnCard(ctx context.Context, userID, noteID int64) (quiz.RelearnCard, bool) {
+	h.mu.Lock()
+	card, ok := h.relearnStore[noteID]
+	h.mu.Unlock()
+	if ok {
+		return card, true
+	}
+	cards, err := h.svc.LoadRelearnPool(userID, time.Now().Add(-relearnMaxWindowHours*time.Hour))
+	if err != nil {
+		return quiz.RelearnCard{}, false
+	}
+	for _, c := range cards {
+		if relearnCardID(c) == noteID {
+			return c, true
+		}
+	}
+	return quiz.RelearnCard{}, false
+}
+
 // SubmitRelearnAnswer grades one relearn answer. It records NOTHING: it calls
 // only the pure meaning graders and writes no state at all — not learning
 // history and not any relearn-local marker. Relearn is repeatable, so a word
@@ -162,9 +188,7 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx context.Context, req *connect.Requ
 	}
 	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
-	h.mu.Lock()
-	card, ok := h.relearnStore[noteID]
-	h.mu.Unlock()
+	card, ok := h.resolveRelearnCard(ctx, userID, noteID)
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("relearn card %d not found", noteID))
 	}
@@ -187,18 +211,21 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 	userID, _ := auth.UserIDFromContext(ctx)
 
 	cards := make([]quiz.RelearnCard, len(answers))
-	h.mu.Lock()
+	resolved := make([]bool, len(answers))
 	for i, a := range answers {
-		card, ok := h.relearnStore[a.GetNoteId()]
-		if !ok {
-			h.mu.Unlock()
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("relearn card %d not found", a.GetNoteId()))
+		if card, ok := h.resolveRelearnCard(ctx, userID, a.GetNoteId()); ok {
+			cards[i] = card
+			resolved[i] = true
+		} else {
+			// Non-fatal: skip the unresolvable item instead of aborting the batch.
+			slog.Warn("relearn batch submit: card not resolved; skipping item", "note_id", a.GetNoteId())
 		}
-		cards[i] = card
 	}
-	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if !resolved[i] {
+			return skippedGradeResult(), nil
+		}
 		return h.gradeRelearn(ctx, userID, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs(), answers[i].GetIsSkipped())
 	})
 	if err != nil {
@@ -207,6 +234,10 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 
 	responses := make([]*apiv1.SubmitRelearnAnswerResponse, len(answers))
 	for i := range answers {
+		if !resolved[i] {
+			responses[i] = &apiv1.SubmitRelearnAnswerResponse{Correct: false}
+			continue
+		}
 		responses[i] = h.buildRelearnResponse(ctx, cards[i], grades[i])
 	}
 	return connect.NewResponse(&apiv1.BatchSubmitRelearnAnswersResponse{Responses: responses}), nil

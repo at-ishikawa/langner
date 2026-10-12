@@ -34,7 +34,10 @@ func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name: "returns NOT_FOUND when any note is missing",
+			// A single unresolvable note must NOT abort the batch (serverless
+			// fix): it is skipped with a placeholder response and the rest are
+			// still graded.
+			name: "skips a missing note and still grades the rest",
 			answers: []*apiv1.SubmitAnswerRequest{
 				{NoteId: 1, Answer: "x", ResponseTimeMs: 500},
 				{NoteId: 999, Answer: "y", ResponseTimeMs: 500},
@@ -42,8 +45,23 @@ func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 			setupNoteStore: func(h *QuizHandler) {
 				h.noteStore[1] = quiz.Card{NotebookName: "n", Entry: "a", Meaning: "b"}
 			},
-			wantCode: connect.CodeNotFound,
-			wantErr:  true,
+			setupMock: func(m *mock_inference.MockClient) {
+				m.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, req inference.AnswerMeaningsRequest) (inference.AnswerMeaningsResponse, error) {
+						answers := make([]inference.AnswerMeaning, len(req.Expressions))
+						for i, expr := range req.Expressions {
+							answers[i] = inference.AnswerMeaning{
+								Expression:        expr.Expression,
+								Meaning:           expr.Meaning,
+								AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 3}},
+							}
+						}
+						return inference.AnswerMeaningsResponse{Answers: answers}, nil
+					},
+				).Times(1)
+			},
+			wantResponseCount: 2,
+			wantFirstCorrect:  true,
 		},
 		{
 			name: "grades all answers and preserves order",

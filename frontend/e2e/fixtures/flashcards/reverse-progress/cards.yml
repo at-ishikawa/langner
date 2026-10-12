@@ -8,9 +8,14 @@
   description: "Isolated words for the reverse-progress ordering guard"
   date: 2026-01-01T00:00:00Z
   cards:
+    # Explicit ids: every real notebook's notes carry a sense_id (prod has zero
+    # id-less notes), and an id-less card can't re-resolve its quiz submit across
+    # serverless instances.
     - expression: "spick and span"
+      id: spick-and-span
       meaning: "clean and tidy"
       part_of_speech: "phrase"
     - expression: "under the weather"
+      id: under-the-weather
       meaning: "feeling unwell"
       part_of_speech: "phrase"

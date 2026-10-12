@@ -51,18 +51,39 @@ const seedEnv: Record<string, string> = {
   TOKEN_FILE,
 };
 
+// PREVIEW mode drives the DEPLOYED Vercel app, where a cold serverless function
+// + Supabase pooler round-trip can take several seconds — far longer than a
+// localhost server. Give assertions, actions, navigations, and the whole test
+// generous timeouts there so cold-start latency doesn't masquerade as a failure;
+// local keeps the snappy defaults.
+const PREVIEW = Boolean(process.env.PLAYWRIGHT_BASE_URL);
+
 export default defineConfig({
   testDir,
-  timeout: 60000,
+  timeout: PREVIEW ? 120_000 : 60_000,
+  // Against the deployed preview, a cold serverless function + pooled DB
+  // connection can occasionally stall a first request past the (already
+  // generous) timeout. Retry twice there so irreducible cold-start latency is
+  // surfaced as "flaky" rather than failing the run — a test that is genuinely
+  // broken still fails on every attempt. Local (deterministic) keeps 0 retries.
+  retries: PREVIEW ? 2 : 0,
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",
+  expect: { timeout: PREVIEW ? 45_000 : 5_000 },
   reporter: [
     ["list"],
     ["html", { open: "never" }],
     ["./e2e/reporters/coverage-reporter.ts"],
   ],
   use: {
-    baseURL: `http://localhost:${FRONTEND_PORT}`,
+    actionTimeout: PREVIEW ? 30_000 : 0,
+    navigationTimeout: PREVIEW ? 45_000 : 0,
+    // In PREVIEW mode (PLAYWRIGHT_BASE_URL set by the e2e-preview CI job) the
+    // app under test is the deployed Vercel frontend, which talks to the
+    // deployed backend — so the exact same scenarios run against real serverless
+    // + DB-backed wiring, the environment where filesystem-vs-DB and cold-start
+    // bugs actually live. Locally it stays localhost with the spawned servers.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${FRONTEND_PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     // No storageState: auth is a bearer held in the SPA's memory, seeded per
@@ -76,7 +97,9 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: [
+  // Preview mode drives the deployed Vercel app, so spawn no local servers; the
+  // e2e-preview CI job seeds the preview DB and writes the token file first.
+  webServer: process.env.PLAYWRIGHT_BASE_URL ? [] : [
     {
       command: "bash e2e/seed-and-serve.sh",
       env: seedEnv,
