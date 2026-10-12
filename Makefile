@@ -39,12 +39,23 @@ AUTH_DEV_ENV := .dev-auth.env
 dev-backend:
 	docker compose up -d --wait
 	$(MAKE) -C backend build
-	@if [ ! -f $(AUTH_DEV_ENV) ]; then \
-		{ printf 'TOKEN_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)"; \
-		  printf 'CREDENTIAL_ENCRYPTION_KEY=%s\n' "$$(openssl rand -hex 32)"; } > $(AUTH_DEV_ENV); \
-		echo "Generated DEV-ONLY TOKEN_SIGNING_KEY + CREDENTIAL_ENCRYPTION_KEY -> $(AUTH_DEV_ENV) (gitignored). Google sign-in also needs google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET in the env."; \
+	@touch $(AUTH_DEV_ENV)
+	@# Generate a DEV-ONLY key ONLY when you haven't supplied one (env or
+	@# .dev-auth.env). If your dev server points at a SHARED/prod database, set
+	@# both keys to that deployment's values — e.g. CREDENTIAL_ENCRYPTION_KEY must
+	@# match or decrypt-on-read of existing per-user credentials fails — and this
+	@# never overwrites them.
+	@if [ -z "$$TOKEN_SIGNING_KEY" ] && ! grep -q '^TOKEN_SIGNING_KEY=' $(AUTH_DEV_ENV); then \
+		printf 'TOKEN_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)" >> $(AUTH_DEV_ENV); \
+		echo "Generated DEV-ONLY TOKEN_SIGNING_KEY -> $(AUTH_DEV_ENV) (gitignored)."; \
 	fi
-	@grep -q '^CREDENTIAL_ENCRYPTION_KEY=' $(AUTH_DEV_ENV) || printf 'CREDENTIAL_ENCRYPTION_KEY=%s\n' "$$(openssl rand -hex 32)" >> $(AUTH_DEV_ENV)
+	@if [ -z "$$CREDENTIAL_ENCRYPTION_KEY" ] && ! grep -q '^CREDENTIAL_ENCRYPTION_KEY=' $(AUTH_DEV_ENV); then \
+		printf 'CREDENTIAL_ENCRYPTION_KEY=%s\n' "$$(openssl rand -hex 32)" >> $(AUTH_DEV_ENV); \
+		echo "Generated DEV-ONLY CREDENTIAL_ENCRYPTION_KEY -> $(AUTH_DEV_ENV) (gitignored)."; \
+	fi
+	@# .dev-auth.env is authoritative (it is sourced below), so to pin keys to a
+	@# shared/prod deployment put them THERE. Google sign-in also needs
+	@# google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET.
 	set -a; . ./$(AUTH_DEV_ENV); set +a; ./langner-server
 
 .PHONY: dev-frontend
