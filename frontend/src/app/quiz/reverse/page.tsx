@@ -11,7 +11,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient, type SubmitReverseAnswerResponse } from "@/lib/client";
+import { quizClient, messageForRpcError, type SubmitReverseAnswerResponse } from "@/lib/client";
 import { useQuizStore, type ReverseFlashcard } from "@/store/quizStore";
 import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
@@ -167,8 +167,8 @@ export default function ReverseQuizPage() {
       retrySlotsRef.current = [];
       retryAnswersRef.current = {};
       setPhase("batch-feedback");
-    } catch {
-      setError("Failed to submit retry answers");
+    } catch (err) {
+      setError(messageForRpcError(err, "Failed to submit retry answers"));
       setPhase("synonym-retry");
     }
   };
@@ -202,8 +202,8 @@ export default function ReverseQuizPage() {
         answers: toFlush.map(buildRequest),
       });
       startSynonymRetryFlow(res.responses);
-    } catch {
-      setError("Failed to submit answers");
+    } catch (err) {
+      setError(messageForRpcError(err, "Failed to submit answers"));
       setPhase("answering");
     }
   };

@@ -14,6 +14,7 @@ import (
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	inferencemock "github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -47,7 +48,7 @@ func newGrammarHandler(t *testing.T) (*QuizHandler, string) {
 			GrammarsDirectories:    []string{filepath.Join(base, "grammars")},
 			LearningNotesDirectory: learningDir,
 		},
-		inferencemock.NewClient(),
+		inference.StaticResolver(inferencemock.NewClient()),
 		make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, calc),
 		quizCfg,

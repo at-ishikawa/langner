@@ -24,6 +24,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -126,7 +127,7 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 		StoriesDirectories:     []string{t.TempDir()},
 		FlashcardsDirectories:  []string{t.TempDir()},
 		LearningNotesDirectory: t.TempDir(),
-	}, mock.NewClient(), map[string]rapidapi.Response{},
+	}, inference.StaticResolver(mock.NewClient()), map[string]rapidapi.Response{},
 		learning.NewMultiLearningRepository(learning.NewYAMLLearningRepository(t.TempDir(), nil), learning.NewDBLearningRepository(db)),
 		config.QuizConfig{})
 	quizHandler := NewQuizHandler(quizSvc)

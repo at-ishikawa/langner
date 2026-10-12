@@ -33,7 +33,7 @@ type NotebookHandler struct {
 	templatesConfig  config.TemplatesConfig
 	dictionaryMap    map[string]rapidapi.Response
 	dictionaryReader *dictionary.Reader
-	openaiClient     inference.Client
+	clientResolver   inference.ClientResolver
 	noteRepository   notebook.NoteRepository
 	// historyStore, when set, is the DB-backed READ side for learning history.
 	// The Learn page's status / next-review / exclusion badges then resolve
@@ -115,13 +115,13 @@ func (h *NotebookHandler) loadHistoriesForNotebooks(userID int64, notebookIDs ..
 
 // NewNotebookHandler creates a new NotebookHandler.
 // noteRepo is optional; pass nil when DB is not configured.
-func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, openaiClient inference.Client, noteRepo notebook.NoteRepository) *NotebookHandler {
+func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, clientResolver inference.ClientResolver, noteRepo notebook.NoteRepository) *NotebookHandler {
 	return &NotebookHandler{
 		notebooksConfig:  notebooksConfig,
 		templatesConfig:  templatesConfig,
 		dictionaryMap:    dictionaryMap,
 		dictionaryReader: dictionaryReader,
-		openaiClient:     openaiClient,
+		clientResolver:   clientResolver,
 		noteRepository:   noteRepo,
 	}
 }
@@ -724,12 +724,18 @@ func (h *NotebookHandler) LookupWord(
 		}
 	}
 
-	if h.openaiClient != nil {
-		aiResp, err := h.openaiClient.LookupWord(ctx, inference.LookupWordRequest{
+	if h.clientResolver != nil {
+		userID, _ := auth.UserIDFromContext(ctx)
+		// Resolve the AI client from the user's credential. Word lookup is a
+		// convenience, not a graded action, so a missing/invalid key degrades
+		// gracefully to the dictionary-only response instead of erroring.
+		client, resolveErr := h.clientResolver.ResolveClient(ctx, userID)
+		if resolveErr != nil {
+			slog.Warn("openai word lookup skipped — client unavailable", "word", word, "error", resolveErr)
+		} else if aiResp, err := client.LookupWord(ctx, inference.LookupWordRequest{
 			Word:    word,
 			Context: req.Msg.GetContext(),
-		})
-		if err != nil {
+		}); err != nil {
 			slog.Warn("openai word lookup failed", "word", word, "error", err)
 		} else if len(aiResp.Definitions) > 0 {
 			var defs []*apiv1.WordDefinition

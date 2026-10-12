@@ -182,9 +182,9 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	if req.Msg.GetIsSkipped() {
 		grade = skippedGradeResult()
 	} else {
-		grade, err = h.svc.GradeNotebookAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+		grade, err = h.svc.GradeNotebookAnswer(ctx, userID, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
 		if err != nil {
-			return nil, gradeError("grade answer", err)
+			return nil, mapGradeError(err)
 		}
 	}
 	learnedAt, nextReviewDate, err := h.svc.SaveResultInfo(ctx, userID, card, grade, req.Msg.GetResponseTimeMs())
@@ -395,9 +395,9 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	if req.Msg.GetIsSkipped() {
 		grade = skippedGradeResult()
 	} else {
-		grade, err = h.svc.GradeReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+		grade, err = h.svc.GradeReverseAnswer(ctx, userID, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
 		if err != nil {
-			return nil, gradeError("grade answer", err)
+			return nil, mapGradeError(err)
 		}
 	}
 	var learnedAt, nextReviewDate string
@@ -469,9 +469,9 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 		}
 		cards = reloaded
 	}
-	grade, err := h.svc.GradeFreeformAnswer(ctx, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
+	grade, err := h.svc.GradeFreeformAnswer(ctx, userID, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
 	if err != nil {
-		return nil, gradeError("grade answer", err)
+		return nil, mapGradeError(err)
 	}
 	var learnedAt, nextReviewDate, senseID string
 	var noteID int64
