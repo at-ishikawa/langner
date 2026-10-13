@@ -117,23 +117,34 @@ jobs:
           # disk); tar the CONTENTS so families are top-level dirs.
           tar czf /tmp/e2e-content.tgz -C frontend/e2e/fixtures .
           echo "Seeding ${BACKEND_URL}/internal/e2e/seed"
-          # Retry the POST through the backend preview's build/alias-flip window:
-          # 404 = not deployed yet, 000 = not up, 500 = old code / DB warming up.
-          # Each failed attempt prints its (truncated) body so a persistent real
-          # error is still visible rather than hidden behind retries.
-          ok=
+          mkdir -p frontend/e2e/.auth
+          # Retry through the preview build/alias-flip window. "Not ready" is ANY
+          # of: a connection failure (000 — alias/DNS not live yet), a non-200
+          # (404 not deployed, 500 warming up), OR a 200 whose body has no .token
+          # (the alias still points at an OLD deployment). NONE of these may
+          # hard-fail the job — only a real token ends the loop. curl's own exit
+          # is swallowed (|| code=000) and every diagnostic read is `|| true` so a
+          # missing response file (connection failure writes none) can't trip the
+          # `set -e` and abort the retry loop early.
+          token=
+          code=000
           for i in $(seq 1 20); do
             code=$(curl -sS -o /tmp/seed-resp.txt -w '%{http_code}' -X POST "${BACKEND_URL}/internal/e2e/seed" \
               -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}" \
               -H "Content-Type: application/gzip" \
-              --data-binary @/tmp/e2e-content.tgz || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i/20: HTTP $code"; head -c 600 /tmp/seed-resp.txt 2>/dev/null; echo
+              --data-binary @/tmp/e2e-content.tgz 2>/tmp/seed-curl-err.txt) || code=000
+            if [ "$code" = "200" ]; then
+              token=$(jq -r '.token // empty' < /tmp/seed-resp.txt 2>/dev/null || true)
+              if [ -n "$token" ]; then echo "seeded on attempt $i/20"; break; fi
+            fi
+            echo "attempt $i/20: not ready (HTTP $code)"
+            head -c 200 /tmp/seed-resp.txt 2>/dev/null || true
+            head -c 200 /tmp/seed-curl-err.txt 2>/dev/null || true
+            echo
             sleep 15
           done
-          if [ -z "$ok" ]; then echo "seed never succeeded (last HTTP $code)"; exit 1; fi
-          mkdir -p frontend/e2e/.auth
-          printf '%s' "$(jq -r .token < /tmp/seed-resp.txt)" > frontend/e2e/.auth/access-token.txt
+          if [ -z "$token" ]; then echo "seed never returned a token (last HTTP $code)"; exit 1; fi
+          printf '%s' "$token" > frontend/e2e/.auth/access-token.txt
           test -s frontend/e2e/.auth/access-token.txt
 
       - name: Warm the preview (pay cold-start + content materialization up front)
