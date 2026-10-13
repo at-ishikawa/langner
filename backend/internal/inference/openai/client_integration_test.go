@@ -77,6 +77,36 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 					{Correct: false, Reason: "user meaning is about moving, not operating"},
 				},
 			},
+			{
+				// Grade on MEANING, not wording: the user's answer uses only
+				// part of the reference definition but keeps its core, so it
+				// must grade CORRECT (guards the over-strict "too vague"
+				// regression). Generic data per repo CLAUDE.md.
+				Expression: inference.Expression{
+					Expression: "composure",
+					Meaning:    "a feeling of calm",
+					Contexts: []inference.Context{
+						{Context: "She kept her composure during the interview", ReferenceDefinition: "a feeling of calm and quiet confidence"},
+					},
+				},
+				Wants: []IntegrationTestTargetWant{
+					{Correct: true, Reason: "keeps the core of the reference definition; a copied phrase is not 'too vague'"},
+				},
+			},
+			{
+				// Preposition / article slip only — core meaning intact, so it
+				// must grade CORRECT.
+				Expression: inference.Expression{
+					Expression: "muster",
+					Meaning:    "to prepare a battle",
+					Contexts: []inference.Context{
+						{Context: "The general mustered the troops at dawn", ReferenceDefinition: "to prepare for battle"},
+					},
+				},
+				Wants: []IntegrationTestTargetWant{
+					{Correct: true, Reason: "only a preposition differs; the meaning is the same"},
+				},
+			},
 		}
 	}
 

@@ -949,6 +949,7 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, userID int64, card Ca
 
 	result := results.Answers[0]
 	isCorrect, reason, quality := extractAnswerResult(result)
+	reason = ensureActionableReason(isCorrect, reason, card.Meaning)
 
 	return GradeResult{
 		Correct: isCorrect,
@@ -1376,6 +1377,26 @@ func containsExpression(textLower, expression, definition string) bool {
 		return true
 	}
 	return false
+}
+
+// ensureActionableReason guarantees that an INCORRECT verdict tells the learner
+// what a correct answer should have been. The grader prompt already asks the
+// model to quote the reference definition in its reason, but a model can still
+// return a bare "too vague" with no corrective target. When the verdict is wrong
+// and we hold a reference meaning the reason does not already surface, append the
+// expected answer so recognition-quiz feedback is never a dead-end critique.
+func ensureActionableReason(correct bool, reason, referenceMeaning string) string {
+	if correct || strings.TrimSpace(referenceMeaning) == "" {
+		return reason
+	}
+	if strings.Contains(strings.ToLower(reason), strings.ToLower(referenceMeaning)) {
+		return reason
+	}
+	expected := fmt.Sprintf("Expected answer: %q.", referenceMeaning)
+	if strings.TrimSpace(reason) == "" {
+		return expected
+	}
+	return strings.TrimRight(strings.TrimSpace(reason), ".") + ". " + expected
 }
 
 func extractAnswerResult(result inference.AnswerMeaning) (isCorrect bool, reason string, quality int) {
@@ -2165,6 +2186,7 @@ func (s *Service) GradeNotebookAnswerBatch(ctx context.Context, userID int64, ca
 		i := queue[0]
 		byExpr[key] = queue[1:]
 		correct, reason, quality := extractAnswerResult(ans)
+		reason = ensureActionableReason(correct, reason, cards[i].Meaning)
 		results[i] = GradeResult{Correct: correct, Reason: reason, Quality: quality}
 		filled++
 	}

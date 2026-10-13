@@ -311,6 +311,16 @@ INPUT UNDERSTANDING
 - Example: reference_definition "to become very angry and lose self-control", context "He lost his temper when the waiter spilled water on his new jacket". The reference defines the general meaning; the context is just one instance. User answer "to become very angry" is CORRECT because it matches the reference. Do NOT mark wrong because the user did not mention waiters or spilled drinks — those details are specific to this context, not to the expression's meaning.
 - Each context may include a "usage" field showing the inflected form in that context.
 
+=== GRADE ON MEANING, NOT WORDING ===
+
+Judge whether the user's answer conveys the CORE of the reference definition, the way a teacher listening to a spoken answer would. Be biased toward accepting an answer that captures the essential idea. Mark it CORRECT even when it:
+- Omits a redundant or synonymous part of the definition while keeping a part that still conveys the core meaning. A substantive phrase copied straight from the reference definition that carries the core sense is ALWAYS CORRECT — never call such an answer "too vague".
+- Reorders the clauses of the definition.
+- Differs only in inflection, number, article, or preposition (e.g. a one-word preposition or article slip).
+- Uses a clear synonym or a paraphrase of the definition.
+
+Mark INCORRECT ONLY when the answer MISSES the essential concept, CONTRADICTS it, or materially NARROWS it to the wrong thing. When you are unsure whether a wording difference matters, and the answer still captures the core idea, choose CORRECT.
+
 === MANDATORY PRE-CHECK (MUST DO FIRST) ===
 
 STEP 1: SELF-DEFINITION CHECK - DO THIS BEFORE ANYTHING ELSE
@@ -404,8 +414,9 @@ MARK INCORRECT FOR THESE ERRORS:
    - Unrelated categories
 
 5. TOO VAGUE:
-   - Generic descriptions that could apply to many things
-   - EXCEPTION: If user's "vague" meaning captures the essential concept, mark CORRECT
+   - Generic descriptions that could apply to MANY unrelated things and miss the essential concept
+   - This is a HIGH bar: only mark vague when the answer fails to identify the core meaning at all
+   - EXCEPTION: If the answer captures the essential concept — even partially, even using only part of the reference definition — it is CORRECT, not vague
 
 === SEMANTIC EQUIVALENCE - BE GENEROUS ===
 
@@ -451,8 +462,8 @@ MARK CORRECT FOR THESE EQUIVALENCES:
 4. Fourth: Check if context uses a compound term
 5. Fifth: Check IS vs USES error (category confusion)
 6. Sixth: Check PASSIVE vs ACTIVE error (direction reversal)
-7. Seventh: Apply semantic equivalence GENEROUSLY
-8. When uncertain: default to INCORRECT
+7. Seventh: Apply semantic equivalence GENEROUSLY (grade on meaning, not wording)
+8. When uncertain only about WORDING but the core meaning is captured: default to CORRECT. Default to INCORRECT only when the essential meaning is missing, contradicted, or materially narrowed.
 
 is_expression_input HANDLING
 - If true: expression may have typos; judge user's intended meaning
@@ -484,7 +495,11 @@ OUTPUT FORMAT:
 
 REASON FORMAT:
 - CORRECT: explain match (e.g., "exact match", "synonymous", "same core concept: survival")
-- INCORRECT: explain error (e.g., "self-definition", "IS vs USES: user described container not substance", "PASSIVE vs ACTIVE: user said victim but means resilience")
+- INCORRECT: the reason MUST do BOTH of the following so the learner knows how to answer next time:
+  (a) name the specific error or the essential element the answer missed, AND
+  (b) give the expected answer by quoting the reference definition (the correct meaning).
+  A reason that only asserts the answer is "vague"/"too narrow"/"not specific enough" WITHOUT quoting the expected meaning is FORBIDDEN.
+  Example: "You gave only the general idea; the expected meaning is 'a solution of salt in water'."
 - NEVER USE AS REASON: "context uses negation", "context implies X is not true"`
 
 	// promptExample to demonstrate correct evaluation patterns
