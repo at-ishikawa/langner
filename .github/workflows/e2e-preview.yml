@@ -117,23 +117,33 @@ jobs:
           # disk); tar the CONTENTS so families are top-level dirs.
           tar czf /tmp/e2e-content.tgz -C frontend/e2e/fixtures .
           echo "Seeding ${BACKEND_URL}/internal/e2e/seed"
-          # Retry the POST through the backend preview's build/alias-flip window:
-          # 404 = not deployed yet, 000 = not up, 500 = old code / DB warming up.
-          # Each failed attempt prints its (truncated) body so a persistent real
-          # error is still visible rather than hidden behind retries.
-          ok=
+          mkdir -p frontend/e2e/.auth
+          # Retry the POST through the backend preview's build/alias-flip window.
+          # "Not ready yet" is NOT just a non-200 (404 = not deployed, 000 = not
+          # up, 500 = old code / DB warming up) — it ALSO includes a 200 whose body
+          # isn't our JSON with a .token, which happens while the branch alias still
+          # points at an OLD deployment (it answers 200 but without this commit's
+          # seed endpoint/response). Treat that as retryable too, so the deploy lag
+          # can't hard-fail the job at jq on the first 200 from a stale deployment.
+          # Each not-ready attempt prints its (truncated) body so a persistent real
+          # error stays visible rather than hidden behind retries.
+          token=
           for i in $(seq 1 20); do
             code=$(curl -sS -o /tmp/seed-resp.txt -w '%{http_code}' -X POST "${BACKEND_URL}/internal/e2e/seed" \
               -H "X-E2E-Seed-Secret: ${E2E_SEED_SECRET}" \
               -H "Content-Type: application/gzip" \
               --data-binary @/tmp/e2e-content.tgz || echo 000)
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i/20: HTTP $code"; head -c 600 /tmp/seed-resp.txt 2>/dev/null; echo
+            if [ "$code" = "200" ]; then
+              token=$(jq -r '.token // empty' < /tmp/seed-resp.txt 2>/dev/null || true)
+              if [ -n "$token" ]; then echo "seeded on attempt $i/20"; break; fi
+              echo "attempt $i/20: HTTP 200 but no .token yet (stale deployment?)"; head -c 200 /tmp/seed-resp.txt 2>/dev/null; echo
+            else
+              echo "attempt $i/20: HTTP $code"; head -c 600 /tmp/seed-resp.txt 2>/dev/null; echo
+            fi
             sleep 15
           done
-          if [ -z "$ok" ]; then echo "seed never succeeded (last HTTP $code)"; exit 1; fi
-          mkdir -p frontend/e2e/.auth
-          printf '%s' "$(jq -r .token < /tmp/seed-resp.txt)" > frontend/e2e/.auth/access-token.txt
+          if [ -z "$token" ]; then echo "seed never returned a token (last HTTP $code)"; exit 1; fi
+          printf '%s' "$token" > frontend/e2e/.auth/access-token.txt
           test -s frontend/e2e/.auth/access-token.txt
 
       - name: Warm the preview (pay cold-start + content materialization up front)
