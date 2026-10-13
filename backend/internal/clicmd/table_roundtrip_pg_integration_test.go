@@ -182,6 +182,13 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		`INSERT INTO cli_refresh_tokens (user_id, family_id, token_hash, expires_at)
 		 SELECT id, 'roundtrip-seed-family', 'roundtrip-seed-refresh-hash', CURRENT_TIMESTAMP + INTERVAL '30 days'
 		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
+	// user_llm_credentials: a per-user LLM key. api_key_encrypted is BYTEA
+	// (AES-GCM ciphertext in production) — binary bytes exercise the lossless
+	// base64 bytea round trip.
+	seedIfEmpty(ctx, t, db, "user_llm_credentials",
+		`INSERT INTO user_llm_credentials (user_id, provider, api_key_encrypted, model)
+		 SELECT id, 'openai', '\x0123456789abcdef'::bytea, 'gpt-4o-mini'
+		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
 
 	// Every table must actually carry rows so the round trip is meaningful —
 	// especially the tables the notebook-shaped ExportAll never exported.

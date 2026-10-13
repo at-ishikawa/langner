@@ -33,9 +33,8 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
-	"github.com/at-ishikawa/langner/internal/inference/gemini"
+	"github.com/at-ishikawa/langner/internal/inference/factory"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
-	"github.com/at-ishikawa/langner/internal/inference/openai"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/at-ishikawa/langner/internal/server"
@@ -94,6 +93,10 @@ type AuthComponents struct {
 	DeviceHandler *server.DeviceAuthHandler
 	Tokens        *auth.TokenSigner
 	DeviceCodes   *auth.CLIDeviceCodeRepository
+	// Credentials is the per-user LLM-key store, non-nil only when
+	// CREDENTIAL_ENCRYPTION_KEY is set. It backs the `user` inference mode and
+	// the /auth/llm-credential endpoints.
+	Credentials *auth.CredentialsRepository
 }
 
 // BuildHandler wires the complete HTTP handler from cfg and returns it alongside
@@ -105,30 +108,6 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	cleanup := func() {
 		for i := len(closers) - 1; i >= 0; i-- {
 			closers[i]()
-		}
-	}
-
-	var inferenceClient inference.Client
-	switch cfg.Inference.Mode {
-	case "mock":
-		inferenceClient = mock.NewClient()
-		slog.Info("using mock inference client (substring grader)")
-	case "gemini":
-		if cfg.Gemini.APIKey != "" {
-			geminiClient := gemini.NewClient(cfg.Gemini.APIKey, cfg.Gemini.Model, inference.DefaultMaxRetryAttempts)
-			closers = append(closers, func() { _ = geminiClient.Close() })
-			inferenceClient = geminiClient
-			slog.Info("using Gemini inference provider", "model", cfg.Gemini.Model)
-		} else {
-			slog.Warn("GEMINI_API_KEY is not set; quiz grading features will be unavailable")
-		}
-	default:
-		if cfg.OpenAI.APIKey != "" {
-			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
-			closers = append(closers, func() { _ = openaiClient.Close() })
-			inferenceClient = openaiClient
-		} else {
-			slog.Warn("OPENAI_API_KEY is not set; quiz grading features will be unavailable")
 		}
 	}
 
@@ -188,6 +167,27 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 		return nil, nil, nil, fmt.Errorf("set up auth: %w", err)
 	}
 	slog.Info("auth enabled; all RPCs require a valid bearer access token (web + CLI)")
+
+	// Resolve the inference client that backs quiz grading. There is NO
+	// system-wide OpenAI/Gemini key: every learner grades with their OWN stored
+	// LLM key (the multi-user model). The only mode is per-user; `mock` is kept
+	// solely for e2e/tests (a deterministic grader, no key). A nil resolver
+	// (CREDENTIAL_ENCRYPTION_KEY unset, or a user with no key yet) resolves to
+	// ErrNoCredential, surfaced as a clear FailedPrecondition, not a crash.
+	var clientResolver inference.ClientResolver
+	switch cfg.Inference.Mode {
+	case "mock":
+		clientResolver = inference.StaticResolver(mock.NewClient())
+		slog.Info("using mock inference client (substring grader; e2e/tests only)")
+	default:
+		if authSetup != nil && authSetup.Credentials != nil {
+			clientResolver = factory.NewResolver(authSetup.Credentials)
+			slog.Info("grading with each user's own LLM credential")
+		} else {
+			clientResolver = inference.StaticResolver(nil)
+			slog.Warn("per-user LLM credentials unavailable (set CREDENTIAL_ENCRYPTION_KEY); quiz grading will report 'no API key configured' until a user adds their key in Settings")
+		}
+	}
 
 	// User-STATE repositories. When a database is configured, writes go to the
 	// DB ONLY — the runtime never rewrites the on-disk learning_notes YAML
@@ -264,7 +264,7 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	}
 	analyticsRepo := analytics.Repository(yamlAnalyticsRepo)
 
-	svc := quiz.NewService(cfg.Notebooks, inferenceClient, dictionaryMap, learningRepo, cfg.Quiz)
+	svc := quiz.NewService(cfg.Notebooks, clientResolver, dictionaryMap, learningRepo, cfg.Quiz)
 	svc.SetHistoryStore(historyStore)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
 
@@ -311,7 +311,7 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	if db != nil {
 		dictReader = dictionary.NewDBReader(dictionary.NewDBDictionaryRepository(db), dictConfig)
 	}
-	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, inferenceClient, noteRepo)
+	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, clientResolver, noteRepo)
 	notebookHandler.SetHistoryStore(historyStore)
 	notebookHandler.SetNotebookACL(repos.ACL)
 
@@ -346,6 +346,10 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	mux.HandleFunc("/auth/google/callback", authSetup.Handler.Callback)
 	mux.HandleFunc("/auth/logout", authSetup.Handler.Logout)
 	mux.HandleFunc("/auth/me", authSetup.Handler.Me)
+	// POST/DELETE register/clear the signed-in user's own LLM API key (the
+	// Settings page). Behind the same bearer middleware as /auth/me; the handler
+	// itself 503s when credential storage is unconfigured.
+	mux.HandleFunc("/auth/llm-credential", authSetup.Handler.LLMCredential)
 	mux.HandleFunc("/auth/device/code", authSetup.DeviceHandler.RequestCode)
 	mux.HandleFunc("/auth/device/token", authSetup.DeviceHandler.Token)
 	mux.HandleFunc("/auth/device/deny", authSetup.DeviceHandler.Deny)
@@ -453,6 +457,19 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*AuthComponents, error) {
 	users := auth.NewUserRepository(db)
 	deviceCodes := auth.NewCLIDeviceCodeRepository(db)
 	refreshTokens := auth.NewCLIRefreshTokenRepository(db)
+
+	// Per-user LLM credentials are encrypted at rest with CREDENTIAL_ENCRYPTION_KEY.
+	// OPTIONAL: without the key the credentials repo stays nil, so the server still
+	// starts (mock/openai/gemini modes) and per-user keys are simply disabled.
+	var credentials *auth.CredentialsRepository
+	if cfg.Auth.CredentialEncryptionKey != "" {
+		enc, err := auth.NewEncryptor(auth.DecodeKey(cfg.Auth.CredentialEncryptionKey))
+		if err != nil {
+			return nil, fmt.Errorf("CREDENTIAL_ENCRYPTION_KEY invalid: %w", err)
+		}
+		credentials = auth.NewCredentialsRepository(db, enc)
+	}
+
 	authenticator := auth.NewOAuthClient(cfg.Auth.GoogleClientID, cfg.Auth.GoogleClientSecret, cfg.Auth.RedirectURL, nil)
 	handler := server.NewAuthHandler(server.AuthHandlerConfig{
 		Authenticator:  authenticator,
@@ -461,6 +478,7 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*AuthComponents, error) {
 		Users:          users,
 		DeviceCodes:    deviceCodes,
 		RefreshTokens:  refreshTokens,
+		Credentials:    credentials,
 		AllowedEmails:  cfg.Auth.AllowedEmails,
 		FrontendURL:    cfg.Auth.FrontendURL,
 		AllowedOrigins: cfg.Server.CORS.AllowedOrigins,
@@ -476,7 +494,7 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*AuthComponents, error) {
 		CookieSecure:    cfg.Auth.CookieSecure,
 		CookieSameSite:  parseSameSite(cfg.Auth.CookieSameSite),
 	})
-	return &AuthComponents{Handler: handler, DeviceHandler: deviceHandler, Tokens: tokens, DeviceCodes: deviceCodes}, nil
+	return &AuthComponents{Handler: handler, DeviceHandler: deviceHandler, Tokens: tokens, DeviceCodes: deviceCodes, Credentials: credentials}, nil
 }
 
 // deviceVerificationURI derives the browser approval URL (…/auth/device) from
@@ -563,7 +581,9 @@ func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		// DELETE is needed for the browser "Remove key" call (DELETE
+		// /auth/llm-credential); the rest of the API is GET/POST (connect RPCs).
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Connect-Protocol-Version, Authorization")
 		w.Header().Set("Access-Control-Max-Age", "3600")
 

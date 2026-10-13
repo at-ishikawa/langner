@@ -1,6 +1,3 @@
-OPENAI_API_KEY ?=
-GEMINI_API_KEY ?=
-INFERENCE_MODE ?=
 API_BASE_URL ?= http://localhost:8080
 # Server-side target the Next dev server proxies /auth to; defaults to a
 # locally-reachable backend (see frontend/Makefile / next.config.ts).
@@ -22,45 +19,34 @@ setup:
 	$(MAKE) proto
 	$(MAKE) db-migrate
 
-# check-api-key guards the dev targets, requiring the API key for the selected
-# INFERENCE_MODE (default openai): mock needs no key, gemini needs
-# GEMINI_API_KEY, openai/unset needs OPENAI_API_KEY.
-.PHONY: check-api-key
-check-api-key:
-	@case "$(INFERENCE_MODE)" in \
-		mock) ;; \
-		gemini) \
-			if [ -z "$(GEMINI_API_KEY)" ]; then \
-				echo "ERROR: GEMINI_API_KEY is not set (INFERENCE_MODE=gemini)"; \
-				exit 1; \
-			fi ;; \
-		*) \
-			if [ -z "$(OPENAI_API_KEY)" ]; then \
-				echo "ERROR: OPENAI_API_KEY is not set"; \
-				exit 1; \
-			fi ;; \
-	esac
-
 # `make dev` runs with auth ALWAYS ON (there is no ungated mode). The server
 # fails fast without TOKEN_SIGNING_KEY and requires Postgres, so we start the
-# database and generate a DEV-ONLY signing key into a GITIGNORED file (this repo
-# is public — never commit keys) and source it for the server.
+# database and launch the server. This repo is PUBLIC, so `make dev` NEVER
+# generates or commits secrets — you supply them yourself:
+#   - Real grading (default, INFERENCE_MODE=user): set TOKEN_SIGNING_KEY and
+#     CREDENTIAL_ENCRYPTION_KEY as the token_signing_key / credential_encryption_key
+#     keys in a gitignored config.yml (copy config.example.yml), or export them in
+#     your environment. Generate each with `openssl rand -hex 32`; they MUST
+#     differ. If your dev server points at a SHARED/prod database these MUST equal
+#     that deployment's values, or decrypt-on-read of stored per-user keys fails
+#     with "cipher: message authentication failed".
+#   - Offline grader: `INFERENCE_MODE=mock make dev` needs NO secrets — mock mode
+#     supplies fixed dev-only keys and grades with a deterministic matcher.
 #
 # To actually SIGN IN you must also supply your own Google OAuth credentials:
 # google_client_id, redirect_url, frontend_url, and allowed_emails in your
 # config file (see the auth: block in config.example.yml), plus
 # GOOGLE_CLIENT_SECRET exported in your environment.
-AUTH_DEV_ENV := .dev-auth.env
+#
+# Grading is PER-USER: there is no system OPENAI_API_KEY/GEMINI_API_KEY. Register
+# your own provider key in the app's Settings page (CREDENTIAL_ENCRYPTION_KEY
+# backs that).
 
 .PHONY: dev-backend
-dev-backend: check-api-key
+dev-backend:
 	docker compose up -d --wait
 	$(MAKE) -C backend build
-	@if [ ! -f $(AUTH_DEV_ENV) ]; then \
-		printf 'TOKEN_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)" > $(AUTH_DEV_ENV); \
-		echo "Generated DEV-ONLY TOKEN_SIGNING_KEY -> $(AUTH_DEV_ENV) (gitignored). Google sign-in also needs google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET in the env."; \
-	fi
-	set -a; . ./$(AUTH_DEV_ENV); set +a; ./langner-server
+	./langner-server
 
 .PHONY: dev-frontend
 dev-frontend:
@@ -69,7 +55,7 @@ dev-frontend:
 BUF_VERSION ?= v1.66.0
 
 .PHONY: dev
-dev: check-api-key
+dev:
 	$(MAKE) -j2 dev-backend dev-frontend
 
 .PHONY: proto

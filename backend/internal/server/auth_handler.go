@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/auth"
+	"github.com/at-ishikawa/langner/internal/inference"
 )
 
 const (
@@ -43,6 +44,7 @@ type AuthHandler struct {
 	users          *auth.UserRepository
 	deviceCodes    *auth.CLIDeviceCodeRepository
 	refreshTokens  *auth.CLIRefreshTokenRepository
+	credentials    *auth.CredentialsRepository
 	allowedEmails  []string
 	frontendURL    string
 	allowedOrigins []string
@@ -57,6 +59,10 @@ type AuthHandlerConfig struct {
 	Tokens        *auth.TokenSigner
 	State         *auth.StateSigner
 	Users         *auth.UserRepository
+	// Credentials loads the signed-in user's stored LLM provider/model for
+	// /auth/me and backs POST/DELETE /auth/llm-credential. May be nil in
+	// tests / DB-less setups: /auth/me reports no key and the endpoint 503s.
+	Credentials *auth.CredentialsRepository
 	// DeviceCodes approves the CLI device row inside the callback (M3). May be
 	// nil in tests that never exercise the device path.
 	DeviceCodes *auth.CLIDeviceCodeRepository
@@ -88,6 +94,7 @@ func NewAuthHandler(cfg AuthHandlerConfig) *AuthHandler {
 		tokens:         cfg.Tokens,
 		state:          cfg.State,
 		users:          cfg.Users,
+		credentials:    cfg.Credentials,
 		deviceCodes:    cfg.DeviceCodes,
 		refreshTokens:  cfg.RefreshTokens,
 		allowedEmails:  cfg.AllowedEmails,
@@ -326,21 +333,34 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, _ *http.Request) {
 }
 
 // meResponse is the JSON shape of /auth/me. Only the non-PII username is
-// exposed — no email/name is stored or returned.
-type meResponse struct {
-	Authenticated bool   `json:"authenticated"`
-	Username      string `json:"username,omitempty"`
+// exposed — no email/name is stored or returned. It also advertises the LLM
+// providers the server can build a client for (AvailableProviders, which drives
+// the Settings UI) and whether the user has registered a key (HasAPIKey) plus
+// which provider / model — but NEVER the key itself.
+type credentialDTO struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model,omitempty"`
+	Primary  bool   `json:"primary"`
 }
 
-// Me returns the signed-in user's username from the verified session
-// (populated in the request context by AuthBearerMiddleware). It responds 401
-// when there is no valid bearer.
+type meResponse struct {
+	Authenticated      bool            `json:"authenticated"`
+	Username           string          `json:"username,omitempty"`
+	HasAPIKey          bool            `json:"hasApiKey"`
+	Credentials        []credentialDTO `json:"credentials"`
+	AvailableProviders []string        `json:"availableProviders"`
+}
+
+// Me returns the signed-in user's username plus their LLM-credential status
+// from the verified session (populated in the request context by
+// AuthBearerMiddleware). It responds 401 when there is no valid bearer. The API
+// key is never included — only whether one is set and under which provider/model.
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	sess, ok := auth.SessionFromContext(r.Context())
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(meResponse{Authenticated: false})
+		_ = json.NewEncoder(w).Encode(meResponse{Authenticated: false, AvailableProviders: inference.AvailableProviders()})
 		return
 	}
 	user, err := h.users.FindByID(r.Context(), sess.UserID)
@@ -348,11 +368,26 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		slog.Error("auth: find user for /auth/me failed", "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(meResponse{Authenticated: false})
+		_ = json.NewEncoder(w).Encode(meResponse{Authenticated: false, AvailableProviders: inference.AvailableProviders()})
 		return
 	}
+	resp := meResponse{
+		Authenticated:      true,
+		Username:           user.Username,
+		AvailableProviders: inference.AvailableProviders(),
+	}
+	if h.credentials != nil {
+		if metas, err := h.credentials.ListCredentials(r.Context(), sess.UserID); err != nil {
+			slog.Error("auth: list llm credentials for /auth/me failed", "error", err)
+		} else {
+			resp.HasAPIKey = len(metas) > 0
+			for _, m := range metas {
+				resp.Credentials = append(resp.Credentials, credentialDTO{Provider: m.Provider, Model: m.Model, Primary: m.IsPrimary})
+			}
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(meResponse{Authenticated: true, Username: user.Username})
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // renderMessage writes a minimal HTML page (used for the device-approval
@@ -361,6 +396,80 @@ func (h *AuthHandler) renderMessage(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(`<!doctype html><html><body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;"><p>` +
 		template.HTMLEscapeString(msg) + `</p></body></html>`))
+}
+
+// llmCredentialRequest is the POST body for /auth/llm-credential. apiKey empty
+// with primary=true means "make this already-registered provider the primary"
+// (no key re-entry, since keys are write-only).
+type llmCredentialRequest struct {
+	Provider string `json:"provider"`
+	APIKey   string `json:"apiKey"`
+	Model    string `json:"model"`
+	Primary  bool   `json:"primary"`
+}
+
+// LLMCredential handles POST (register/replace) and DELETE (clear) of the
+// signed-in user's LLM credential. It rejects with 401 when there is no valid
+// session, reading the user id from the session exactly like /auth/me. The key
+// is stored encrypted at rest and never echoed back.
+func (h *AuthHandler) LLMCredential(w http.ResponseWriter, r *http.Request) {
+	sess, ok := auth.SessionFromContext(r.Context())
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if h.credentials == nil {
+		http.Error(w, "credential storage unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	switch r.Method {
+	case http.MethodPost:
+		var req llmCredentialRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.Provider) == "" {
+			http.Error(w, "provider is required", http.StatusBadRequest)
+			return
+		}
+		switch {
+		case req.APIKey != "":
+			// Register or rotate this provider's key (optionally make it primary).
+			if err := h.credentials.SetCredential(r.Context(), sess.UserID, req.Provider, req.APIKey, req.Model, req.Primary); err != nil {
+				// A rejected provider / empty key is the caller's mistake (400); a
+				// storage failure is ours (500). Both are logged; neither echoes the key.
+				slog.Warn("auth: set llm credential failed", "error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		case req.Primary:
+			// Flip the primary to an already-registered provider (no key re-entry).
+			if err := h.credentials.SetPrimaryProvider(r.Context(), sess.UserID, req.Provider); err != nil {
+				slog.Warn("auth: set primary provider failed", "error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		default:
+			http.Error(w, "api key is required", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	case http.MethodDelete:
+		provider := strings.TrimSpace(r.URL.Query().Get("provider"))
+		if provider == "" {
+			http.Error(w, "provider query parameter is required", http.StatusBadRequest)
+			return
+		}
+		if err := h.credentials.DeleteCredential(r.Context(), sess.UserID, provider); err != nil {
+			slog.Error("auth: delete llm credential failed", "error", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func (h *AuthHandler) clearCookie(w http.ResponseWriter, name string) {

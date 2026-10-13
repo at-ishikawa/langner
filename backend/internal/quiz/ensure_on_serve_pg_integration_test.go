@@ -17,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/datasync"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -107,7 +108,7 @@ func (f ensureFixture) newImporter(t *testing.T) *datasync.Importer {
 // the test can observe the pre-fix behavior.
 func (f ensureFixture) newService(t *testing.T, withEnsurer bool) *quiz.Service {
 	t.Helper()
-	svc := quiz.NewService(f.cfg.Notebooks, mock.NewClient(), map[string]rapidapi.Response{}, f.repos.Learning, f.cfg.Quiz)
+	svc := quiz.NewService(f.cfg.Notebooks, inference.StaticResolver(mock.NewClient()), map[string]rapidapi.Response{}, f.repos.Learning, f.cfg.Quiz)
 	svc.SetHistoryStore(f.repos.HistoryStore)
 	svc.SetSkipStores(f.repos.SkipFlags, f.repos.Note, f.repos.Origin)
 	if withEnsurer {

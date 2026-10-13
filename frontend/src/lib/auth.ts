@@ -12,13 +12,31 @@ import { tryRefreshSession } from "./refresh";
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
+// LlmCredential is one registered provider (never the key itself). primary marks
+// the provider grading uses first; the other configured provider is the
+// automatic rate-limit/quota fallback.
+export interface LlmCredential {
+  provider: string;
+  model: string;
+  primary: boolean;
+}
+
 export interface AuthUser {
   username: string;
+  // hasApiKey gates the quiz-start banner (any provider configured);
+  // credentials lists each registered provider; availableProviders drives the
+  // Settings rows.
+  hasApiKey: boolean;
+  credentials: LlmCredential[];
+  availableProviders: string[];
 }
 
 interface MeResponse {
   authenticated: boolean;
   username?: string;
+  hasApiKey?: boolean;
+  credentials?: LlmCredential[];
+  availableProviders?: string[];
 }
 
 // getMe returns the signed-in user, or null when unauthenticated. It restores a
@@ -53,7 +71,62 @@ export async function getMe(): Promise<AuthUser | null> {
   if (!data.authenticated || !data.username) {
     return null;
   }
-  return { username: data.username };
+  return {
+    username: data.username,
+    hasApiKey: data.hasApiKey ?? false,
+    credentials: data.credentials ?? [],
+    availableProviders: data.availableProviders ?? [],
+  };
+}
+
+async function postCredential(body: Record<string, unknown>, failMsg: string): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/llm-credential`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = (await res.text()).trim();
+    throw new Error(text || failMsg);
+  }
+}
+
+// setLlmCredential registers (or rotates) one provider's API key (+ optional
+// model). The key is sent once and never read back. primary makes it the
+// provider grading uses first (the other configured provider is the fallback).
+export async function setLlmCredential(params: {
+  provider: string;
+  apiKey: string;
+  model: string;
+  primary?: boolean;
+}): Promise<void> {
+  await postCredential(params, "Failed to save API key");
+}
+
+// setPrimaryProvider makes an already-registered provider the primary, without
+// re-entering its key.
+export async function setPrimaryProvider(provider: string): Promise<void> {
+  await postCredential({ provider, primary: true }, "Failed to set primary provider");
+}
+
+// deleteLlmCredential removes one provider's stored credential.
+export async function deleteLlmCredential(provider: string): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(
+    `${API_BASE}/auth/llm-credential?provider=${encodeURIComponent(provider)}`,
+    {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  );
+  if (!res.ok) {
+    const text = (await res.text()).trim();
+    throw new Error(text || "Failed to remove API key");
+  }
 }
 
 // redirectToSignIn sends the browser to Google sign-in, folding the current

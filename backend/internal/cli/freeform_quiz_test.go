@@ -245,7 +245,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 				config.NotebooksConfig{
 					LearningNotesDirectory: tmpDir,
 				},
-				mockClient,
+				inference.StaticResolver(mockClient),
 				nil,
 				learning.NewYAMLLearningRepository(tmpDir, nil),
 				config.QuizConfig{},
@@ -469,7 +469,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 				config.NotebooksConfig{
 					LearningNotesDirectory: tmpDir,
 				},
-				mockClient,
+				inference.StaticResolver(mockClient),
 				nil,
 				learning.NewYAMLLearningRepository(tmpDir, nil),
 				config.QuizConfig{},

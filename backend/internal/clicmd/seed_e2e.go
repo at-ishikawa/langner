@@ -113,6 +113,10 @@ func NewMigrateSeedE2ECommand() *cobra.Command {
 // state), the CLI auth tables, and schema_migrations are deliberately preserved
 // so the pre-minted access token keeps resolving and the DB-served notebook
 // content survives a reset; ensure-on-serve recreates notes from that content.
+//
+// user_llm_credentials is per-user STATE a scenario can create (the Settings
+// register flow) — cleared each reset so every scenario starts with no key. It
+// references users (preserved), so truncating it alone is safe.
 var e2eStateTables = []string{
 	"learning_logs",
 	"notebook_notes",
@@ -121,6 +125,7 @@ var e2eStateTables = []string{
 	"grammar_corrections",
 	"etymology_origins",
 	"notes",
+	"user_llm_credentials",
 }
 
 // NewMigrateResetE2ECommand restores the seeded e2e baseline between scenarios:

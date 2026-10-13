@@ -162,6 +162,9 @@ Edit `config.yml` to set your directories for notebooks, dictionaries, templates
 | `RAPID_API_KEY` | Dictionary lookup | Get at [RapidAPI](https://rapidapi.com/dpventures/api/wordsapi) |
 | `GOOGLE_CLIENT_SECRET` | Sign in with Google | OAuth client secret from Google Cloud Console |
 | `TOKEN_SIGNING_KEY` | **Always required** | Secret key (e.g. `openssl rand -hex 32`) that signs the langner access token for both the web app and the CLI. The server refuses to start without it. |
+| `CREDENTIAL_ENCRYPTION_KEY` | Quizzes (per-user keys) | 32-byte AES-256 key (hex or base64, e.g. `openssl rand -hex 32`) that encrypts each user's LLM API key at rest. Must differ from `TOKEN_SIGNING_KEY`. If the server shares a database with another deployment the value must match it, or stored keys can't be decrypted. |
+
+> Set these secrets as environment variables or as `token_signing_key` / `credential_encryption_key` in a (gitignored) `config.yml` — `make dev` does not generate them for you. The `INFERENCE_MODE=mock` offline grader needs no secrets.
 
 ### Sign in with Google
 
