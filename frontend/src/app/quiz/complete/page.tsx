@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
@@ -40,8 +40,15 @@ export default function SessionCompletePage() {
     return [];
   }, [results, reverseResults, freeformResults]);
 
+  // When the page loads with no results (e.g. navigated here directly), bounce
+  // home. But NOT when the user clicks "Back to Start": that handler calls
+  // reset() — which empties allResults — and then pushes to /quiz. Without this
+  // guard the empty-results effect races that push and can win, landing the user
+  // on "/" instead of /quiz (flaky on slow deploys; a real wrong-destination bug).
+  const leavingToQuiz = useRef(false);
+
   useEffect(() => {
-    if (allResults.length === 0) {
+    if (allResults.length === 0 && !leavingToQuiz.current) {
       router.push("/");
     }
   }, [allResults, router]);
@@ -56,6 +63,7 @@ export default function SessionCompletePage() {
   const incorrectCount = allResults.filter((r) => !r.correct && !r.isSkipped).length;
 
   const handleBackToStart = () => {
+    leavingToQuiz.current = true;
     reset();
     router.push("/quiz");
   };
