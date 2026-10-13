@@ -161,6 +161,107 @@ jobs:
           done
           echo "warm-up done"
 
+      - uses: actions/setup-go@v6
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          go-version-file: backend/go.mod
+
+      # Drive the REAL end-user CLI (cobra RunE → resolveBundle/validate →
+      # NotebookService RPC over the wire → `list` output parsing) against the
+      # preview backend — the path the handler-only Go tests never exercise. It
+      # authenticates non-interactively with the already-seeded e2e bearer:
+      # LANGNER_SERVER + LANGNER_TOKEN (see internal/clicmd ensureAccessToken), so
+      # NO browser login and NO credential file are needed. Runs BEFORE Playwright
+      # and cleans up after itself (delete), and the per-scenario reset truncates
+      # notes/notebook_notes, so the seeded Playwright state is untouched.
+      - name: Drive the real `langner notebooks` CLI against the preview
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          BACKEND_URL: ${{ steps.urls.outputs.backend }}
+        run: |
+          set -euo pipefail
+          # Cross-build the CLI exactly as a release would (the runner is already
+          # linux/amd64, but pin it so the command matches the documented build).
+          (cd backend && GOOS=linux GOARCH=amd64 go build -o /tmp/langner ./cmd/langner)
+          export LANGNER_SERVER="$BACKEND_URL"
+          LANGNER_TOKEN="$(cat frontend/e2e/.auth/access-token.txt)"
+          export LANGNER_TOKEN
+          test -n "$LANGNER_TOKEN"
+
+          NAME="Common English Idioms"
+
+          # Print the nb_ ids whose display NAME equals $1, parsed from `list`
+          # output (col 1 = NOTEBOOK ID, col 2 = VISIBILITY, the rest = NAME).
+          ids_for_name() {
+            /tmp/langner notebooks list \
+              | awk -v want="$1" 'NR>1 { id=$1; $1=""; $2=""; sub(/^ +/,""); if ($0==want) print id }'
+          }
+
+          # Cold-start tolerant first call: retry `list` until the preview answers
+          # (mirrors the seed step's retry style).
+          list_ok=
+          for i in $(seq 1 10); do
+            if /tmp/langner notebooks list >/tmp/cli-list.txt 2>/tmp/cli-err.txt; then list_ok=1; break; fi
+            echo "list attempt $i/10 failed:"; head -c 400 /tmp/cli-err.txt; echo; sleep 15
+          done
+          if [ -z "$list_ok" ]; then echo "CLI could not reach the preview backend"; exit 1; fi
+
+          # Idempotency: the shared preview DB preserves the notebooks table across
+          # runs, so delete any leftover same-named notebook from a prior run first.
+          for id in $(ids_for_name "$NAME"); do
+            echo "pre-cleanup: deleting leftover $id"
+            /tmp/langner notebooks delete "$id"
+          done
+
+          # Work on a copy so the second push can EDIT the bundle (add a card)
+          # without mutating the checked-out fixture.
+          rm -rf /tmp/cli-bundle
+          cp -r examples/user-notebooks/idioms /tmp/cli-bundle
+
+          # 1) PUSH → the notebook appears in `list` with an nb_ id.
+          /tmp/langner notebooks push /tmp/cli-bundle
+          mapfile -t ids1 < <(ids_for_name "$NAME")
+          if [ "${#ids1[@]}" -ne 1 ]; then
+            echo "FAIL: expected exactly 1 notebook named '$NAME' after push, got ${#ids1[@]}"
+            /tmp/langner notebooks list; exit 1
+          fi
+          id1="${ids1[0]}"
+          case "$id1" in nb_*) : ;; *) echo "FAIL: id '$id1' is not an nb_ id"; exit 1 ;; esac
+          echo "push created $id1"
+
+          # 2) EDIT the bundle (add a second card) + PUSH again → UPDATE IN PLACE:
+          #    the SAME nb_ id and NOT a second same-named notebook (the #95 bug).
+          #    Append a sixth card to the (only) notebook's cards list. The YAML
+          #    indentation is kept INSIDE the single quotes so it survives the
+          #    workflow's block-scalar indentation stripping.
+          printf '%s\n' \
+            '    - expression: "spill the beans"' \
+            '      meaning: "to reveal secret or private information"' \
+            '      part_of_speech: "idiom"' \
+            '      examples:' \
+            '        - "He spilled the beans about the surprise party."' \
+            >> /tmp/cli-bundle/cards.yml
+          /tmp/langner notebooks push /tmp/cli-bundle
+          mapfile -t ids2 < <(ids_for_name "$NAME")
+          if [ "${#ids2[@]}" -ne 1 ]; then
+            echo "FAIL: re-push created a DUPLICATE — expected 1 notebook named '$NAME', got ${#ids2[@]}"
+            /tmp/langner notebooks list; exit 1
+          fi
+          id2="${ids2[0]}"
+          if [ "$id2" != "$id1" ]; then
+            echo "FAIL: re-push changed the id ($id1 -> $id2); expected update-in-place"; exit 1
+          fi
+          echo "re-push updated $id2 in place (no duplicate)"
+
+          # 3) DELETE → it disappears from `list`.
+          /tmp/langner notebooks delete "$id1"
+          mapfile -t ids3 < <(ids_for_name "$NAME")
+          if [ "${#ids3[@]}" -ne 0 ]; then
+            echo "FAIL: notebook '$NAME' still present after delete: ${ids3[*]}"
+            /tmp/langner notebooks list; exit 1
+          fi
+          echo "CLI e2e passed: push → update-in-place → delete all verified"
+
       - name: Run Playwright against the preview
         if: steps.gate.outputs.enabled == 'true'
         working-directory: frontend

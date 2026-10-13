@@ -3,8 +3,10 @@ package clicmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -200,6 +202,12 @@ func NewWhoamiCommand() *cobra.Command {
 // 60s of expiry. A missing entry is a hard error (no cross-server fallback); a
 // failed refresh clears the entry and tells the user to log in again.
 func ensureAccessToken(ctx context.Context, store *CredentialStore, server string) (string, error) {
+	// A pre-minted bearer in LANGNER_TOKEN short-circuits the credential store and
+	// the refresh flow — the non-interactive path CI/e2e uses to drive the CLI
+	// with a seeded access token (paired with LANGNER_SERVER), no browser login.
+	if t := strings.TrimSpace(os.Getenv("LANGNER_TOKEN")); t != "" {
+		return t, nil
+	}
 	creds, ok := store.Get(server)
 	if !ok {
 		return "", notLoggedInErr(server)

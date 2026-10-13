@@ -128,6 +128,48 @@ func TestEnsureAccessToken_NotLoggedIn(t *testing.T) {
 	assert.Contains(t, err.Error(), "not logged in")
 }
 
+// TestEnsureAccessToken_LangnerTokenEnv proves a pre-minted LANGNER_TOKEN
+// short-circuits the credential store entirely (the non-interactive CI/e2e path:
+// a seeded bearer + LANGNER_SERVER, no browser login). It returns the trimmed
+// token even with an empty store, and wins over a stored token.
+func TestEnsureAccessToken_LangnerTokenEnv(t *testing.T) {
+	withTempConfigHome(t)
+	const server = "https://example.test"
+
+	tests := []struct {
+		name  string
+		env   string
+		store func() *CredentialStore
+		want  string
+	}{
+		{
+			name:  "short-circuits an empty store (trimmed)",
+			env:   "  pre-minted-bearer\n",
+			store: func() *CredentialStore { return &CredentialStore{Servers: map[string]ServerCredentials{}} },
+			want:  "pre-minted-bearer",
+		},
+		{
+			name: "wins over a stored token",
+			env:  "env-bearer",
+			store: func() *CredentialStore {
+				return &CredentialStore{Servers: map[string]ServerCredentials{
+					server: {AccessToken: "stored-bearer", AccessTokenExpiresAt: time.Now().Add(time.Hour)},
+				}}
+			},
+			want: "env-bearer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("LANGNER_TOKEN", tt.env)
+			got, err := ensureAccessToken(context.Background(), tt.store(), server)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestBearerInterceptor_ForceRefresh_InvalidGrant proves a dead refresh token
 // clears the entry and tells the user to log in again.
 func TestBearerInterceptor_ForceRefresh_InvalidGrant(t *testing.T) {
