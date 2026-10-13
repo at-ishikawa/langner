@@ -3,28 +3,30 @@ import { createBdd } from "playwright-bdd";
 
 const { When, Then } = createBdd();
 
-// The Settings page renders the per-user LLM key form: a provider <select>
-// (defaults to the first available provider), a password API-key input
-// (placeholder "sk-…"), a Save button, and — once a key is set — a Remove
-// button. The key is write-only, so these steps assert the state text, never
-// the key value.
+// The Settings page renders one row per LLM provider: an API-key input
+// (aria-label "<provider> API key"), a "Save <provider> key" button, a
+// "Make <provider> primary" button once a key is set, and a "Remove <provider>"
+// button. Keys are write-only, so these steps assert the state copy, never the
+// key value.
 
-When("I enter the API key {string}", async ({ page }, key: string) => {
-  await page.locator('input[type="password"]').fill(key);
+When("I enter the {string} API key {string}", async ({ page }, provider: string, key: string) => {
+  await page.getByLabel(`${provider} API key`).fill(key);
 });
 
-When("I save the API key", async ({ page }) => {
-  await page.getByRole("button", { name: /^save$/i }).click();
+When("I save the {string} key", async ({ page }, provider: string) => {
+  await page.getByRole("button", { name: `Save ${provider} key` }).click();
 });
 
-When("I remove the API key", async ({ page }) => {
-  await page.getByRole("button", { name: /^remove key$/i }).click();
+When("I make {string} the primary provider", async ({ page }, provider: string) => {
+  await page.getByRole("button", { name: `Make ${provider} primary` }).click();
 });
 
-// Generic visible-text assertion for the Settings state copy ("No API key
-// configured yet.", "API key saved.", "… — key set."). Substring match so the
-// "key set." fragment within the longer "Current: <provider> … — key set."
-// line still matches.
+When("I remove the {string} key", async ({ page }, provider: string) => {
+  await page.getByRole("button", { name: new RegExp(`^Remove ${provider}$`, "i") }).click();
+});
+
+// Generic visible-text assertion for the Settings status copy ("No API key
+// configured yet.", "No key set.", "Saved."). Substring match.
 Then("I see the text {string}", async ({ page }, text: string) => {
   await expect(page.getByText(text, { exact: false }).first()).toBeVisible();
 });

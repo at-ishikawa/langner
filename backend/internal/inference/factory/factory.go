@@ -11,6 +11,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/inference/fallback"
 	"github.com/at-ishikawa/langner/internal/inference/gemini"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
 )
@@ -54,16 +55,31 @@ func NewResolver(credentials *auth.CredentialsRepository) *Resolver {
 	return &Resolver{credentials: credentials}
 }
 
-// ResolveClient loads the user's credential, decrypts the key, and builds the
-// matching client. It returns inference.ErrNoCredential when the user has not
-// registered a provider + key.
+// ResolveClient loads the user's credentials (primary first), decrypts the
+// keys, and builds the client. With one provider it returns that client; with a
+// second provider configured it wraps the primary in a rate-limit/quota
+// fallback to the other provider. Returns inference.ErrNoCredential when the
+// user has registered no provider key.
 func (r *Resolver) ResolveClient(ctx context.Context, userID int64) (inference.Client, error) {
-	cred, ok, err := r.credentials.GetCredential(ctx, userID)
+	creds, err := r.credentials.DecryptedCredentials(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("get credential: %w", err)
+		return nil, fmt.Errorf("get credentials: %w", err)
 	}
-	if !ok {
+	if len(creds) == 0 {
 		return nil, inference.ErrNoCredential
 	}
-	return Build(cred.Provider, cred.APIKey, cred.Model)
+	primary, err := Build(creds[0].Provider, creds[0].APIKey, creds[0].Model)
+	if err != nil {
+		return nil, err
+	}
+	// creds are ordered primary-first; a second provider becomes the automatic
+	// fallback the grader retries on when the primary hits a rate-limit/quota.
+	if len(creds) > 1 {
+		secondary, err := Build(creds[1].Provider, creds[1].APIKey, creds[1].Model)
+		if err != nil {
+			return nil, err
+		}
+		return fallback.NewClient(primary, secondary), nil
+	}
+	return primary, nil
 }

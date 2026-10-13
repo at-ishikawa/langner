@@ -337,13 +337,18 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, _ *http.Request) {
 // providers the server can build a client for (AvailableProviders, which drives
 // the Settings UI) and whether the user has registered a key (HasAPIKey) plus
 // which provider / model — but NEVER the key itself.
+type credentialDTO struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model,omitempty"`
+	Primary  bool   `json:"primary"`
+}
+
 type meResponse struct {
-	Authenticated      bool     `json:"authenticated"`
-	Username           string   `json:"username,omitempty"`
-	HasAPIKey          bool     `json:"hasApiKey"`
-	Provider           string   `json:"provider,omitempty"`
-	Model              string   `json:"model,omitempty"`
-	AvailableProviders []string `json:"availableProviders"`
+	Authenticated      bool            `json:"authenticated"`
+	Username           string          `json:"username,omitempty"`
+	HasAPIKey          bool            `json:"hasApiKey"`
+	Credentials        []credentialDTO `json:"credentials"`
+	AvailableProviders []string        `json:"availableProviders"`
 }
 
 // Me returns the signed-in user's username plus their LLM-credential status
@@ -372,12 +377,13 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		AvailableProviders: inference.AvailableProviders(),
 	}
 	if h.credentials != nil {
-		if cred, ok, err := h.credentials.GetCredential(r.Context(), sess.UserID); err != nil {
-			slog.Error("auth: load llm credential for /auth/me failed", "error", err)
-		} else if ok {
-			resp.HasAPIKey = true
-			resp.Provider = cred.Provider
-			resp.Model = cred.Model
+		if metas, err := h.credentials.ListCredentials(r.Context(), sess.UserID); err != nil {
+			slog.Error("auth: list llm credentials for /auth/me failed", "error", err)
+		} else {
+			resp.HasAPIKey = len(metas) > 0
+			for _, m := range metas {
+				resp.Credentials = append(resp.Credentials, credentialDTO{Provider: m.Provider, Model: m.Model, Primary: m.IsPrimary})
+			}
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -392,11 +398,14 @@ func (h *AuthHandler) renderMessage(w http.ResponseWriter, msg string) {
 		template.HTMLEscapeString(msg) + `</p></body></html>`))
 }
 
-// llmCredentialRequest is the POST body for /auth/llm-credential.
+// llmCredentialRequest is the POST body for /auth/llm-credential. apiKey empty
+// with primary=true means "make this already-registered provider the primary"
+// (no key re-entry, since keys are write-only).
 type llmCredentialRequest struct {
 	Provider string `json:"provider"`
 	APIKey   string `json:"apiKey"`
 	Model    string `json:"model"`
+	Primary  bool   `json:"primary"`
 }
 
 // LLMCredential handles POST (register/replace) and DELETE (clear) of the
@@ -420,16 +429,39 @@ func (h *AuthHandler) LLMCredential(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if err := h.credentials.SetCredential(r.Context(), sess.UserID, req.Provider, req.APIKey, req.Model); err != nil {
-			// A rejected provider / empty key is the caller's mistake (400); a
-			// storage failure is ours (500). Both are logged; neither echoes the key.
-			slog.Warn("auth: set llm credential failed", "error", err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if strings.TrimSpace(req.Provider) == "" {
+			http.Error(w, "provider is required", http.StatusBadRequest)
+			return
+		}
+		switch {
+		case req.APIKey != "":
+			// Register or rotate this provider's key (optionally make it primary).
+			if err := h.credentials.SetCredential(r.Context(), sess.UserID, req.Provider, req.APIKey, req.Model, req.Primary); err != nil {
+				// A rejected provider / empty key is the caller's mistake (400); a
+				// storage failure is ours (500). Both are logged; neither echoes the key.
+				slog.Warn("auth: set llm credential failed", "error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		case req.Primary:
+			// Flip the primary to an already-registered provider (no key re-entry).
+			if err := h.credentials.SetPrimaryProvider(r.Context(), sess.UserID, req.Provider); err != nil {
+				slog.Warn("auth: set primary provider failed", "error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		default:
+			http.Error(w, "api key is required", http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodDelete:
-		if err := h.credentials.DeleteCredential(r.Context(), sess.UserID); err != nil {
+		provider := strings.TrimSpace(r.URL.Query().Get("provider"))
+		if provider == "" {
+			http.Error(w, "provider query parameter is required", http.StatusBadRequest)
+			return
+		}
+		if err := h.credentials.DeleteCredential(r.Context(), sess.UserID, provider); err != nil {
 			slog.Error("auth: delete llm credential failed", "error", err)
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
