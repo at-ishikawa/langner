@@ -53,16 +53,27 @@ auth:
   # `state` cookie (the sole browser cookie left — same-site to the API host).
   cookie_secure: true
   cookie_samesite: lax
-  # SECRETS — keep out of committed files; env var or a private/uncommitted config:
-  #   GOOGLE_CLIENT_SECRET        the OAuth client secret
-  #   TOKEN_SIGNING_KEY           REQUIRED. Signs the langner access JWT (HS256)
+  # SECRETS — keep out of committed files. Set them as env vars, or as the
+  # matching keys in a gitignored config.yml (copy this file). `make dev` does
+  # NOT generate these for you (except INFERENCE_MODE=mock, which uses fixed
+  # dev-only keys for the offline grader):
+  #   GOOGLE_CLIENT_SECRET        the OAuth client secret (env var)
+  #   TOKEN_SIGNING_KEY  /  token_signing_key
+  #                               REQUIRED. Signs the langner access JWT (HS256)
   #                               for BOTH web and CLI, and keys the OAuth CSRF
   #                               `state`. The server refuses to start without it.
   #                               Generate a secret, e.g. `openssl rand -hex 32`.
-  #   CREDENTIAL_ENCRYPTION_KEY   32-byte (hex/base64) AES-256 key that encrypts
+  #   CREDENTIAL_ENCRYPTION_KEY  /  credential_encryption_key
+  #                               32-byte (hex/base64) AES-256 key that encrypts
   #                               each user's LLM API key at rest. Required when
   #                               inference.mode is "user". MUST differ from
-  #                               TOKEN_SIGNING_KEY.
+  #                               TOKEN_SIGNING_KEY. If this server shares a
+  #                               database with another deployment the value MUST
+  #                               match it, or decrypt-on-read fails with
+  #                               "cipher: message authentication failed".
+  # In a private config.yml the two keys go here, e.g.:
+  #   token_signing_key: "REPLACE_WITH_HEX_32_BYTES"
+  #   credential_encryption_key: "REPLACE_WITH_DIFFERENT_HEX_32_BYTES"
   # No email/name is stored, so the only secret encrypted at rest is the LLM key.
 
 # Notebook ownership + public/private visibility (auth Phase 3). Content stays a
