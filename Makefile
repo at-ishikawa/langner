@@ -21,8 +21,17 @@ setup:
 
 # `make dev` runs with auth ALWAYS ON (there is no ungated mode). The server
 # fails fast without TOKEN_SIGNING_KEY and requires Postgres, so we start the
-# database and generate a DEV-ONLY signing key into a GITIGNORED file (this repo
-# is public — never commit keys) and source it for the server.
+# database and launch the server. This repo is PUBLIC, so `make dev` NEVER
+# generates or commits secrets — you supply them yourself:
+#   - Real grading (default, INFERENCE_MODE=user): set TOKEN_SIGNING_KEY and
+#     CREDENTIAL_ENCRYPTION_KEY as the token_signing_key / credential_encryption_key
+#     keys in a gitignored config.yml (copy config.example.yml), or export them in
+#     your environment. Generate each with `openssl rand -hex 32`; they MUST
+#     differ. If your dev server points at a SHARED/prod database these MUST equal
+#     that deployment's values, or decrypt-on-read of stored per-user keys fails
+#     with "cipher: message authentication failed".
+#   - Offline grader: `INFERENCE_MODE=mock make dev` needs NO secrets — mock mode
+#     supplies fixed dev-only keys and grades with a deterministic matcher.
 #
 # To actually SIGN IN you must also supply your own Google OAuth credentials:
 # google_client_id, redirect_url, frontend_url, and allowed_emails in your
@@ -30,33 +39,14 @@ setup:
 # GOOGLE_CLIENT_SECRET exported in your environment.
 #
 # Grading is PER-USER: there is no system OPENAI_API_KEY/GEMINI_API_KEY. Register
-# your own provider key in the app's Settings page (the dev CREDENTIAL_ENCRYPTION_KEY
-# generated below backs that), or run `INFERENCE_MODE=mock make dev` for the
-# deterministic offline grader.
-AUTH_DEV_ENV := .dev-auth.env
+# your own provider key in the app's Settings page (CREDENTIAL_ENCRYPTION_KEY
+# backs that).
 
 .PHONY: dev-backend
 dev-backend:
 	docker compose up -d --wait
 	$(MAKE) -C backend build
-	@touch $(AUTH_DEV_ENV)
-	@# Generate a DEV-ONLY key ONLY when you haven't supplied one (env or
-	@# .dev-auth.env). If your dev server points at a SHARED/prod database, set
-	@# both keys to that deployment's values — e.g. CREDENTIAL_ENCRYPTION_KEY must
-	@# match or decrypt-on-read of existing per-user credentials fails — and this
-	@# never overwrites them.
-	@if [ -z "$$TOKEN_SIGNING_KEY" ] && ! grep -q '^TOKEN_SIGNING_KEY=' $(AUTH_DEV_ENV); then \
-		printf 'TOKEN_SIGNING_KEY=%s\n' "$$(openssl rand -hex 32)" >> $(AUTH_DEV_ENV); \
-		echo "Generated DEV-ONLY TOKEN_SIGNING_KEY -> $(AUTH_DEV_ENV) (gitignored)."; \
-	fi
-	@if [ -z "$$CREDENTIAL_ENCRYPTION_KEY" ] && ! grep -q '^CREDENTIAL_ENCRYPTION_KEY=' $(AUTH_DEV_ENV); then \
-		printf 'CREDENTIAL_ENCRYPTION_KEY=%s\n' "$$(openssl rand -hex 32)" >> $(AUTH_DEV_ENV); \
-		echo "Generated DEV-ONLY CREDENTIAL_ENCRYPTION_KEY -> $(AUTH_DEV_ENV) (gitignored)."; \
-	fi
-	@# .dev-auth.env is authoritative (it is sourced below), so to pin keys to a
-	@# shared/prod deployment put them THERE. Google sign-in also needs
-	@# google_client_id + allowed_emails in your config and GOOGLE_CLIENT_SECRET.
-	set -a; . ./$(AUTH_DEV_ENV); set +a; ./langner-server
+	./langner-server
 
 .PHONY: dev-frontend
 dev-frontend:

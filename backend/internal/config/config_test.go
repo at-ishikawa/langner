@@ -349,16 +349,21 @@ func TestConfigLoader_Load_MockInferenceDisablesShuffle(t *testing.T) {
 		cfg, err := loader.Load()
 		require.NoError(t, err)
 		assert.True(t, cfg.Quiz.DisableShuffle, "mock inference must disable card shuffle")
-		// Mock mode also provides a fixed 32-byte test credential key so the
-		// per-user LLM key flow is exercisable in e2e without a real secret.
+		// Mock mode also provides fixed dev-only auth keys so the auth-gated app
+		// (sign-in + the per-user LLM key flow) is exercisable in e2e / offline
+		// `INFERENCE_MODE=mock make dev` without real secrets — `make dev` no
+		// longer generates them.
 		assert.Len(t, []byte(cfg.Auth.CredentialEncryptionKey), 32,
 			"mock inference must supply a valid 32-byte test credential key")
+		assert.NotEmpty(t, cfg.Auth.TokenSigningKey,
+			"mock inference must supply a fixed dev token signing key")
 	})
 
-	t.Run("explicit CREDENTIAL_ENCRYPTION_KEY is not overridden in mock mode", func(t *testing.T) {
+	t.Run("explicit keys are not overridden in mock mode", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(configPath, []byte("# empty\n"), 0644))
 		t.Setenv("INFERENCE_MODE", "mock")
 		t.Setenv("CREDENTIAL_ENCRYPTION_KEY", "a-different-explicit-32byte-key!!")
+		t.Setenv("TOKEN_SIGNING_KEY", "an-explicit-token-signing-key-value")
 
 		loader, err := NewConfigLoader(configPath)
 		require.NoError(t, err)
@@ -366,9 +371,10 @@ func TestConfigLoader_Load_MockInferenceDisablesShuffle(t *testing.T) {
 		cfg, err := loader.Load()
 		require.NoError(t, err)
 		assert.Equal(t, "a-different-explicit-32byte-key!!", cfg.Auth.CredentialEncryptionKey)
+		assert.Equal(t, "an-explicit-token-signing-key-value", cfg.Auth.TokenSigningKey)
 	})
 
-	t.Run("non-mock leaves shuffle on and sets no test credential key (prod)", func(t *testing.T) {
+	t.Run("non-mock leaves shuffle on and injects no dev keys (prod)", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(configPath, []byte("inference:\n  mode: openai\n"), 0644))
 
 		loader, err := NewConfigLoader(configPath)
@@ -378,6 +384,7 @@ func TestConfigLoader_Load_MockInferenceDisablesShuffle(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, cfg.Quiz.DisableShuffle, "live inference must keep shuffle enabled")
 		assert.Empty(t, cfg.Auth.CredentialEncryptionKey, "live inference must not inject a test key")
+		assert.Empty(t, cfg.Auth.TokenSigningKey, "live inference must not inject a test signing key")
 	})
 }
 
