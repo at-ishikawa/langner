@@ -114,6 +114,20 @@ describe("SessionCompletePage", () => {
     expect(pushMock).toHaveBeenCalledWith("/quiz");
   });
 
+  it("Back to Start goes to /quiz without bouncing to home (race regression)", () => {
+    // reset() empties the results, which fires the "no results → go home"
+    // effect. That effect must NOT race the push to /quiz: Back to Start must
+    // land on /quiz, never on "/".
+    useQuizStore.setState({ results: mockResults });
+
+    renderPage();
+
+    fireEvent.click(screen.getByText("Back to Start"));
+
+    expect(pushMock).toHaveBeenCalledWith("/quiz");
+    expect(pushMock).not.toHaveBeenCalledWith("/");
+  });
+
   it("shows Incorrect section before Correct section", () => {
     useQuizStore.setState({ results: mockResults });
     renderPage();
