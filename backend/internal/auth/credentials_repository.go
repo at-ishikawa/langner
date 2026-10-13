@@ -126,10 +126,21 @@ func (r *CredentialsRepository) SetPrimaryProvider(ctx context.Context, userID i
 }
 
 // setPrimaryTx flips is_primary so exactly `provider` is primary for the user.
-// A single statement keeps it consistent with the one-primary unique index.
+// It clears every primary first, then sets the one — two statements in the tx,
+// not `SET is_primary = (provider = $2)` in one. The one-primary index
+// (idx_user_llm_credentials_primary) is a non-deferrable partial unique index,
+// so a single multi-row UPDATE can transiently hold two primary rows (the new
+// one set true before the old is cleared) and the index rejects it mid-statement
+// (SQLSTATE 23505). Clearing all to false first means the set-true step never
+// collides.
 func (r *CredentialsRepository) setPrimaryTx(ctx context.Context, tx *sqlx.Tx, userID int64, provider string) error {
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE user_llm_credentials SET is_primary = (provider = $2) WHERE user_id = $1`,
+		`UPDATE user_llm_credentials SET is_primary = FALSE WHERE user_id = $1 AND is_primary`,
+		userID); err != nil {
+		return fmt.Errorf("clear primary provider: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE user_llm_credentials SET is_primary = TRUE WHERE user_id = $1 AND provider = $2`,
 		userID, provider); err != nil {
 		return fmt.Errorf("set primary provider: %w", err)
 	}
