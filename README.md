@@ -88,6 +88,8 @@ langner notebooks list                 # see your notebooks
 langner notebooks pull <notebook-id>   # download it again to edit
 ```
 
+The CLI targets the deployed backend by default. To run against a local `make dev` server, set `LANGNER_SERVER=http://localhost:8080` (or pass `--server http://localhost:8080`); `langner login` remembers whichever server you sign in to.
+
 A bundle is a directory with an `index.yml` and the files it references (see `examples/user-notebooks/idioms/`).
 
 Saved words from all sources appear in the Learn section and are available for quizzes.
