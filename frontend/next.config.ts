@@ -44,21 +44,16 @@ const nextConfig: NextConfig = {
   env: apiBaseUrl ? { NEXT_PUBLIC_API_BASE_URL: apiBaseUrl } : {},
   allowedDevOrigins: apiHost ? [apiHost] : [],
   async rewrites() {
-    // Proxy ONLY the cookie-bearing auth endpoints onto this origin: the Google
-    // sign-in/callback (so the OAuth state + refresh cookies are first-party) and
-    // the token refresh/revoke endpoints the SPA calls. Everything else (the quiz
-    // RPCs, /auth/me) keeps talking to the API directly with the bearer token.
-    //
-    // The device-login verification page is GET /auth/device (the bare path the
-    // CLI prints as verification_uri, where the user types the code). It must be
-    // proxied EXPLICITLY: `/auth/device/:path*` only matches the sub-paths
-    // (/code, /token, /deny) and, for the bare path, forwards to `/auth/device/`
-    // with a trailing slash that the backend's exact `/auth/device` route 404s.
+    // Proxy ONLY the cookie-bearing WEB auth endpoints onto this origin: the
+    // Google sign-in/callback (so the OAuth state + refresh cookies are
+    // first-party) and the token refresh/revoke endpoints the SPA calls.
+    // Everything else (the quiz RPCs, /auth/me) talks to the API directly with
+    // the bearer token. The CLI device-login flow is NOT proxied: it hits the API
+    // directly (incl. the GET /auth/device approval page), so it needs no cookie
+    // and no first-party origin here.
     return [
       { source: "/auth/google/:path*", destination: `${authProxyTarget}/auth/google/:path*` },
       { source: "/auth/token/:path*", destination: `${authProxyTarget}/auth/token/:path*` },
-      { source: "/auth/device", destination: `${authProxyTarget}/auth/device` },
-      { source: "/auth/device/:path*", destination: `${authProxyTarget}/auth/device/:path*` },
     ];
   },
 };
