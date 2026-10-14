@@ -48,9 +48,16 @@ const nextConfig: NextConfig = {
     // sign-in/callback (so the OAuth state + refresh cookies are first-party) and
     // the token refresh/revoke endpoints the SPA calls. Everything else (the quiz
     // RPCs, /auth/me) keeps talking to the API directly with the bearer token.
+    //
+    // The device-login verification page is GET /auth/device (the bare path the
+    // CLI prints as verification_uri, where the user types the code). It must be
+    // proxied EXPLICITLY: `/auth/device/:path*` only matches the sub-paths
+    // (/code, /token, /deny) and, for the bare path, forwards to `/auth/device/`
+    // with a trailing slash that the backend's exact `/auth/device` route 404s.
     return [
       { source: "/auth/google/:path*", destination: `${authProxyTarget}/auth/google/:path*` },
       { source: "/auth/token/:path*", destination: `${authProxyTarget}/auth/token/:path*` },
+      { source: "/auth/device", destination: `${authProxyTarget}/auth/device` },
       { source: "/auth/device/:path*", destination: `${authProxyTarget}/auth/device/:path*` },
     ];
   },
