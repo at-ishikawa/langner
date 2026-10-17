@@ -143,6 +143,35 @@ func (r *NotebookFileRepository) PushBundle(ctx context.Context, nb UserNotebook
 	return nil
 }
 
+// DeleteUserNotebook removes a notebook entirely: its stored blobs
+// (notebook_files), its per-notebook membership links (notebook_notes), and its
+// registry/ownership row (notebooks). It deliberately does NOT delete `notes`
+// rows — those are globally deduped by (usage, entry) and shared across
+// notebooks and owners, so dropping them would corrupt other notebooks. The
+// now-unreferenced notes are harmless (nothing serves them without a notebook
+// membership). Caller must have already authorized the delete (ownership check).
+func (r *NotebookFileRepository) DeleteUserNotebook(ctx context.Context, notebookID string) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM notebook_notes WHERE notebook_id = $1`, notebookID); err != nil {
+		return fmt.Errorf("delete notebook_notes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM notebook_files WHERE notebook_id = $1`, notebookID); err != nil {
+		return fmt.Errorf("delete notebook_files: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM notebooks WHERE notebook_id = $1`, notebookID); err != nil {
+		return fmt.Errorf("delete notebooks row: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete: %w", err)
+	}
+	return nil
+}
+
 // ImportShippedBundle stores a filesystem-catalog notebook under its EXISTING
 // id (no nb_ minting) so learning histories keyed by that id survive (design
 // §13.3). It upserts the notebooks registry row with source='shipped' and the

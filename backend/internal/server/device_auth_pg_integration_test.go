@@ -137,7 +137,6 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 	mux.Handle(quizPath, quizH)
 	mux.HandleFunc("/auth/device/code", deviceHandler.RequestCode)
 	mux.HandleFunc("/auth/device/token", deviceHandler.Token)
-	mux.HandleFunc("/auth/device", deviceHandler.ShowApprovalPage)
 	mux.HandleFunc("/auth/token/refresh", deviceHandler.Refresh)
 	mux.HandleFunc("/auth/token/revoke", deviceHandler.Revoke)
 	mux.HandleFunc("/auth/google/callback", authHandler.Callback)
@@ -154,10 +153,11 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 
-	// approveViaCallback simulates the browser approval: the approval page links
-	// to /auth/google/login?user_code=… which folds user_code into the signed
-	// state; the callback then binds the just-verified identity to the device
-	// row. We synthesize that signed state directly (standing in for the Google
+	// approveViaCallback simulates the browser approval: the frontend approval
+	// page links to /auth/google/login?user_code=… which folds user_code into the
+	// signed state; the callback then binds the just-verified identity to the
+	// device row and REDIRECTS back to the frontend (the API renders no HTML). We
+	// synthesize that signed state directly (standing in for the Google
 	// round-trip) and drive the callback with the matching state cookie.
 	approveViaCallback := func(t *testing.T, userCode string) {
 		t.Helper()
@@ -166,11 +166,11 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, srv.URL+"/auth/google/callback?state="+url.QueryEscape(stateVal)+"&code=any", nil)
 		require.NoError(t, err)
 		req.AddCookie(&http.Cookie{Name: stateCookieName, Value: stateVal})
-		resp, err := httpClient.Do(req)
+		resp, err := noRedirectClient.Do(req)
 		require.NoError(t, err)
-		body := readClose(t, resp)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Contains(t, body, "Approved")
+		readClose(t, resp)
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+		require.Contains(t, resp.Header.Get("Location"), "/auth/device?result=approved")
 	}
 
 	// runDeviceFlow requests a code, approves it via the OAuth callback (M3),

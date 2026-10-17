@@ -172,8 +172,12 @@ func extractTarGz(r io.Reader, dest string) error {
 // host) connection just for the migration and run it there. Any other port
 // (direct/session already) migrates on the runtime pool as-is.
 func migrateViaSessionPooler(cfg *config.Config, runtime *sqlx.DB) error {
+	// AllowAhead: the preview DB is shared across branches, so a concurrent PR
+	// that adds a later migration can leave it ahead of this branch's embedded
+	// set — benign for e2e, but strict Migrate would refuse. See
+	// database.MigrateUpAllowAhead.
 	if cfg.Database.Port != 6543 {
-		return database.Migrate(runtime, schemas.Migrations, "migrations")
+		return database.MigrateUpAllowAhead(runtime, schemas.Migrations, "migrations")
 	}
 	sessionCfg := cfg.Database
 	sessionCfg.Port = 5432
@@ -182,7 +186,7 @@ func migrateViaSessionPooler(cfg *config.Config, runtime *sqlx.DB) error {
 		return fmt.Errorf("open session pooler (5432) for migration: %w", err)
 	}
 	defer func() { _ = sdb.Close() }()
-	return database.Migrate(sdb, schemas.Migrations, "migrations")
+	return database.MigrateUpAllowAhead(sdb, schemas.Migrations, "migrations")
 }
 
 // IssueTestToken mints a langner access JWT for email (upserting its user row via

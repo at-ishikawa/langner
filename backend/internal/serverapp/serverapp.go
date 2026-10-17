@@ -352,8 +352,9 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	mux.HandleFunc("/auth/llm-credential", authSetup.Handler.LLMCredential)
 	mux.HandleFunc("/auth/device/code", authSetup.DeviceHandler.RequestCode)
 	mux.HandleFunc("/auth/device/token", authSetup.DeviceHandler.Token)
+	// Deny is a plain redirect endpoint; the approval PAGE (GET /auth/device) is a
+	// frontend route — the API renders no user-facing HTML.
 	mux.HandleFunc("/auth/device/deny", authSetup.DeviceHandler.Deny)
-	mux.HandleFunc("/auth/device", authSetup.DeviceHandler.ShowApprovalPage)
 	mux.HandleFunc("/auth/token/refresh", authSetup.DeviceHandler.Refresh)
 	mux.HandleFunc("/auth/token/revoke", authSetup.DeviceHandler.Revoke)
 
@@ -490,7 +491,7 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*AuthComponents, error) {
 		RefreshTokens:   refreshTokens,
 		Tokens:          tokens,
 		FrontendURL:     cfg.Auth.FrontendURL,
-		VerificationURI: deviceVerificationURI(cfg.Auth.RedirectURL),
+		VerificationURI: deviceVerificationURI(cfg.Auth.FrontendURL),
 		CookieSecure:    cfg.Auth.CookieSecure,
 		CookieSameSite:  parseSameSite(cfg.Auth.CookieSameSite),
 	})
@@ -498,9 +499,11 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*AuthComponents, error) {
 }
 
 // deviceVerificationURI derives the browser approval URL (…/auth/device) from
-// the OAuth redirect_url's origin. Falls back to a bare path if it can't parse.
-func deviceVerificationURI(redirectURL string) string {
-	u, err := url.Parse(redirectURL)
+// the FRONTEND origin: the approval page is a frontend route (the API renders no
+// user-facing HTML; it only redirects). Falls back to a bare path if it can't
+// parse.
+func deviceVerificationURI(frontendURL string) string {
+	u, err := url.Parse(frontendURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "/auth/device"
 	}

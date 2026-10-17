@@ -3,8 +3,10 @@ package clicmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -55,11 +57,21 @@ func runLogin(ctx context.Context, store *CredentialStore, server string, makeDe
 		return fmt.Errorf("request device code from %s: %w", server, err)
 	}
 
-	fmt.Printf("To sign in, open:  %s\n", dc.VerificationURI)
-	fmt.Printf("and enter code:    %s\n", dc.UserCode)
-	if dc.VerificationURIComplete != "" {
-		openBrowser(dc.VerificationURIComplete)
+	// Use the verification_uri the server returns. The approval page is now a
+	// FRONTEND route (the API serves no user-facing HTML), so the server points
+	// us at the frontend origin. Fall back to <server>/auth/device only for an
+	// older server that doesn't populate it.
+	verifyURL := dc.VerificationURI
+	if verifyURL == "" {
+		verifyURL = strings.TrimRight(server, "/") + "/auth/device"
 	}
+	openURL := dc.VerificationURIComplete
+	if openURL == "" {
+		openURL = verifyURL + "?user_code=" + dc.UserCode
+	}
+	fmt.Printf("To sign in, open:  %s\n", verifyURL)
+	fmt.Printf("and enter code:    %s\n", dc.UserCode)
+	openBrowser(openURL)
 	fmt.Println("(waiting for approval…)")
 
 	interval := dc.Interval
@@ -200,6 +212,12 @@ func NewWhoamiCommand() *cobra.Command {
 // 60s of expiry. A missing entry is a hard error (no cross-server fallback); a
 // failed refresh clears the entry and tells the user to log in again.
 func ensureAccessToken(ctx context.Context, store *CredentialStore, server string) (string, error) {
+	// A pre-minted bearer in LANGNER_TOKEN short-circuits the credential store and
+	// the refresh flow — the non-interactive path CI/e2e uses to drive the CLI
+	// with a seeded access token (paired with LANGNER_SERVER), no browser login.
+	if t := strings.TrimSpace(os.Getenv("LANGNER_TOKEN")); t != "" {
+		return t, nil
+	}
 	creds, ok := store.Get(server)
 	if !ok {
 		return "", notLoggedInErr(server)

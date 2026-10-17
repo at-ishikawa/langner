@@ -44,14 +44,17 @@ const nextConfig: NextConfig = {
   env: apiBaseUrl ? { NEXT_PUBLIC_API_BASE_URL: apiBaseUrl } : {},
   allowedDevOrigins: apiHost ? [apiHost] : [],
   async rewrites() {
-    // Proxy ONLY the cookie-bearing auth endpoints onto this origin: the Google
-    // sign-in/callback (so the OAuth state + refresh cookies are first-party) and
-    // the token refresh/revoke endpoints the SPA calls. Everything else (the quiz
-    // RPCs, /auth/me) keeps talking to the API directly with the bearer token.
+    // Proxy ONLY the cookie-bearing WEB auth endpoints onto this origin: the
+    // Google sign-in/callback (so the OAuth state + refresh cookies are
+    // first-party) and the token refresh/revoke endpoints the SPA calls.
+    // Everything else (the quiz RPCs, /auth/me) talks to the API directly with
+    // the bearer token. The CLI device-login flow is NOT proxied: its approval
+    // page is a FRONTEND route (/auth/device) whose form submits straight to the
+    // API (Google sign-in + deny), so it needs no cookie and no first-party
+    // origin here.
     return [
       { source: "/auth/google/:path*", destination: `${authProxyTarget}/auth/google/:path*` },
       { source: "/auth/token/:path*", destination: `${authProxyTarget}/auth/token/:path*` },
-      { source: "/auth/device/:path*", destination: `${authProxyTarget}/auth/device/:path*` },
     ];
   },
 };

@@ -273,7 +273,38 @@ func NewNotebooksCommand() *cobra.Command {
 		Use:   "notebooks",
 		Short: "Manage your own notebooks on a langner server (push / pull / list)",
 	}
-	cmd.AddCommand(newNotebooksPushCommand(), newNotebooksPullCommand(), newNotebooksListCommand())
+	cmd.AddCommand(newNotebooksPushCommand(), newNotebooksPullCommand(), newNotebooksListCommand(), newNotebooksDeleteCommand())
+	return cmd
+}
+
+func newNotebooksDeleteCommand() *cobra.Command {
+	var server string
+	cmd := &cobra.Command{
+		Use:   "delete <nb_id>",
+		Short: "Delete one of your notebooks on a server",
+		Long: `Delete a notebook you own, by its id.
+
+Find the id with 'langner notebooks list' (the NOTEBOOK ID column). This removes
+the notebook's stored content and ownership; it cannot be undone.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := LoadCredentials()
+			if err != nil {
+				return err
+			}
+			target := store.ResolveServer(server)
+			client := newNotebookClient(store, target)
+			resp, err := client.DeleteNotebook(cmd.Context(), connect.NewRequest(&apiv1.DeleteNotebookRequest{
+				NotebookId: args[0],
+			}))
+			if err != nil {
+				return fmt.Errorf("delete notebook: %w", err)
+			}
+			fmt.Printf("Deleted notebook %s\n", resp.Msg.NotebookId)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&server, "server", "", "server base URL")
 	return cmd
 }
 

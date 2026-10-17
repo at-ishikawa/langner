@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // register the pgx driver under the name "pgx"
 	migrate "github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	_ "github.com/jackc/pgx/v5/stdlib" // register the pgx driver under the name "pgx"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/at-ishikawa/langner/internal/config"
@@ -119,6 +119,74 @@ func Migrate(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 	return nil
+}
+
+// MigrateUpAllowAhead applies pending migrations like Migrate, but treats a
+// database whose recorded version is at or AHEAD of the newest migration in
+// migrationsFS as success (a no-op) instead of failing.
+//
+// This exists ONLY for the e2e preview seed, where a SINGLE preview database is
+// reused across branches/PRs. A concurrent branch that adds a later migration
+// advances the shared DB past an older branch's embedded migration set, and
+// golang-migrate then refuses to run on that branch with "no migration found
+// for version N". The newer (additive) tables are harmless to the older
+// branch's e2e, so being behind the live schema is fine. Production keeps the
+// strict Migrate — this tolerance must never hide a real version gap there.
+func MigrateUpAllowAhead(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
+	src, err := iofs.New(migrationsFS, dir)
+	if err != nil {
+		return fmt.Errorf("init migration source: %w", err)
+	}
+	driver, err := migratepgx.WithInstance(db.DB, &migratepgx.Config{})
+	if err != nil {
+		return fmt.Errorf("init migration driver: %w", err)
+	}
+	m, err := migrate.NewWithInstance("iofs", src, "pgx5", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+
+	maxSrc, err := maxMigrationVersion(migrationsFS, dir)
+	if err != nil {
+		return fmt.Errorf("scan migration versions: %w", err)
+	}
+	// A clean DB already at/ahead of our newest migration needs nothing applied
+	// (and m.Up() would error that it can't find the DB's version in our source).
+	if cur, dirty, verr := m.Version(); verr == nil && !dirty && maxSrc > 0 && cur >= maxSrc {
+		return nil
+	}
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+	return nil
+}
+
+// maxMigrationVersion returns the highest NNN numeric prefix among the
+// *.up.sql files in dir of migrationsFS (0 when there are none).
+func maxMigrationVersion(migrationsFS fs.FS, dir string) (uint, error) {
+	entries, err := fs.ReadDir(migrationsFS, dir)
+	if err != nil {
+		return 0, err
+	}
+	var highest uint
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+		prefix := name
+		if i := strings.IndexFunc(name, func(r rune) bool { return r < '0' || r > '9' }); i >= 0 {
+			prefix = name[:i]
+		}
+		n, perr := strconv.ParseUint(prefix, 10, 64)
+		if perr != nil {
+			continue
+		}
+		if uint(n) > highest {
+			highest = uint(n)
+		}
+	}
+	return highest, nil
 }
 
 // Rollback reverses the most recent `steps` applied migrations by running their

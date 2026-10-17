@@ -9,8 +9,11 @@ import (
 )
 
 // DefaultServer is the compiled-in server base URL used when neither --server,
-// LANGNER_SERVER, nor a stored default_server selects one (design §10 Q6).
-const DefaultServer = "http://localhost:8080"
+// LANGNER_SERVER, nor a stored default_server selects one (design §10 Q6). It
+// points at the DEPLOYED backend because the CLI's job is managing notebooks on
+// the live app; for a local `make dev` server set LANGNER_SERVER=http://localhost:8080
+// (or pass --server http://localhost:8080).
+const DefaultServer = "https://langner-api.vercel.app"
 
 // ServerCredentials holds the tokens issued by one server. The refresh token is
 // the long-lived opaque secret; the access token is the short-lived bearer.
