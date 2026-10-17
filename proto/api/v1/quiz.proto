@@ -180,6 +180,11 @@ message Flashcard {
   string concept_head = 5;
   repeated string concept_members = 6;
   string concept_meaning = 7;
+  // notebook_name is the id of the notebook this card was loaded from, echoed
+  // back on SubmitAnswer so a word shared across notebooks (one sense_id, one
+  // note_id, different meaning/example per notebook) resolves its feedback card
+  // to the originating notebook. See SubmitReverseAnswerRequest.notebook_name.
+  string notebook_name = 8;
 }
 
 message Example {
@@ -217,6 +222,9 @@ message SubmitAnswerRequest {
   string answer = 2;
   int64 response_time_ms = 3;
   bool is_skipped = 4;
+  // notebook_name — see Flashcard.notebook_name. Disambiguates a word shared
+  // across notebooks when resolving the feedback card after grading.
+  string notebook_name = 5;
 }
 
 message SubmitAnswerResponse {
@@ -295,6 +303,14 @@ message SubmitReverseAnswerRequest {
   // where the user has already had a chance to provide the exact word.
   bool accept_synonym_as_correct = 4;
   bool is_skipped = 5;
+  // notebook_name is the id of the notebook the quizzed card was loaded from
+  // (echoed back from the StartReverseQuiz response's ReverseFlashcard). The
+  // same word can appear in several notebooks under ONE globally-unique
+  // sense_id (note_id), so note_id alone cannot say which notebook's card the
+  // learner saw — its meaning/example/part-of-speech differ per notebook. The
+  // backend uses this to resolve the feedback card to the originating
+  // notebook. Empty falls back to the legacy first-match-by-sense-id behavior.
+  string notebook_name = 6;
 }
 
 message SubmitReverseAnswerResponse {

@@ -275,7 +275,7 @@ func (s *Service) LoadRelearnPool(userID int64, windowStart time.Time) ([]Relear
 	if err != nil {
 		return nil, fmt.Errorf("load words for relearn pool: %w", err)
 	}
-	vocabByID, vocabByExpr, vocabByNotebookExpr := relearnVocabIndex(words)
+	vocabByID, vocabByExpr, vocabByNotebookExpr, vocabByNotebookID := relearnVocabIndex(words)
 	// originFamilies groups every non-excluded word by the SAME origin its miss
 	// would fold under (primaryOriginPart), so an origin card can show the wider
 	// word family as post-answer reference. Excluded words (skipped_at) are left
@@ -287,12 +287,24 @@ func (s *Service) LoadRelearnPool(userID int64, windowStart time.Time) ([]Relear
 	}
 
 	// resolveWord maps a wrong-word candidate to its vocabulary card, mirroring
-	// MatchesEntry: by stable id first (so same-spelling homographs never
-	// collide), then by (notebook, expression), then by expression alone for
-	// legacy id-less candidates. Used by both the recognition/reverse branch and
-	// the etymology-origin branch, whose missed items are now WORDS resolved the
+	// MatchesEntry: by (notebook, stable id) first, then bare id, then
+	// (notebook, expression), then expression alone for legacy id-less
+	// candidates. Used by both the recognition/reverse branch and the
+	// etymology-origin branch, whose missed items are now WORDS resolved the
 	// same way (invariant L2).
+	//
+	// The (notebook, id) step must come BEFORE bare id: the same word can live
+	// in several notebooks under ONE sense_id with a DIFFERENT
+	// meaning/example/part-of-speech in each, and vocabByID is last-write-wins
+	// across notebooks — so resolving a shared word by bare id shows whichever
+	// notebook loaded last, not the one the learner missed. The candidate
+	// already carries its originating notebookName, so scope to it first.
 	resolveWord := func(c relearnCandidate) (FreeformCard, bool) {
+		if c.id != "" && c.notebookName != "" {
+			if fc, ok := vocabByNotebookID[strings.ToLower(c.notebookName)+relearnKeySep+c.id]; ok {
+				return fc, true
+			}
+		}
 		if c.id != "" {
 			if fc, ok := vocabByID[c.id]; ok {
 				return fc, true
@@ -610,18 +622,27 @@ func collapseVocabDirections(candidates map[string]relearnCandidate) map[string]
 	return out
 }
 
-// relearnVocabIndex indexes the given vocabulary words by stable id (the
-// canonical key), and — as a legacy fallback for id-less candidates — also by
+// relearnVocabIndex indexes the given vocabulary words by (notebook, stable id)
+// — the unambiguous key for a word that may appear in several notebooks under
+// one sense_id with a different meaning/example per notebook — and by bare
+// stable id, and — as a legacy fallback for id-less candidates — also by
 // (notebook, expression) and by expression alone, so the pool can resolve a
 // wrong word to its meaning and context. The caller loads the words once (with
 // s.LoadAllWords) and shares the slice with the origin-family builder.
-func relearnVocabIndex(words []FreeformCard) (byID map[string]FreeformCard, byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard) {
+//
+// byID is last-write-wins across notebooks and so is only a fallback for
+// candidates with no notebook; resolveWord consults byNotebookID first.
+func relearnVocabIndex(words []FreeformCard) (byID, byExpr, byNotebookExpr, byNotebookID map[string]FreeformCard) {
 	byID = make(map[string]FreeformCard, len(words))
 	byExpr = make(map[string]FreeformCard, len(words))
 	byNotebookExpr = make(map[string]FreeformCard, len(words))
+	byNotebookID = make(map[string]FreeformCard, len(words))
 	for _, w := range words {
 		if w.ID != "" {
 			byID[w.ID] = w
+			if w.NotebookName != "" {
+				byNotebookID[strings.ToLower(w.NotebookName)+relearnKeySep+w.ID] = w
+			}
 		}
 		for _, e := range []string{w.Expression, w.OriginalExpression} {
 			e = strings.ToLower(strings.TrimSpace(e))
@@ -632,7 +653,7 @@ func relearnVocabIndex(words []FreeformCard) (byID map[string]FreeformCard, byEx
 			byNotebookExpr[strings.ToLower(w.NotebookName)+relearnKeySep+e] = w
 		}
 	}
-	return byID, byExpr, byNotebookExpr
+	return byID, byExpr, byNotebookExpr, byNotebookID
 }
 
 // originFamilyKey is the shared (origin|language) key, lowercased, that both the

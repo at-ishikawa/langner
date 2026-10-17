@@ -158,6 +158,7 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		flashcards = append(flashcards, &apiv1.Flashcard{
 			NoteId: noteID, Entry: card.Entry, Examples: examples, OriginalEntry: card.OriginalEntry,
 			ConceptHead: card.ConceptHead, ConceptMembers: card.ConceptMembers, ConceptMeaning: card.ConceptMeaning,
+			NotebookName: card.NotebookName,
 		})
 	}
 	h.mu.Lock()
@@ -173,7 +174,7 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	}
 	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
-	card, ok := h.resolveCard(ctx, userID, noteID)
+	card, ok := h.resolveCard(ctx, userID, noteID, req.Msg.GetNotebookName())
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID))
 	}
@@ -329,7 +330,7 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 // submit works even on a different/cold serverless instance than the one that
 // started the quiz. A legacy ephemeral session id (>= sessionIDBase) is read
 // from the in-memory store (same-instance only, as before).
-func (h *QuizHandler) resolveReverseCard(ctx context.Context, userID, noteID int64) (quiz.ReverseCard, bool) {
+func (h *QuizHandler) resolveReverseCard(ctx context.Context, userID, noteID int64, originNotebookID string) (quiz.ReverseCard, bool) {
 	// Fast path: the card is still in this instance's store (warm instance, or a
 	// legacy ephemeral session id). Checked first so same-instance submits and
 	// tests that inject the store keep working.
@@ -349,7 +350,10 @@ func (h *QuizHandler) resolveReverseCard(ctx context.Context, userID, noteID int
 	if err != nil || note == nil {
 		return quiz.ReverseCard{}, false
 	}
-	resolved, found, err := h.svc.ResolveReverseCardByNote(userID, note)
+	// originNotebookID disambiguates a word shared across notebooks under one
+	// sense_id, so the feedback card is the notebook the learner was quizzed
+	// from (not whichever card the loader emits first).
+	resolved, found, err := h.svc.ResolveReverseCardByNote(userID, note, originNotebookID)
 	if err != nil || !found {
 		return quiz.ReverseCard{}, false
 	}
@@ -359,7 +363,7 @@ func (h *QuizHandler) resolveReverseCard(ctx context.Context, userID, noteID int
 // resolveCard is the standard-quiz analogue of resolveReverseCard: store-first
 // (warm instance / legacy session id), else a real DB note id re-resolves via
 // the loader so the submit works on a cold/different serverless instance.
-func (h *QuizHandler) resolveCard(ctx context.Context, userID, noteID int64) (quiz.Card, bool) {
+func (h *QuizHandler) resolveCard(ctx context.Context, userID, noteID int64, originNotebookID string) (quiz.Card, bool) {
 	h.mu.Lock()
 	card, ok := h.noteStore[noteID]
 	h.mu.Unlock()
@@ -373,7 +377,9 @@ func (h *QuizHandler) resolveCard(ctx context.Context, userID, noteID int64) (qu
 	if err != nil || note == nil {
 		return quiz.Card{}, false
 	}
-	resolved, found, err := h.svc.ResolveCardByNote(userID, note)
+	// originNotebookID disambiguates a word shared across notebooks under one
+	// sense_id, so feedback shows the notebook the learner was quizzed from.
+	resolved, found, err := h.svc.ResolveCardByNote(userID, note, originNotebookID)
 	if err != nil || !found {
 		return quiz.Card{}, false
 	}
@@ -386,7 +392,7 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	}
 	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
-	card, ok := h.resolveReverseCard(ctx, userID, noteID)
+	card, ok := h.resolveReverseCard(ctx, userID, noteID, req.Msg.GetNotebookName())
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID))
 	}

@@ -96,6 +96,9 @@ export default function QuizCardPage() {
           answer: b.answer,
           responseTimeMs: b.responseTimeMs,
           isSkipped: b.isSkipped ?? false,
+          // Echo the quizzed notebook so a word shared across notebooks (one
+          // sense_id) resolves its feedback card to the right notebook.
+          notebookName: b.card.notebookName,
         })),
       });
       toFlush.forEach((b, i) => {

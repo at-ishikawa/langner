@@ -701,8 +701,13 @@ type Flashcard struct {
 	ConceptHead    string   `protobuf:"bytes,5,opt,name=concept_head,json=conceptHead,proto3" json:"concept_head,omitempty"`
 	ConceptMembers []string `protobuf:"bytes,6,rep,name=concept_members,json=conceptMembers,proto3" json:"concept_members,omitempty"`
 	ConceptMeaning string   `protobuf:"bytes,7,opt,name=concept_meaning,json=conceptMeaning,proto3" json:"concept_meaning,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// notebook_name is the id of the notebook this card was loaded from, echoed
+	// back on SubmitAnswer so a word shared across notebooks (one sense_id, one
+	// note_id, different meaning/example per notebook) resolves its feedback card
+	// to the originating notebook. See SubmitReverseAnswerRequest.notebook_name.
+	NotebookName  string `protobuf:"bytes,8,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Flashcard) Reset() {
@@ -780,6 +785,13 @@ func (x *Flashcard) GetConceptMembers() []string {
 func (x *Flashcard) GetConceptMeaning() string {
 	if x != nil {
 		return x.ConceptMeaning
+	}
+	return ""
+}
+
+func (x *Flashcard) GetNotebookName() string {
+	if x != nil {
+		return x.NotebookName
 	}
 	return ""
 }
@@ -1015,8 +1027,11 @@ type SubmitAnswerRequest struct {
 	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
 	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
 	IsSkipped      bool   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// notebook_name — see Flashcard.notebook_name. Disambiguates a word shared
+	// across notebooks when resolving the feedback card after grading.
+	NotebookName  string `protobuf:"bytes,5,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitAnswerRequest) Reset() {
@@ -1075,6 +1090,13 @@ func (x *SubmitAnswerRequest) GetIsSkipped() bool {
 		return x.IsSkipped
 	}
 	return false
+}
+
+func (x *SubmitAnswerRequest) GetNotebookName() string {
+	if x != nil {
+		return x.NotebookName
+	}
+	return ""
 }
 
 type SubmitAnswerResponse struct {
@@ -1562,8 +1584,16 @@ type SubmitReverseAnswerRequest struct {
 	// where the user has already had a chance to provide the exact word.
 	AcceptSynonymAsCorrect bool `protobuf:"varint,4,opt,name=accept_synonym_as_correct,json=acceptSynonymAsCorrect,proto3" json:"accept_synonym_as_correct,omitempty"`
 	IsSkipped              bool `protobuf:"varint,5,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// notebook_name is the id of the notebook the quizzed card was loaded from
+	// (echoed back from the StartReverseQuiz response's ReverseFlashcard). The
+	// same word can appear in several notebooks under ONE globally-unique
+	// sense_id (note_id), so note_id alone cannot say which notebook's card the
+	// learner saw — its meaning/example/part-of-speech differ per notebook. The
+	// backend uses this to resolve the feedback card to the originating
+	// notebook. Empty falls back to the legacy first-match-by-sense-id behavior.
+	NotebookName  string `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitReverseAnswerRequest) Reset() {
@@ -1629,6 +1659,13 @@ func (x *SubmitReverseAnswerRequest) GetIsSkipped() bool {
 		return x.IsSkipped
 	}
 	return false
+}
+
+func (x *SubmitReverseAnswerRequest) GetNotebookName() string {
+	if x != nil {
+		return x.NotebookName
+	}
+	return ""
 }
 
 type SubmitReverseAnswerResponse struct {
@@ -4807,7 +4844,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11StartQuizResponse\x121\n" +
 	"\n" +
 	"flashcards\x18\x01 \x03(\v2\x11.api.v1.FlashcardR\n" +
-	"flashcards\"\x83\x02\n" +
+	"flashcards\"\xa8\x02\n" +
 	"\tFlashcard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
 	"\x05entry\x18\x02 \x01(\tR\x05entry\x12+\n" +
@@ -4815,7 +4852,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x0eoriginal_entry\x18\x04 \x01(\tR\roriginalEntry\x12!\n" +
 	"\fconcept_head\x18\x05 \x01(\tR\vconceptHead\x12'\n" +
 	"\x0fconcept_members\x18\x06 \x03(\tR\x0econceptMembers\x12'\n" +
-	"\x0fconcept_meaning\x18\a \x01(\tR\x0econceptMeaning\"U\n" +
+	"\x0fconcept_meaning\x18\a \x01(\tR\x0econceptMeaning\x12#\n" +
+	"\rnotebook_name\x18\b \x01(\tR\fnotebookName\"U\n" +
 	"\aExample\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x18\n" +
 	"\aspeaker\x18\x02 \x01(\tR\aspeaker\x12\x1c\n" +
@@ -4833,13 +4871,14 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x06origin\x18\x01 \x01(\tR\x06origin\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
 	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x18\n" +
-	"\ameaning\x18\x04 \x01(\tR\ameaning\"\x98\x01\n" +
+	"\ameaning\x18\x04 \x01(\tR\ameaning\"\xbd\x01\n" +
 	"\x13SubmitAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
 	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
 	"\n" +
-	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\x93\x02\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\x12#\n" +
+	"\rnotebook_name\x18\x05 \x01(\tR\fnotebookName\"\x93\x02\n" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
@@ -4878,14 +4917,15 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x0fconcept_meaning\x18\t \x01(\tR\x0econceptMeaning\"R\n" +
 	"\x0fContextSentence\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\x12%\n" +
-	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\xda\x01\n" +
+	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\xff\x01\n" +
 	"\x1aSubmitReverseAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
 	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x129\n" +
 	"\x19accept_synonym_as_correct\x18\x04 \x01(\bR\x16acceptSynonymAsCorrect\x12\x1d\n" +
 	"\n" +
-	"is_skipped\x18\x05 \x01(\bR\tisSkipped\"\xfe\x02\n" +
+	"is_skipped\x18\x05 \x01(\bR\tisSkipped\x12#\n" +
+	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\"\xfe\x02\n" +
 	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
 	"\n" +

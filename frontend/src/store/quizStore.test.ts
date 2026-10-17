@@ -8,12 +8,14 @@ const mockFlashcards: Flashcard[] = [
     entry: "break the ice",
     originalEntry: "",
     examples: [{ text: "She told a joke to break the ice.", speaker: "Rachel" }],
+    notebookName: "idioms",
   },
   {
     noteId: BigInt(2),
     entry: "lose one's temper",
     originalEntry: "",
     examples: [],
+    notebookName: "idioms",
   },
 ];
 

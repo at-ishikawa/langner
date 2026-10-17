@@ -96,6 +96,11 @@ export default function ReverseQuizPage() {
     answer: b.answer,
     responseTimeMs: b.responseTimeMs,
     isSkipped: b.isSkipped ?? false,
+    // The same word can live in several notebooks under one note_id with a
+    // different meaning/example per notebook; echo the notebook the card was
+    // quizzed from so the feedback card resolves to it, not whichever notebook
+    // the backend lists first.
+    notebookName: b.card.notebookName,
   });
 
   const persistResults = () => {
