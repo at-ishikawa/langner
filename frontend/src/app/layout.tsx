@@ -1,4 +1,4 @@
-import { AppHeader } from "@/components/AppHeader";
+import { AppNav } from "@/components/AppNav";
 import { Providers } from "./providers";
 
 export const metadata = {
@@ -15,7 +15,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <Providers>
-          <AppHeader />
+          <AppNav />
           {children}
         </Providers>
       </body>

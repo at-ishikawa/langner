@@ -13,6 +13,7 @@ import {
 } from "@chakra-ui/react";
 import { quizClient, messageForRpcError } from "@/lib/client";
 import { useQuizStore, type Flashcard } from "@/store/quizStore";
+import { PageShell } from "@/components/PageShell";
 import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
 import { PronounceButton } from "@/components/PronounceButton";
@@ -185,7 +186,7 @@ export default function QuizCardPage() {
   };
 
   return (
-    <Box p={4} maxW="md" mx="auto">
+    <PageShell maxW="xl">
       <Box mb={4}>
         <Text fontSize="sm" mb={1}>
           {currentIndex + 1} / {total}
@@ -267,7 +268,7 @@ export default function QuizCardPage() {
             <VStack align="stretch" gap={2}>
               <Text color="red.500">{error}</Text>
               {pendingRetry && (
-                <Button w="full" colorPalette="blue" variant="outline" onClick={handleRetry}>
+                <Button w="full" colorPalette="brand" variant="outline" onClick={handleRetry}>
                   Retry grading
                 </Button>
               )}
@@ -275,6 +276,6 @@ export default function QuizCardPage() {
           )}
         </VStack>
       )}
-    </Box>
+    </PageShell>
   );
 }
