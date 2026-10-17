@@ -33,6 +33,10 @@ export interface Flashcard {
   entry: string;
   originalEntry: string;
   examples: Example[];
+  // notebookName is the id of the notebook this card was loaded from, echoed
+  // on submit so a word shared across notebooks (one sense_id) resolves its
+  // feedback card to the originating notebook.
+  notebookName: string;
   // Definitions-concept context. Empty conceptHead means the card is a
   // standalone vocabulary entry; non-empty means it represents a multi-
   // member concept whose member list is conceptMembers and umbrella

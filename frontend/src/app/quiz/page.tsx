@@ -314,6 +314,7 @@ export default function QuizHubPage() {
             (res.flashcards ?? []).map((f) => ({
               noteId: f.noteId, entry: f.entry, originalEntry: f.originalEntry, examples: f.examples,
               conceptHead: f.conceptHead, conceptMembers: f.conceptMembers, conceptMeaning: f.conceptMeaning,
+              notebookName: f.notebookName,
             })),
           );
           router.push("/quiz/standard");

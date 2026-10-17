@@ -63,7 +63,7 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	cards := make([]quiz.Card, len(answers))
 	resolved := make([]bool, len(answers))
 	for i, a := range answers {
-		if card, ok := h.resolveCard(ctx, userID, a.GetNoteId()); ok {
+		if card, ok := h.resolveCard(ctx, userID, a.GetNoteId(), a.GetNotebookName()); ok {
 			cards[i] = card
 			resolved[i] = true
 		} else {
@@ -149,7 +149,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	cards := make([]quiz.ReverseCard, len(answers))
 	resolved := make([]bool, len(answers))
 	for i, a := range answers {
-		if card, ok := h.resolveReverseCard(ctx, userID, a.GetNoteId()); ok {
+		if card, ok := h.resolveReverseCard(ctx, userID, a.GetNoteId(), a.GetNotebookName()); ok {
 			cards[i] = card
 			resolved[i] = true
 		} else {
