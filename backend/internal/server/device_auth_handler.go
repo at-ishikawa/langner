@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"time"
@@ -27,17 +26,18 @@ const (
 // DeviceAuthHandler serves the RFC 8628 device-authorization endpoints and the
 // refresh/revoke endpoints for the CLI bearer-token flow. They are plain HTTP,
 // mounted OUTSIDE the connect interceptor so an unauthenticated CLI can reach
-// them. There is no session cookie: the approval page routes the browser
-// through a one-shot Google sign-in (/auth/google/login?user_code=…), and the
-// OAuth callback binds the just-verified identity to the device row (M3, see
-// AuthHandler.Callback).
+// them. There is no session cookie: the FRONTEND approval page routes the
+// browser through a one-shot Google sign-in (/auth/google/login?user_code=…),
+// and the OAuth callback binds the just-verified identity to the device row
+// (M3, see AuthHandler.Callback). This handler renders NO user-facing HTML — it
+// returns JSON (the CLI endpoints) or redirects to the frontend (Deny).
 type DeviceAuthHandler struct {
 	deviceCodes   *auth.CLIDeviceCodeRepository
 	refreshTokens *auth.CLIRefreshTokenRepository
 	tokens        *auth.TokenSigner
 	frontendURL   string
-	// verificationURI is the API-host URL the user opens to approve, e.g.
-	// https://api.langner.app/auth/device.
+	// verificationURI is the FRONTEND URL the user opens to approve, e.g.
+	// https://langner.app/auth/device (a frontend route, not an API page).
 	verificationURI string
 	// cookieSecure / cookieSameSite style the WEB refresh cookie this handler
 	// sets when a browser refreshes (mirrors the OAuth state cookie's config).
@@ -159,47 +159,14 @@ func (h *DeviceAuthHandler) RequestCode(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-var devicePageTmpl = template.Must(template.New("device").Parse(`<!doctype html>
-<html><head><meta charset="utf-8"><title>Approve CLI access</title></head>
-<body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;">
-  <h1>Approve CLI access?</h1>
-  <p>Enter the code shown in your terminal by <code>langner login</code>, then approve.
-     Approving takes you through a one-time Google sign-in; the account you sign in as is
-     the account the CLI will act as. Only approve a code you started yourself.</p>
-  <form method="get" action="/auth/google/login">
-    <input type="text" name="user_code" value="{{.UserCode}}" placeholder="XXXX-XXXX"
-      autocomplete="off" autocapitalize="characters" spellcheck="false" required
-      style="font-size:1.25rem;letter-spacing:0.15em;text-transform:uppercase;padding:0.4rem 0.6rem;width:9rem;">
-    <div style="margin-top:1rem;">
-      <button type="submit">Approve &amp; sign in with Google</button>
-      <button type="submit" formmethod="post" formaction="/auth/device/deny" style="margin-left:1rem;">Deny</button>
-    </div>
-  </form>
-</body></html>`))
-
-// ShowApprovalPage handles GET /auth/device: it renders the confirmation page.
-// There is no session cookie, so the Approve action routes the browser through
-// a one-shot Google sign-in (/auth/google/login?user_code=…); the OAuth
-// callback binds the verified identity to the device row (M3).
-func (h *DeviceAuthHandler) ShowApprovalPage(w http.ResponseWriter, r *http.Request) {
-	userCode := auth.NormalizeUserCode(r.URL.Query().Get("user_code"))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = devicePageTmpl.Execute(w, struct {
-		UserCode string
-	}{UserCode: userCode})
-}
-
-// Deny handles POST /auth/device/deny. No identity is needed to deny.
+// Deny handles POST /auth/device/deny (a top-level form submit from the
+// frontend approval page). No identity is needed to deny. It marks the code
+// denied and redirects back to the frontend, which renders the result — the API
+// itself serves no HTML.
 func (h *DeviceAuthHandler) Deny(w http.ResponseWriter, r *http.Request) {
 	userCode := auth.NormalizeUserCode(r.FormValue("user_code"))
 	_ = h.deviceCodes.Deny(r.Context(), userCode)
-	h.writeApprovalResult(w, "Denied. You can return to your terminal.")
-}
-
-func (h *DeviceAuthHandler) writeApprovalResult(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(`<!doctype html><html><body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;"><p>` +
-		template.HTMLEscapeString(msg) + `</p></body></html>`))
+	http.Redirect(w, r, h.frontendURL+"/auth/device?result=denied", http.StatusFound)
 }
 
 // Token handles POST /auth/device/token (RFC 8628 §3.4/§3.5): the CLI poll.

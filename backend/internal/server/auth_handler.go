@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -192,7 +191,8 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// row IN THIS REQUEST — there is no session to carry it to a later POST.
 	if claims.UserCode != "" {
 		h.approveDevice(ctx, claims.UserCode, user.ID)
-		h.renderMessage(w, "Approved. You can return to your terminal.")
+		// The frontend renders the result; the API only redirects (no HTML).
+		http.Redirect(w, r, h.frontendURL+"/auth/device?result=approved", http.StatusFound)
 		return
 	}
 
@@ -388,14 +388,6 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// renderMessage writes a minimal HTML page (used for the device-approval
-// result).
-func (h *AuthHandler) renderMessage(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(`<!doctype html><html><body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;"><p>` +
-		template.HTMLEscapeString(msg) + `</p></body></html>`))
 }
 
 // llmCredentialRequest is the POST body for /auth/llm-credential. apiKey empty

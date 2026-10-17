@@ -48,9 +48,10 @@ const nextConfig: NextConfig = {
     // Google sign-in/callback (so the OAuth state + refresh cookies are
     // first-party) and the token refresh/revoke endpoints the SPA calls.
     // Everything else (the quiz RPCs, /auth/me) talks to the API directly with
-    // the bearer token. The CLI device-login flow is NOT proxied: it hits the API
-    // directly (incl. the GET /auth/device approval page), so it needs no cookie
-    // and no first-party origin here.
+    // the bearer token. The CLI device-login flow is NOT proxied: its approval
+    // page is a FRONTEND route (/auth/device) whose form submits straight to the
+    // API (Google sign-in + deny), so it needs no cookie and no first-party
+    // origin here.
     return [
       { source: "/auth/google/:path*", destination: `${authProxyTarget}/auth/google/:path*` },
       { source: "/auth/token/:path*", destination: `${authProxyTarget}/auth/token/:path*` },
