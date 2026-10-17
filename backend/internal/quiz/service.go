@@ -1442,7 +1442,18 @@ type ReverseContext struct {
 // superset of anything Start could have shown) and returns the card whose
 // stable sense-id (ReverseCard.ID) matches. This is the serverless-safe submit
 // path: the card is reconstructed from the note's identity, not a process map.
-func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteRecord) (ReverseCard, bool, error) {
+//
+// originNotebookID names the notebook the learner was actually quizzed from.
+// A word can live in several notebooks under ONE globally-unique sense_id
+// (note_id) yet carry a DIFFERENT meaning/example/part-of-speech in each, so
+// the bare sense_id is ambiguous: a naive first-match returns whichever
+// notebook's card the loader happens to emit first, and the feedback page then
+// shows the wrong notebook's meaning. Scoping resolution to originNotebookID
+// keeps a shared word's feedback faithful to the card the learner saw. It is
+// the ONLY disambiguator (the learning-log series stays one-per-sense_id, L4).
+// Empty (legacy clients that don't echo the notebook) falls back to the old
+// first-match behavior.
+func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteRecord, originNotebookID string) (ReverseCard, bool, error) {
 	seen := map[string]bool{}
 	var nbIDs []string
 	for _, nn := range note.NotebookNotes {
@@ -1450,6 +1461,11 @@ func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteReco
 			seen[nn.NotebookID] = true
 			nbIDs = append(nbIDs, nn.NotebookID)
 		}
+	}
+	// Scope to the originating notebook when it is one the note belongs to, so
+	// a word shared across notebooks resolves to the card actually quizzed.
+	if originNotebookID != "" && seen[originNotebookID] {
+		nbIDs = []string{originNotebookID}
 	}
 	if len(nbIDs) == 0 || note.SenseID == "" {
 		return ReverseCard{}, false, nil
