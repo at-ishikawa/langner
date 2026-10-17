@@ -57,14 +57,21 @@ func runLogin(ctx context.Context, store *CredentialStore, server string, makeDe
 		return fmt.Errorf("request device code from %s: %w", server, err)
 	}
 
-	// The approval page is served by the API itself (GET /auth/device), so point
-	// the user at the SAME server the CLI is logging into. The server-returned
-	// verification_uri is derived from the web redirect_url's origin (the
-	// frontend) and would send them to a host that doesn't serve this page.
-	verifyURL := strings.TrimRight(server, "/") + "/auth/device"
+	// Use the verification_uri the server returns. The approval page is now a
+	// FRONTEND route (the API serves no user-facing HTML), so the server points
+	// us at the frontend origin. Fall back to <server>/auth/device only for an
+	// older server that doesn't populate it.
+	verifyURL := dc.VerificationURI
+	if verifyURL == "" {
+		verifyURL = strings.TrimRight(server, "/") + "/auth/device"
+	}
+	openURL := dc.VerificationURIComplete
+	if openURL == "" {
+		openURL = verifyURL + "?user_code=" + dc.UserCode
+	}
 	fmt.Printf("To sign in, open:  %s\n", verifyURL)
 	fmt.Printf("and enter code:    %s\n", dc.UserCode)
-	openBrowser(verifyURL + "?user_code=" + dc.UserCode)
+	openBrowser(openURL)
 	fmt.Println("(waiting for approval…)")
 
 	interval := dc.Interval
