@@ -87,6 +87,38 @@ func TestClient_ProviderError_InvalidKeyNotRetried(t *testing.T) {
 
 func uintPtr(v uint) *uint { return &v }
 
+// TestClient_RateLimit_ZeroRetries_SingleCall proves the retry COUNT is honored
+// for a TRANSIENT 429 rate limit (non-quota): with maxRetryAttempts=0 the client
+// issues exactly ONE upstream call and returns immediately. This is what lets the
+// fallback factory build a two-provider primary with 0 retries so a rate-limit
+// fails over to the secondary without first hammering the rate-limited provider.
+// (Contrast: TestIsRetryableError confirms a transient 429 IS retried when retries
+// are allowed — the single-provider behavior we keep.)
+func TestClient_RateLimit_ZeroRetries_SingleCall(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"Rate limit reached","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}`))
+	}))
+	defer server.Close()
+
+	client := &Client{
+		httpClient:       resty.New().SetBaseURL(server.URL),
+		model:            "gpt-4",
+		maxRetryAttempts: 0, // immediate-failover primary: no internal retries
+	}
+
+	_, err := client.AnswerMeanings(context.Background(), inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{{Expression: "break the ice", Meaning: "to ease tension"}},
+	})
+	require.Error(t, err)
+	var pe *inference.ProviderError
+	require.True(t, errors.As(err, &pe))
+	assert.Equal(t, http.StatusTooManyRequests, pe.StatusCode)
+	assert.Equal(t, int32(1), calls.Load(), "with 0 retries a transient 429 must be a single call (immediate failover)")
+}
+
 func TestIsRetryableError(t *testing.T) {
 	tests := []struct {
 		name string
