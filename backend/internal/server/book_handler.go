@@ -25,20 +25,26 @@ func (h *NotebookHandler) SearchBooks(
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
-	books, err := gutenberg.Search(ctx, h.bookHTTPClient, req.Msg.GetQuery())
+	res, err := gutenberg.Search(ctx, h.bookHTTPClient, req.Msg.GetQuery(), int(req.Msg.GetPage()))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("search books: %w", err))
 	}
-	results := make([]*apiv1.BookResult, 0, len(books))
-	for _, b := range books {
+	results := make([]*apiv1.BookResult, 0, len(res.Books))
+	for _, b := range res.Books {
 		results = append(results, &apiv1.BookResult{
 			SourceId: b.SourceID,
 			Title:    b.Title,
 			Author:   b.Author,
 			Language: b.Language,
+			CoverUrl: b.CoverURL,
 		})
 	}
-	return connect.NewResponse(&apiv1.SearchBooksResponse{Books: results}), nil
+	return connect.NewResponse(&apiv1.SearchBooksResponse{
+		Books:   results,
+		HasNext: res.HasNext,
+		HasPrev: res.HasPrev,
+		Page:    int32(res.Page),
+	}), nil
 }
 
 // ImportBook downloads + parses a Project Gutenberg book and stores it ONCE as

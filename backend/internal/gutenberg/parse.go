@@ -28,6 +28,7 @@ type Book struct {
 	Author   string
 	Language string
 	TextURL  string
+	CoverURL string
 }
 
 // BundleFile is a single emitted file: Path is relative (e.g. "index.yml",

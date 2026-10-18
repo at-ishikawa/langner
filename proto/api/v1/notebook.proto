@@ -35,20 +35,28 @@ service NotebookService {
 }
 
 message SearchBooksRequest {
-  string query = 1 [(buf.validate.field).string.min_len = 1];
+  // query is optional: empty browses the popular catalog (fast + cached by
+  // Gutendex); non-empty runs a free-text search. page is 1-based (0 or 1 =
+  // first page) so the catalog pages without a query.
+  string query = 1;
+  int32 page = 2;
 }
 
 // BookResult is one catalog hit. source_id is the Gutenberg book id (as a
-// string) passed back to ImportBook.
+// string) passed back to ImportBook. cover_url is a thumbnail when Gutendex has one.
 message BookResult {
   string source_id = 1;
   string title = 2;
   string author = 3;
   string language = 4;
+  string cover_url = 5;
 }
 
 message SearchBooksResponse {
   repeated BookResult books = 1;
+  bool has_next = 2;
+  bool has_prev = 3;
+  int32 page = 4;
 }
 
 message ImportBookRequest {

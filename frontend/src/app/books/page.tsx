@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Box,
   Button,
   Heading,
+  Image,
   Input,
+  SimpleGrid,
   Spinner,
   Text,
   VStack,
@@ -20,52 +22,73 @@ import {
   type NotebookSummary,
 } from "@/lib/client";
 
-// BooksPage lets a reader search the Project Gutenberg catalog (Gutendex),
-// import a public-domain book once as a shared notebook, and jump straight into
-// the reader. Books are shared across all users, so an already-imported book is
-// listed under "Continue reading" (they surface as visible gutenberg- notebooks
-// in the quiz options). Highlight → register → quiz all happen in the reader.
+// BooksPage is the Project Gutenberg discovery surface (reached from the home
+// page). It BROWSES the popular catalog on load — no search required — and
+// paginates it; typing a title/author switches to a free-text search. Importing
+// a book stores it once as a shared notebook and jumps into the reader, where
+// highlighting → saving → quizzing all happen. Already-imported shared books
+// (gutenberg- ids, visible via quiz options) are listed under "Continue reading".
 export default function BooksPage() {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<BookResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [input, setInput] = useState("");
+  const [query, setQuery] = useState(""); // the submitted term ("" = browse)
+  const [page, setPage] = useState(1);
+
+  const [books, setBooks] = useState<BookResult[]>([]);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrev, setHasPrev] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
 
   const [myBooks, setMyBooks] = useState<NotebookSummary[]>([]);
 
-  // Already-imported books are shared, owner-less notebooks with a
-  // `gutenberg-<id>` id; they show up in the visible quiz options.
   useEffect(() => {
     quizClient
       .getQuizOptions({})
       .then((res) =>
         setMyBooks(
-          (res.notebooks ?? []).filter((n) =>
-            n.notebookId.startsWith("gutenberg-"),
-          ),
+          (res.notebooks ?? []).filter((n) => n.notebookId.startsWith("gutenberg-")),
         ),
       )
       .catch(() => {});
   }, []);
 
-  const runSearch = async () => {
-    const q = query.trim();
-    if (!q) return;
-    setSearching(true);
+  // Load a catalog page whenever the query or page changes (mount browses the
+  // popular catalog with an empty query).
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     setError(null);
-    try {
-      const res = await notebookClient.searchBooks({ query: q });
-      setResults(res.books);
-      setSearched(true);
-    } catch (err) {
-      setError(messageForRpcError(err, "Search failed. Please try again."));
-    } finally {
-      setSearching(false);
-    }
-  };
+    notebookClient
+      .searchBooks({ query, page })
+      .then((res) => {
+        if (cancelled) return;
+        setBooks(res.books);
+        setHasNext(res.hasNext);
+        setHasPrev(res.hasPrev);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setBooks([]);
+        setHasNext(false);
+        setHasPrev(false);
+        setError(
+          messageForRpcError(err, "Couldn't reach the book catalog. Try again."),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query, page]);
+
+  const submitSearch = useCallback(() => {
+    setQuery(input.trim());
+    setPage(1);
+  }, [input]);
 
   const importBook = async (book: BookResult) => {
     setImportingId(book.sourceId);
@@ -74,15 +97,13 @@ export default function BooksPage() {
       const res = await notebookClient.importBook({ sourceId: book.sourceId });
       router.push(`/learn/${res.notebookId}`);
     } catch (err) {
-      setError(
-        messageForRpcError(err, `Couldn't import "${book.title}". Try again.`),
-      );
+      setError(messageForRpcError(err, `Couldn't import “${book.title}”. Try again.`));
       setImportingId(null);
     }
   };
 
   return (
-    <Box maxW="sm" mx="auto" minH="100vh" p={4}>
+    <Box maxW="3xl" mx="auto" minH="100vh" p={{ base: 4, md: 6 }}>
       <Box mb={2}>
         <Link href="/">
           <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
@@ -90,32 +111,39 @@ export default function BooksPage() {
           </Text>
         </Link>
       </Box>
-      <Heading size="md" mb={1} textAlign="center">
+      <Heading size="lg" mb={1}>
         Read a book
       </Heading>
-      <Text fontSize="sm" color="fg.muted" textAlign="center" mb={4}>
-        Search Project Gutenberg, then read and mine new words.
+      <Text fontSize="sm" color="fg.muted" mb={4}>
+        Browse Project Gutenberg, or search a title or author. Import one to read
+        it and mine new words.
       </Text>
 
-      <Box display="flex" gap={2} mb={4}>
+      <Box display="flex" gap={2} mb={5}>
         <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") void runSearch();
+            if (e.key === "Enter") submitSearch();
           }}
-          placeholder="Title or author…"
-          size="sm"
+          placeholder="Search title or author…"
         />
-        <Button
-          size="sm"
-          colorPalette="blue"
-          onClick={() => void runSearch()}
-          loading={searching}
-          flexShrink={0}
-        >
+        <Button colorPalette="blue" onClick={submitSearch} flexShrink={0}>
           Search
         </Button>
+        {query !== "" && (
+          <Button
+            variant="ghost"
+            flexShrink={0}
+            onClick={() => {
+              setInput("");
+              setQuery("");
+              setPage(1);
+            }}
+          >
+            Clear
+          </Button>
+        )}
       </Box>
 
       {error && (
@@ -124,16 +152,14 @@ export default function BooksPage() {
         </Text>
       )}
 
-      {myBooks.length > 0 && !searched && (
+      {myBooks.length > 0 && query === "" && page === 1 && (
         <Box mb={6}>
-          <Text fontSize="xs" fontWeight="bold" color="fg.muted" mb={2}>
-            Continue reading
-          </Text>
+          <SectionLabel>Continue reading</SectionLabel>
           <VStack align="stretch" gap={2}>
             {myBooks.map((n) => (
               <Link key={n.notebookId} href={`/learn/${n.notebookId}`}>
                 <Box
-                  p={4}
+                  p={3}
                   borderWidth="1px"
                   borderColor="border"
                   borderRadius="10px"
@@ -156,53 +182,139 @@ export default function BooksPage() {
         </Box>
       )}
 
-      {searching && (
-        <Box textAlign="center" py={6}>
-          <Spinner />
+      <SectionLabel>{query === "" ? "Popular books" : `Results for “${query}”`}</SectionLabel>
+
+      {loading ? (
+        <Box textAlign="center" py={10}>
+          <Spinner size="lg" />
+        </Box>
+      ) : books.length === 0 && !error ? (
+        <Text color="fg.muted" fontSize="sm">
+          {query === "" ? "No books to show." : `No books found for “${query}”.`}
+        </Text>
+      ) : (
+        <SimpleGrid columns={{ base: 1, sm: 2 }} gap={3}>
+          {books.map((book) => (
+            <BookCard
+              key={book.sourceId}
+              book={book}
+              importing={importingId === book.sourceId}
+              disabled={importingId !== null}
+              onImport={() => void importBook(book)}
+            />
+          ))}
+        </SimpleGrid>
+      )}
+
+      {!loading && (hasPrev || hasNext) && (
+        <Box display="flex" justifyContent="space-between" alignItems="center" mt={5}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasPrev}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            ← Previous
+          </Button>
+          <Text fontSize="sm" color="fg.muted">
+            Page {page}
+          </Text>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasNext}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next →
+          </Button>
         </Box>
       )}
+    </Box>
+  );
+}
 
-      {searched && !searching && results.length === 0 && !error && (
-        <Text color="fg.muted" fontSize="sm" textAlign="center">
-          No books found for “{query}”.
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Text
+      fontFamily="mono"
+      fontSize="xs"
+      letterSpacing="0.1em"
+      textTransform="uppercase"
+      color="fg.muted"
+      mb={2}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function BookCard({
+  book,
+  importing,
+  disabled,
+  onImport,
+}: {
+  book: BookResult;
+  importing: boolean;
+  disabled: boolean;
+  onImport: () => void;
+}) {
+  return (
+    <Box
+      p={3}
+      borderWidth="1px"
+      borderColor="border"
+      borderRadius="12px"
+      display="flex"
+      gap={3}
+      bg="bg.panel"
+    >
+      <Box
+        w="56px"
+        h="80px"
+        flexShrink={0}
+        borderRadius="6px"
+        overflow="hidden"
+        bg="bg.subtle"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+      >
+        {book.coverUrl ? (
+          <Image
+            src={book.coverUrl}
+            alt=""
+            w="100%"
+            h="100%"
+            objectFit="cover"
+            loading="lazy"
+          />
+        ) : (
+          <Text fontSize="xl" color="fg.muted">
+            {book.title.slice(0, 1).toUpperCase()}
+          </Text>
+        )}
+      </Box>
+      <Box display="flex" flexDirection="column" minW={0} flex="1">
+        <Text fontWeight="600" fontSize="sm" lineClamp={2}>
+          {book.title}
         </Text>
-      )}
-
-      <VStack align="stretch" gap={2}>
-        {results.map((book) => (
-          <Box
-            key={book.sourceId}
-            p={4}
-            borderWidth="1px"
-            borderColor="border"
-            borderRadius="10px"
-            display="flex"
-            alignItems="center"
-            justifyContent="space-between"
-            gap={3}
+        <Text fontSize="xs" color="fg.muted" lineClamp={1}>
+          {book.author || "Unknown author"}
+          {book.language ? ` · ${book.language}` : ""}
+        </Text>
+        <Box mt="auto" pt={2}>
+          <Button
+            size="xs"
+            colorPalette="blue"
+            onClick={onImport}
+            loading={importing}
+            disabled={disabled}
           >
-            <Box minW={0}>
-              <Text fontWeight="medium" fontSize="sm" truncate>
-                {book.title}
-              </Text>
-              <Text fontSize="xs" color="fg.muted" truncate>
-                {book.author || "Unknown author"}
-                {book.language ? ` · ${book.language}` : ""}
-              </Text>
-            </Box>
-            <Button
-              size="xs"
-              colorPalette="blue"
-              flexShrink={0}
-              onClick={() => void importBook(book)}
-              loading={importingId === book.sourceId}
-              disabled={importingId !== null}
-            >
-              Import &amp; read
-            </Button>
-          </Box>
-        ))}
-      </VStack>
+            Import &amp; read
+          </Button>
+        </Box>
+      </Box>
     </Box>
   );
 }

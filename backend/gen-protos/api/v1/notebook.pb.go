@@ -23,8 +23,12 @@ const (
 )
 
 type SearchBooksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// query is optional: empty browses the popular catalog (fast + cached by
+	// Gutendex); non-empty runs a free-text search. page is 1-based (0 or 1 =
+	// first page) so the catalog pages without a query.
+	Query         string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Page          int32  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -66,14 +70,22 @@ func (x *SearchBooksRequest) GetQuery() string {
 	return ""
 }
 
+func (x *SearchBooksRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
 // BookResult is one catalog hit. source_id is the Gutenberg book id (as a
-// string) passed back to ImportBook.
+// string) passed back to ImportBook. cover_url is a thumbnail when Gutendex has one.
 type BookResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SourceId      string                 `protobuf:"bytes,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
 	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	Author        string                 `protobuf:"bytes,3,opt,name=author,proto3" json:"author,omitempty"`
 	Language      string                 `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
+	CoverUrl      string                 `protobuf:"bytes,5,opt,name=cover_url,json=coverUrl,proto3" json:"cover_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -136,9 +148,19 @@ func (x *BookResult) GetLanguage() string {
 	return ""
 }
 
+func (x *BookResult) GetCoverUrl() string {
+	if x != nil {
+		return x.CoverUrl
+	}
+	return ""
+}
+
 type SearchBooksResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Books         []*BookResult          `protobuf:"bytes,1,rep,name=books,proto3" json:"books,omitempty"`
+	HasNext       bool                   `protobuf:"varint,2,opt,name=has_next,json=hasNext,proto3" json:"has_next,omitempty"`
+	HasPrev       bool                   `protobuf:"varint,3,opt,name=has_prev,json=hasPrev,proto3" json:"has_prev,omitempty"`
+	Page          int32                  `protobuf:"varint,4,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -178,6 +200,27 @@ func (x *SearchBooksResponse) GetBooks() []*BookResult {
 		return x.Books
 	}
 	return nil
+}
+
+func (x *SearchBooksResponse) GetHasNext() bool {
+	if x != nil {
+		return x.HasNext
+	}
+	return false
+}
+
+func (x *SearchBooksResponse) GetHasPrev() bool {
+	if x != nil {
+		return x.HasPrev
+	}
+	return false
+}
+
+func (x *SearchBooksResponse) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
 }
 
 type ImportBookRequest struct {
@@ -2766,17 +2809,22 @@ var File_api_v1_notebook_proto protoreflect.FileDescriptor
 
 const file_api_v1_notebook_proto_rawDesc = "" +
 	"\n" +
-	"\x15api/v1/notebook.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"3\n" +
-	"\x12SearchBooksRequest\x12\x1d\n" +
-	"\x05query\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05query\"s\n" +
+	"\x15api/v1/notebook.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\">\n" +
+	"\x12SearchBooksRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x12\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\"\x90\x01\n" +
 	"\n" +
 	"BookResult\x12\x1b\n" +
 	"\tsource_id\x18\x01 \x01(\tR\bsourceId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
 	"\x06author\x18\x03 \x01(\tR\x06author\x12\x1a\n" +
-	"\blanguage\x18\x04 \x01(\tR\blanguage\"?\n" +
+	"\blanguage\x18\x04 \x01(\tR\blanguage\x12\x1b\n" +
+	"\tcover_url\x18\x05 \x01(\tR\bcoverUrl\"\x89\x01\n" +
 	"\x13SearchBooksResponse\x12(\n" +
-	"\x05books\x18\x01 \x03(\v2\x12.api.v1.BookResultR\x05books\"9\n" +
+	"\x05books\x18\x01 \x03(\v2\x12.api.v1.BookResultR\x05books\x12\x19\n" +
+	"\bhas_next\x18\x02 \x01(\bR\ahasNext\x12\x19\n" +
+	"\bhas_prev\x18\x03 \x01(\bR\ahasPrev\x12\x12\n" +
+	"\x04page\x18\x04 \x01(\x05R\x04page\"9\n" +
 	"\x11ImportBookRequest\x12$\n" +
 	"\tsource_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bsourceId\"5\n" +
 	"\x12ImportBookResponse\x12\x1f\n" +

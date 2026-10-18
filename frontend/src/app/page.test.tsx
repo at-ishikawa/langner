@@ -28,6 +28,13 @@ describe("HomePage", () => {
     expect(screen.getByText("Langner")).toBeInTheDocument();
   });
 
+  it("shows Books feature link", () => {
+    renderPage();
+    expect(screen.getByText("Books")).toBeInTheDocument();
+    const link = screen.getByText("Books").closest("a");
+    expect(link).toHaveAttribute("href", "/books");
+  });
+
   it("shows Learn feature link", () => {
     renderPage();
     expect(screen.getByText("Learn")).toBeInTheDocument();
@@ -57,19 +64,20 @@ describe("HomePage", () => {
     expect(link).toHaveAttribute("href", "/history");
   });
 
-  it("renders exactly 4 feature cards", () => {
+  it("renders exactly 5 feature cards", () => {
     renderPage();
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(5);
   });
 
   it("renders in dark mode without errors", () => {
     renderPageDark();
     expect(screen.getByText("Langner")).toBeInTheDocument();
+    expect(screen.getByText("Books")).toBeInTheDocument();
     expect(screen.getByText("Learn")).toBeInTheDocument();
     expect(screen.getByText("Quiz")).toBeInTheDocument();
     expect(screen.getByText("Analytics")).toBeInTheDocument();
     expect(screen.getByText("History")).toBeInTheDocument();
-    expect(screen.getAllByRole("link")).toHaveLength(4);
+    expect(screen.getAllByRole("link")).toHaveLength(5);
   });
 });
