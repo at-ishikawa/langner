@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/stretchr/testify/assert"
@@ -83,6 +84,30 @@ func TestClient_ProviderError_InvalidKeyNotRetried(t *testing.T) {
 	assert.Equal(t, "invalid_api_key", pe.Code)
 	assert.True(t, pe.IsInvalidKey())
 	assert.Equal(t, int32(1), calls.Load(), "an invalid-key failure must NOT be retried")
+}
+
+// TestClient_RequestTimeout proves the per-attempt HTTP timeout actually fires.
+// A provider that stalls past the deadline must surface an error promptly rather
+// than hang the caller forever — the pre-fix client had no timeout, so a stuck
+// grade call blocked the quiz/relearn card indefinitely.
+func TestClient_RequestTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second) // far longer than the client's timeout below
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// retryAttempts=0 → a single attempt, so the timeout is not compounded by retries.
+	client := NewClient("sk-test", "gpt-4", 0, WithBaseURL(server.URL), WithTimeout(100*time.Millisecond))
+
+	start := time.Now()
+	_, err := client.ValidateWordForm(context.Background(), inference.ValidateWordFormRequest{
+		Expected: "run", UserAnswer: "ran", Meaning: "to move quickly",
+	})
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "a stalled provider must surface an error, not hang")
+	assert.Less(t, elapsed, 1500*time.Millisecond, "the call must abort near the 100ms timeout, well before the 2s server delay")
 }
 
 func uintPtr(v uint) *uint { return &v }

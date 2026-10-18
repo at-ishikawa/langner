@@ -920,6 +920,15 @@ func (s *Service) loadFlashcardCards(
 	return cards, nil
 }
 
+// interactiveGradeTimeout bounds the TOTAL time one interactive grade may take —
+// the per-user client resolve plus the LLM call and all of its internal retries
+// (the provider client's retry loop honors this ctx via retry.Context). Without
+// it a slow-but-not-erroring provider, compounded by up to 4 retry attempts with
+// backoff, could hang a quiz/relearn card for minutes. This governs only the
+// interactive graders below (quiz + relearn), not bulk/import grading, which is
+// not on a user-facing hot path.
+const interactiveGradeTimeout = 25 * time.Second
+
 // GradeNotebookAnswer grades a meaning answer and returns the result.
 // userID selects whose LLM credential backs the grade (resolved per call).
 func (s *Service) GradeNotebookAnswer(ctx context.Context, userID int64, card Card, answer string, responseTimeMs int64) (GradeResult, error) {
@@ -931,6 +940,8 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, userID int64, card Ca
 	if strings.TrimSpace(answer) == "" {
 		return GradeResult{Correct: false, Reason: "No answer provided.", Quality: int(notebook.QualityWrong)}, nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, interactiveGradeTimeout)
+	defer cancel()
 	client, err := s.clientResolver.ResolveClient(ctx, userID)
 	if err != nil {
 		return GradeResult{}, err
@@ -2021,6 +2032,8 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, userID int64, card Rev
 		contextStr = card.Contexts[0].Context
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, interactiveGradeTimeout)
+	defer cancel()
 	client, err := s.clientResolver.ResolveClient(ctx, userID)
 	if err != nil {
 		return GradeResult{}, err
