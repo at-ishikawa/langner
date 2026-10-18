@@ -181,7 +181,14 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 		slog.Info("using mock inference client (substring grader; e2e/tests only)")
 	default:
 		if authSetup != nil && authSetup.Credentials != nil {
-			clientResolver = factory.NewResolver(authSetup.Credentials)
+			resolver := factory.NewResolver(authSetup.Credentials)
+			// Drop a user's cached client the moment they change their key, so a
+			// rotated/added credential takes effect immediately instead of after
+			// the resolver's cache TTL.
+			if authSetup.Handler != nil {
+				authSetup.Handler.SetCredentialInvalidator(resolver.Invalidate)
+			}
+			clientResolver = resolver
 			slog.Info("grading with each user's own LLM credential")
 		} else {
 			clientResolver = inference.StaticResolver(nil)

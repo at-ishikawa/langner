@@ -1304,7 +1304,10 @@ func TestService_GradeNotebookAnswer_Incorrect(t *testing.T) {
 	result, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "wrong answer", 1000)
 	require.NoError(t, err)
 	assert.False(t, result.Correct)
-	assert.Equal(t, "Wrong meaning", result.Reason)
+	// The model's bare reason is kept, and the expected meaning is appended so
+	// the learner always sees what a correct answer should have been.
+	assert.Contains(t, result.Reason, "Wrong meaning")
+	assert.Contains(t, strings.ToLower(result.Reason), strings.ToLower(card.Meaning))
 	assert.Equal(t, 1, result.Quality)
 }
 
@@ -1355,6 +1358,139 @@ func TestService_GradeNotebookAnswer_EmptyIsWrongWithoutLLM(t *testing.T) {
 			got, err := svc.GradeNotebookAnswer(context.Background(), 0, Card{Entry: "preposterous"}, answer, 1000)
 			require.NoError(t, err)
 			assert.False(t, got.Correct, "an empty recognition answer must be wrong")
+		})
+	}
+}
+
+// TestService_GradeNotebookAnswer_IncorrectReasonSurfacesExpected pins the
+// "every incorrect verdict must say how to answer" contract: when the grader
+// marks a recognition answer wrong with only a bare vagueness reason, the
+// returned reason must still tell the learner the expected meaning. A reason
+// that only asserts "too vague" with no corrective target must FAIL this test.
+// GENERIC data per repo CLAUDE.md (not a real notebook word).
+func TestService_GradeNotebookAnswer_IncorrectReasonSurfacesExpected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	svc := newTestService(t, mockClient)
+
+	card := Card{
+		Entry:   "composure",
+		Meaning: "a feeling of calm and quiet confidence",
+	}
+
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{
+				{
+					Expression: "composure",
+					Meaning:    "a feeling of calm and quiet confidence",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: false, Reason: "too vague", Quality: 1},
+					},
+				},
+			},
+		}, nil,
+	)
+
+	result, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "a feeling", 1000)
+	require.NoError(t, err)
+	assert.False(t, result.Correct)
+	assert.NotEmpty(t, result.Reason)
+	// The reason must give the expected answer (quote the reference meaning),
+	// not merely assert vagueness — otherwise the feedback is a dead end.
+	assert.Contains(t, strings.ToLower(result.Reason), strings.ToLower(card.Meaning),
+		"an incorrect reason must surface the expected meaning, not just call the answer vague")
+}
+
+// TestService_GradeNotebookAnswer_SubsetParaphraseIsCorrect guards the
+// over-strict regression: an answer that uses part of / paraphrases the
+// reference definition and is graded CORRECT by the model passes through as
+// correct, and its reason is NOT polluted with an "expected answer" nag — that
+// corrective target is appended only to INCORRECT verdicts. GENERIC data.
+func TestService_GradeNotebookAnswer_SubsetParaphraseIsCorrect(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	svc := newTestService(t, mockClient)
+
+	card := Card{
+		Entry:   "composure",
+		Meaning: "a feeling of calm and quiet confidence",
+	}
+
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{
+				{
+					Expression: "composure",
+					Meaning:    "a feeling of calm and quiet confidence",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Reason: "captures the core concept", Quality: 4},
+					},
+				},
+			},
+		}, nil,
+	)
+
+	result, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "a feeling of calm", 1000)
+	require.NoError(t, err)
+	assert.True(t, result.Correct)
+	assert.Equal(t, "captures the core concept", result.Reason)
+	assert.NotContains(t, result.Reason, "Expected answer")
+}
+
+// TestEnsureActionableReason pins the reason safety net directly: an INCORRECT
+// verdict always carries the expected meaning, a CORRECT verdict and a reason
+// that already quotes the reference are left untouched, and a vagueness-only
+// reason is forbidden (it gets the expected answer appended).
+func TestEnsureActionableReason(t *testing.T) {
+	const ref = "a feeling of calm and quiet confidence"
+	tests := []struct {
+		name             string
+		correct          bool
+		reason           string
+		referenceMeaning string
+		wantContains     string
+		wantUnchanged    bool
+	}{
+		{
+			name:             "incorrect vague reason gets expected answer appended",
+			reason:           "too vague",
+			referenceMeaning: ref,
+			wantContains:     ref,
+		},
+		{
+			name:             "incorrect empty reason becomes expected answer",
+			reason:           "",
+			referenceMeaning: ref,
+			wantContains:     ref,
+		},
+		{
+			name:             "incorrect reason already quoting reference is unchanged",
+			reason:           "you gave only the general idea; the expected meaning is a feeling of calm and quiet confidence",
+			referenceMeaning: ref,
+			wantUnchanged:    true,
+		},
+		{
+			name:             "correct reason is never touched",
+			correct:          true,
+			reason:           "exact match",
+			referenceMeaning: ref,
+			wantUnchanged:    true,
+		},
+		{
+			name:          "no reference meaning leaves reason unchanged",
+			reason:        "too vague",
+			wantUnchanged: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ensureActionableReason(tt.correct, tt.reason, tt.referenceMeaning)
+			if tt.wantUnchanged {
+				assert.Equal(t, tt.reason, got)
+				return
+			}
+			assert.Contains(t, strings.ToLower(got), strings.ToLower(tt.wantContains))
 		})
 	}
 }

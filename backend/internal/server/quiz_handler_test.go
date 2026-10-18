@@ -943,7 +943,9 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 			},
 			wantCorrect: false,
 			wantMeaning: "to understand completely",
-			wantReason:  "The answer does not match the meaning.",
+			// The model's reason is kept and the expected answer is appended so
+			// an incorrect verdict always tells the learner what to say.
+			wantReason: `The answer does not match the meaning. Expected answer: "to understand completely".`,
 		},
 		{
 			name:   "returns INTERNAL when inference fails",

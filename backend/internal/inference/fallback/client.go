@@ -42,9 +42,21 @@ func shouldFallback(err error) bool {
 	if err == nil || errors.Is(err, inference.ErrMalformedResponse) {
 		return false
 	}
+	// Prefer the typed provider error when present: a 429 rate-limit or a quota
+	// exhaustion on the primary is exactly the class of failure a DIFFERENT
+	// provider may not be hitting. Classifying on the status/code is reliable
+	// regardless of how the provider worded its error body.
+	var pe *inference.ProviderError
+	if errors.As(err, &pe) {
+		return pe.StatusCode == 429 || pe.IsQuota()
+	}
+	// Untyped errors (a provider/transport that didn't surface a ProviderError):
+	// match the rate-limit/quota signals by substring. "provider error 429"
+	// covers the ProviderError string form; the rest cover raw transport/body text.
 	msg := strings.ToLower(err.Error())
 	for _, sig := range []string{
 		"response error 429",
+		"provider error 429",
 		"insufficient_quota",
 		"resource_exhausted",
 		"rate limit",
