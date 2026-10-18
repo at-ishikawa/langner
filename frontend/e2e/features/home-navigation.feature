@@ -3,7 +3,7 @@ Feature: Home navigation
 
   Scenario: Open the Learn hub from home
     Given I am on the home page
-    When I follow the "Learn" link
+    When I follow the "Words" link
     Then I should be on the Learn page
     And I see the notebook "Idioms"
 

@@ -48,11 +48,17 @@ export default function TodayPage() {
         <StatTile value={grammarDue} label="grammar notes" />
       </SimpleGrid>
 
-      <Button asChild colorPalette="brand" size="lg" w="full" mb={7}>
+      <Button asChild colorPalette="brand" size="lg" w="full" mb={3}>
         <NextLink href="/quiz">
           {wordsDue > 0 ? `Review ${wordsDue} due →` : "Start a quiz →"}
         </NextLink>
       </Button>
+
+      <Box textAlign="center" mb={7}>
+        <Button asChild variant="plain" size="sm" color="fg.muted" h="auto" py={1}>
+          <NextLink href="/history">History — review past days</NextLink>
+        </Button>
+      </Box>
 
       {dueNotebooks.length > 0 && (
         <>
