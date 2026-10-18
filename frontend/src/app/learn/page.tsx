@@ -131,6 +131,29 @@ export default function LearnHubPage() {
 
       {/* Content */}
       <Box p={4}>
+        <Link href="/books">
+          <Box
+            p={3}
+            mb={3}
+            borderWidth="1px"
+            borderColor="blue.200"
+            _dark={{ borderColor: "blue.700", bg: "blue.950" }}
+            bg="blue.50"
+            borderRadius="10px"
+            _hover={{ bg: "blue.100" }}
+            cursor="pointer"
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+          >
+            <Text fontWeight="medium" fontSize="sm" color="blue.700" _dark={{ color: "blue.200" }}>
+              + Read a book from Project Gutenberg
+            </Text>
+            <Text fontSize="sm" color="blue.500">
+              &rsaquo;
+            </Text>
+          </Box>
+        </Link>
         {tab === "vocabulary" ? (
           vocabularyNotebooks.length === 0 ? (
             <Text color="fg.muted" textAlign="center">

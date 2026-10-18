@@ -11,7 +11,113 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/notebook.proto.
  */
 export const file_api_v1_notebook: GenFile = /*@__PURE__*/
-  fileDesc("ChVhcGkvdjEvbm90ZWJvb2sucHJvdG8SBmFwaS52MSItCgxOb3RlYm9va0ZpbGUSDAoEcGF0aBgBIAEoCRIPCgdjb250ZW50GAIgASgMIosBChNQdXNoTm90ZWJvb2tSZXF1ZXN0EhMKC25vdGVib29rX2lkGAEgASgJEgwKBGtpbmQYAiABKAkSDAoEbmFtZRgDIAEoCRItCgVmaWxlcxgEIAMoCzIULmFwaS52MS5Ob3RlYm9va0ZpbGVCCLpIBZIBAggBEhQKDGNvbnRlbnRfaGFzaBgFIAEoCSKnAQoUUHVzaE5vdGVib29rUmVzcG9uc2USEwoLbm90ZWJvb2tfaWQYASABKAkSRQoNaW1wb3J0ZWRfcm93cxgCIAMoCzIuLmFwaS52MS5QdXNoTm90ZWJvb2tSZXNwb25zZS5JbXBvcnRlZFJvd3NFbnRyeRozChFJbXBvcnRlZFJvd3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAU6AjgBIjUKFURlbGV0ZU5vdGVib29rUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQASItChZEZWxldGVOb3RlYm9va1Jlc3BvbnNlEhMKC25vdGVib29rX2lkGAEgASgJIjMKE1B1bGxOb3RlYm9va1JlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEiUQoUUHVsbE5vdGVib29rUmVzcG9uc2USIwoFZmlsZXMYASADKAsyFC5hcGkudjEuTm90ZWJvb2tGaWxlEhQKDGNvbnRlbnRfaGFzaBgCIAEoCSIYChZMaXN0TXlOb3RlYm9va3NSZXF1ZXN0IsgBChdMaXN0TXlOb3RlYm9va3NSZXNwb25zZRI4Cglub3RlYm9va3MYASADKAsyJS5hcGkudjEuTGlzdE15Tm90ZWJvb2tzUmVzcG9uc2UuRW50cnkacwoFRW50cnkSEwoLbm90ZWJvb2tfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIMCgRraW5kGAMgASgJEhIKCnZpc2liaWxpdHkYBCABKAkSEQoJYnl0ZV9zaXplGAUgASgFEhIKCnVwZGF0ZWRfYXQYBiABKAMiOAoYR2V0Tm90ZWJvb2tEZXRhaWxSZXF1ZXN0EhwKC25vdGVib29rX2lkGAEgASgJQge6SARyAhABIn0KGUdldE5vdGVib29rRGV0YWlsUmVzcG9uc2USEwoLbm90ZWJvb2tfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIjCgdzdG9yaWVzGAMgAygLMhIuYXBpLnYxLlN0b3J5RW50cnkSGAoQdG90YWxfd29yZF9jb3VudBgEIAEoBSJ2CgpTdG9yeUVudHJ5Eg0KBWV2ZW50GAEgASgJEicKCG1ldGFkYXRhGAIgASgLMhUuYXBpLnYxLlN0b3J5TWV0YWRhdGESDAoEZGF0ZRgDIAEoCRIiCgZzY2VuZXMYBCADKAsyEi5hcGkudjEuU3RvcnlTY2VuZSJACg1TdG9yeU1ldGFkYXRhEg4KBnNlcmllcxgBIAEoCRIOCgZzZWFzb24YAiABKAUSDwoHZXBpc29kZRgDIAEoBSKHAQoKU3RvcnlTY2VuZRINCgV0aXRsZRgBIAEoCRIrCg1jb252ZXJzYXRpb25zGAIgAygLMhQuYXBpLnYxLkNvbnZlcnNhdGlvbhIpCgtkZWZpbml0aW9ucxgDIAMoCzIULmFwaS52MS5Ob3RlYm9va1dvcmQSEgoKc3RhdGVtZW50cxgFIAMoCSIuCgxDb252ZXJzYXRpb24SDwoHc3BlYWtlchgBIAEoCRINCgVxdW90ZRgCIAEoCSKuAwoMTm90ZWJvb2tXb3JkEhIKCmV4cHJlc3Npb24YASABKAkSEgoKZGVmaW5pdGlvbhgCIAEoCRIPCgdtZWFuaW5nGAMgASgJEhYKDnBhcnRfb2Zfc3BlZWNoGAQgASgJEhUKDXByb251bmNpYXRpb24YBSABKAkSEAoIZXhhbXBsZXMYBiADKAkSEAoIc3lub255bXMYByADKAkSEAoIYW50b255bXMYCCADKAkSFwoPbGVhcm5pbmdfc3RhdHVzGAkgASgJEi4KDGxlYXJuZWRfbG9ncxgKIAMoCzIYLmFwaS52MS5MZWFybmluZ0xvZ0VudHJ5EhgKEG5leHRfcmV2aWV3X2RhdGUYDCABKAkSDgoGb3JpZ2luGA0gASgJEhIKCmlzX3NraXBwZWQYDiABKAgSGgoSc2tpcHBlZF9xdWl6X3R5cGVzGA8gAygJEg8KB25vdGVfaWQYECABKAMSFAoMY29uY2VwdF9oZWFkGBEgASgJEhcKD2NvbmNlcHRfbWVtYmVycxgSIAMoCRIXCg9jb25jZXB0X21lYW5pbmcYEyABKAlKBAgLEAwiiwEKEExlYXJuaW5nTG9nRW50cnkSDgoGc3RhdHVzGAEgASgJEhIKCmxlYXJuZWRfYXQYAiABKAkSDwoHcXVhbGl0eRgDIAEoBRIYChByZXNwb25zZV90aW1lX21zGAQgASgDEhEKCXF1aXpfdHlwZRgFIAEoCRIVCg1pbnRlcnZhbF9kYXlzGAYgASgFIjgKGEV4cG9ydE5vdGVib29rUERGUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQASJCChlFeHBvcnROb3RlYm9va1BERlJlc3BvbnNlEhMKC3BkZl9jb250ZW50GAEgASgMEhAKCGZpbGVuYW1lGAIgASgJIlAKEUxvb2t1cFdvcmRSZXF1ZXN0EhUKBHdvcmQYASABKAlCB7pIBHICEAESEwoLbm90ZWJvb2tfaWQYAiABKAkSDwoHY29udGV4dBgDIAEoCSKZAQoOV29yZERlZmluaXRpb24SFgoOcGFydF9vZl9zcGVlY2gYASABKAkSEgoKZGVmaW5pdGlvbhgCIAEoCRIQCghleGFtcGxlcxgDIAMoCRIQCghzeW5vbnltcxgEIAMoCRIVCg1wcm9udW5jaWF0aW9uGAUgASgJEhAKCGFudG9ueW1zGAYgAygJEg4KBm9yaWdpbhgHIAEoCSJfChJMb29rdXBXb3JkUmVzcG9uc2USDAoEd29yZBgBIAEoCRIrCgtkZWZpbml0aW9ucxgCIAMoCzIWLmFwaS52MS5Xb3JkRGVmaW5pdGlvbhIOCgZzb3VyY2UYAyABKAkixgEKGVJlZ2lzdGVyRGVmaW5pdGlvblJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAESFQoNbm90ZWJvb2tfZmlsZRgCIAEoCRITCgtzY2VuZV9pbmRleBgDIAEoBRIbCgpleHByZXNzaW9uGAQgASgJQge6SARyAhABEhgKB21lYW5pbmcYBSABKAlCB7pIBHICEAESFgoOcGFydF9vZl9zcGVlY2gYBiABKAkSEAoIZXhhbXBsZXMYByADKAkiHAoaUmVnaXN0ZXJEZWZpbml0aW9uUmVzcG9uc2UigAEKF0RlbGV0ZURlZmluaXRpb25SZXF1ZXN0EhwKC25vdGVib29rX2lkGAEgASgJQge6SARyAhABEhUKDW5vdGVib29rX2ZpbGUYAiABKAkSEwoLc2NlbmVfaW5kZXgYAyABKAUSGwoKZXhwcmVzc2lvbhgEIAEoCUIHukgEcgIQASIaChhEZWxldGVEZWZpbml0aW9uUmVzcG9uc2UiPwoTRXR5bW9sb2d5T3JpZ2luRm9ybRIMCgRmb3JtGAEgASgJEgwKBHJvbGUYAiABKAkSDAoEbm90ZRgDIAEoCSLWAQoTRXR5bW9sb2d5T3JpZ2luUGFydBIOCgZvcmlnaW4YASABKAkSDAoEdHlwZRgCIAEoCRIQCghsYW5ndWFnZRgDIAEoCRIPCgdtZWFuaW5nGAQgASgJEhIKCndvcmRfY291bnQYBSABKAUSKgoFZm9ybXMYBiADKAsyGy5hcGkudjEuRXR5bW9sb2d5T3JpZ2luRm9ybRIRCglmcm9tX2Zvcm0YByABKAkSFAoMY29uY2VwdF9rZXlzGAggAygJEhUKDXNlc3Npb25fdGl0bGUYCSABKAkijwIKE0V0eW1vbG9neURlZmluaXRpb24SEgoKZXhwcmVzc2lvbhgBIAEoCRIPCgdtZWFuaW5nGAIgASgJEhYKDnBhcnRfb2Zfc3BlZWNoGAMgASgJEgwKBG5vdGUYBCABKAkSMQoMb3JpZ2luX3BhcnRzGAUgAygLMhsuYXBpLnYxLkV0eW1vbG9neU9yaWdpblBhcnQSFQoNbm90ZWJvb2tfbmFtZRgGIAEoCRIQCghleGFtcGxlcxgHIAMoCRIQCghjb250ZXh0cxgIIAMoCRISCgppc19za2lwcGVkGAkgASgIEhoKEnNraXBwZWRfcXVpel90eXBlcxgKIAMoCRIPCgdub3RlX2lkGAsgASgDIlYKFUV0eW1vbG9neU1lYW5pbmdHcm91cBIPCgdtZWFuaW5nGAEgASgJEiwKB29yaWdpbnMYAiADKAsyGy5hcGkudjEuRXR5bW9sb2d5T3JpZ2luUGFydCI7ChtHZXRFdHltb2xvZ3lOb3RlYm9va1JlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEiWwoVU2VtYW50aWNDb25jZXB0TWVtYmVyEisKBm9yaWdpbhgBIAEoCzIbLmFwaS52MS5FdHltb2xvZ3lPcmlnaW5QYXJ0EhUKDXNlc3Npb25fdGl0bGUYAiABKAkiZgoPQ29uY2VwdFJlbGF0aW9uEgwKBHR5cGUYASABKAkSEwoLaXNfZGlyZWN0ZWQYAiABKAgSGAoQZnJvbV9jb25jZXB0X2tleRgDIAEoCRIWCg50b19jb25jZXB0X2tleRgEIAEoCSK/AQoPU2VtYW50aWNDb25jZXB0EhMKC25vdGVib29rX2lkGAEgASgJEhMKC2NvbmNlcHRfa2V5GAIgASgJEg8KB21lYW5pbmcYAyABKAkSDAoEbm90ZRgEIAEoCRIuCgdtZW1iZXJzGAUgAygLMh0uYXBpLnYxLlNlbWFudGljQ29uY2VwdE1lbWJlchIzChJvdXRnb2luZ19yZWxhdGlvbnMYBiADKAsyFy5hcGkudjEuQ29uY2VwdFJlbGF0aW9uIpACChxHZXRFdHltb2xvZ3lOb3RlYm9va1Jlc3BvbnNlEiwKB29yaWdpbnMYASADKAsyGy5hcGkudjEuRXR5bW9sb2d5T3JpZ2luUGFydBIwCgtkZWZpbml0aW9ucxgCIAMoCzIbLmFwaS52MS5FdHltb2xvZ3lEZWZpbml0aW9uEjUKDm1lYW5pbmdfZ3JvdXBzGAMgAygLMh0uYXBpLnYxLkV0eW1vbG9neU1lYW5pbmdHcm91cBIUCgxvcmlnaW5fY291bnQYBCABKAUSGAoQZGVmaW5pdGlvbl9jb3VudBgFIAEoBRIpCghjb25jZXB0cxgGIAMoCzIXLmFwaS52MS5TZW1hbnRpY0NvbmNlcHQy3AYKD05vdGVib29rU2VydmljZRJYChFHZXROb3RlYm9va0RldGFpbBIgLmFwaS52MS5HZXROb3RlYm9va0RldGFpbFJlcXVlc3QaIS5hcGkudjEuR2V0Tm90ZWJvb2tEZXRhaWxSZXNwb25zZRJYChFFeHBvcnROb3RlYm9va1BERhIgLmFwaS52MS5FeHBvcnROb3RlYm9va1BERlJlcXVlc3QaIS5hcGkudjEuRXhwb3J0Tm90ZWJvb2tQREZSZXNwb25zZRJDCgpMb29rdXBXb3JkEhkuYXBpLnYxLkxvb2t1cFdvcmRSZXF1ZXN0GhouYXBpLnYxLkxvb2t1cFdvcmRSZXNwb25zZRJbChJSZWdpc3RlckRlZmluaXRpb24SIS5hcGkudjEuUmVnaXN0ZXJEZWZpbml0aW9uUmVxdWVzdBoiLmFwaS52MS5SZWdpc3RlckRlZmluaXRpb25SZXNwb25zZRJVChBEZWxldGVEZWZpbml0aW9uEh8uYXBpLnYxLkRlbGV0ZURlZmluaXRpb25SZXF1ZXN0GiAuYXBpLnYxLkRlbGV0ZURlZmluaXRpb25SZXNwb25zZRJhChRHZXRFdHltb2xvZ3lOb3RlYm9vaxIjLmFwaS52MS5HZXRFdHltb2xvZ3lOb3RlYm9va1JlcXVlc3QaJC5hcGkudjEuR2V0RXR5bW9sb2d5Tm90ZWJvb2tSZXNwb25zZRJJCgxQdXNoTm90ZWJvb2sSGy5hcGkudjEuUHVzaE5vdGVib29rUmVxdWVzdBocLmFwaS52MS5QdXNoTm90ZWJvb2tSZXNwb25zZRJJCgxQdWxsTm90ZWJvb2sSGy5hcGkudjEuUHVsbE5vdGVib29rUmVxdWVzdBocLmFwaS52MS5QdWxsTm90ZWJvb2tSZXNwb25zZRJSCg9MaXN0TXlOb3RlYm9va3MSHi5hcGkudjEuTGlzdE15Tm90ZWJvb2tzUmVxdWVzdBofLmFwaS52MS5MaXN0TXlOb3RlYm9va3NSZXNwb25zZRJPCg5EZWxldGVOb3RlYm9vaxIdLmFwaS52MS5EZWxldGVOb3RlYm9va1JlcXVlc3QaHi5hcGkudjEuRGVsZXRlTm90ZWJvb2tSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
+  fileDesc("ChVhcGkvdjEvbm90ZWJvb2sucHJvdG8SBmFwaS52MSIsChJTZWFyY2hCb29rc1JlcXVlc3QSFgoFcXVlcnkYASABKAlCB7pIBHICEAEiUAoKQm9va1Jlc3VsdBIRCglzb3VyY2VfaWQYASABKAkSDQoFdGl0bGUYAiABKAkSDgoGYXV0aG9yGAMgASgJEhAKCGxhbmd1YWdlGAQgASgJIjgKE1NlYXJjaEJvb2tzUmVzcG9uc2USIQoFYm9va3MYASADKAsyEi5hcGkudjEuQm9va1Jlc3VsdCIvChFJbXBvcnRCb29rUmVxdWVzdBIaCglzb3VyY2VfaWQYASABKAlCB7pIBHICEAEiKQoSSW1wb3J0Qm9va1Jlc3BvbnNlEhMKC25vdGVib29rX2lkGAEgASgJIi0KDE5vdGVib29rRmlsZRIMCgRwYXRoGAEgASgJEg8KB2NvbnRlbnQYAiABKAwiiwEKE1B1c2hOb3RlYm9va1JlcXVlc3QSEwoLbm90ZWJvb2tfaWQYASABKAkSDAoEa2luZBgCIAEoCRIMCgRuYW1lGAMgASgJEi0KBWZpbGVzGAQgAygLMhQuYXBpLnYxLk5vdGVib29rRmlsZUIIukgFkgECCAESFAoMY29udGVudF9oYXNoGAUgASgJIqcBChRQdXNoTm90ZWJvb2tSZXNwb25zZRITCgtub3RlYm9va19pZBgBIAEoCRJFCg1pbXBvcnRlZF9yb3dzGAIgAygLMi4uYXBpLnYxLlB1c2hOb3RlYm9va1Jlc3BvbnNlLkltcG9ydGVkUm93c0VudHJ5GjMKEUltcG9ydGVkUm93c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoBToCOAEiNQoVRGVsZXRlTm90ZWJvb2tSZXF1ZXN0EhwKC25vdGVib29rX2lkGAEgASgJQge6SARyAhABIi0KFkRlbGV0ZU5vdGVib29rUmVzcG9uc2USEwoLbm90ZWJvb2tfaWQYASABKAkiMwoTUHVsbE5vdGVib29rUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQASJRChRQdWxsTm90ZWJvb2tSZXNwb25zZRIjCgVmaWxlcxgBIAMoCzIULmFwaS52MS5Ob3RlYm9va0ZpbGUSFAoMY29udGVudF9oYXNoGAIgASgJIhgKFkxpc3RNeU5vdGVib29rc1JlcXVlc3QiyAEKF0xpc3RNeU5vdGVib29rc1Jlc3BvbnNlEjgKCW5vdGVib29rcxgBIAMoCzIlLmFwaS52MS5MaXN0TXlOb3RlYm9va3NSZXNwb25zZS5FbnRyeRpzCgVFbnRyeRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBGtpbmQYAyABKAkSEgoKdmlzaWJpbGl0eRgEIAEoCRIRCglieXRlX3NpemUYBSABKAUSEgoKdXBkYXRlZF9hdBgGIAEoAyI4ChhHZXROb3RlYm9va0RldGFpbFJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEifQoZR2V0Tm90ZWJvb2tEZXRhaWxSZXNwb25zZRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEiMKB3N0b3JpZXMYAyADKAsyEi5hcGkudjEuU3RvcnlFbnRyeRIYChB0b3RhbF93b3JkX2NvdW50GAQgASgFInYKClN0b3J5RW50cnkSDQoFZXZlbnQYASABKAkSJwoIbWV0YWRhdGEYAiABKAsyFS5hcGkudjEuU3RvcnlNZXRhZGF0YRIMCgRkYXRlGAMgASgJEiIKBnNjZW5lcxgEIAMoCzISLmFwaS52MS5TdG9yeVNjZW5lIkAKDVN0b3J5TWV0YWRhdGESDgoGc2VyaWVzGAEgASgJEg4KBnNlYXNvbhgCIAEoBRIPCgdlcGlzb2RlGAMgASgFIocBCgpTdG9yeVNjZW5lEg0KBXRpdGxlGAEgASgJEisKDWNvbnZlcnNhdGlvbnMYAiADKAsyFC5hcGkudjEuQ29udmVyc2F0aW9uEikKC2RlZmluaXRpb25zGAMgAygLMhQuYXBpLnYxLk5vdGVib29rV29yZBISCgpzdGF0ZW1lbnRzGAUgAygJIi4KDENvbnZlcnNhdGlvbhIPCgdzcGVha2VyGAEgASgJEg0KBXF1b3RlGAIgASgJIq4DCgxOb3RlYm9va1dvcmQSEgoKZXhwcmVzc2lvbhgBIAEoCRISCgpkZWZpbml0aW9uGAIgASgJEg8KB21lYW5pbmcYAyABKAkSFgoOcGFydF9vZl9zcGVlY2gYBCABKAkSFQoNcHJvbnVuY2lhdGlvbhgFIAEoCRIQCghleGFtcGxlcxgGIAMoCRIQCghzeW5vbnltcxgHIAMoCRIQCghhbnRvbnltcxgIIAMoCRIXCg9sZWFybmluZ19zdGF0dXMYCSABKAkSLgoMbGVhcm5lZF9sb2dzGAogAygLMhguYXBpLnYxLkxlYXJuaW5nTG9nRW50cnkSGAoQbmV4dF9yZXZpZXdfZGF0ZRgMIAEoCRIOCgZvcmlnaW4YDSABKAkSEgoKaXNfc2tpcHBlZBgOIAEoCBIaChJza2lwcGVkX3F1aXpfdHlwZXMYDyADKAkSDwoHbm90ZV9pZBgQIAEoAxIUCgxjb25jZXB0X2hlYWQYESABKAkSFwoPY29uY2VwdF9tZW1iZXJzGBIgAygJEhcKD2NvbmNlcHRfbWVhbmluZxgTIAEoCUoECAsQDCKLAQoQTGVhcm5pbmdMb2dFbnRyeRIOCgZzdGF0dXMYASABKAkSEgoKbGVhcm5lZF9hdBgCIAEoCRIPCgdxdWFsaXR5GAMgASgFEhgKEHJlc3BvbnNlX3RpbWVfbXMYBCABKAMSEQoJcXVpel90eXBlGAUgASgJEhUKDWludGVydmFsX2RheXMYBiABKAUiOAoYRXhwb3J0Tm90ZWJvb2tQREZSZXF1ZXN0EhwKC25vdGVib29rX2lkGAEgASgJQge6SARyAhABIkIKGUV4cG9ydE5vdGVib29rUERGUmVzcG9uc2USEwoLcGRmX2NvbnRlbnQYASABKAwSEAoIZmlsZW5hbWUYAiABKAkiUAoRTG9va3VwV29yZFJlcXVlc3QSFQoEd29yZBgBIAEoCUIHukgEcgIQARITCgtub3RlYm9va19pZBgCIAEoCRIPCgdjb250ZXh0GAMgASgJIpkBCg5Xb3JkRGVmaW5pdGlvbhIWCg5wYXJ0X29mX3NwZWVjaBgBIAEoCRISCgpkZWZpbml0aW9uGAIgASgJEhAKCGV4YW1wbGVzGAMgAygJEhAKCHN5bm9ueW1zGAQgAygJEhUKDXByb251bmNpYXRpb24YBSABKAkSEAoIYW50b255bXMYBiADKAkSDgoGb3JpZ2luGAcgASgJIjwKEU1lYW5pbmdTdWdnZXN0aW9uEg8KB21lYW5pbmcYASABKAkSFgoOc2F2ZWRfYnlfY291bnQYAiABKAUijwEKEkxvb2t1cFdvcmRSZXNwb25zZRIMCgR3b3JkGAEgASgJEisKC2RlZmluaXRpb25zGAIgAygLMhYuYXBpLnYxLldvcmREZWZpbml0aW9uEg4KBnNvdXJjZRgDIAEoCRIuCgtzdWdnZXN0aW9ucxgEIAMoCzIZLmFwaS52MS5NZWFuaW5nU3VnZ2VzdGlvbiLGAQoZUmVnaXN0ZXJEZWZpbml0aW9uUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQARIVCg1ub3RlYm9va19maWxlGAIgASgJEhMKC3NjZW5lX2luZGV4GAMgASgFEhsKCmV4cHJlc3Npb24YBCABKAlCB7pIBHICEAESGAoHbWVhbmluZxgFIAEoCUIHukgEcgIQARIWCg5wYXJ0X29mX3NwZWVjaBgGIAEoCRIQCghleGFtcGxlcxgHIAMoCSIcChpSZWdpc3RlckRlZmluaXRpb25SZXNwb25zZSKAAQoXRGVsZXRlRGVmaW5pdGlvblJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAESFQoNbm90ZWJvb2tfZmlsZRgCIAEoCRITCgtzY2VuZV9pbmRleBgDIAEoBRIbCgpleHByZXNzaW9uGAQgASgJQge6SARyAhABIhoKGERlbGV0ZURlZmluaXRpb25SZXNwb25zZSI/ChNFdHltb2xvZ3lPcmlnaW5Gb3JtEgwKBGZvcm0YASABKAkSDAoEcm9sZRgCIAEoCRIMCgRub3RlGAMgASgJItYBChNFdHltb2xvZ3lPcmlnaW5QYXJ0Eg4KBm9yaWdpbhgBIAEoCRIMCgR0eXBlGAIgASgJEhAKCGxhbmd1YWdlGAMgASgJEg8KB21lYW5pbmcYBCABKAkSEgoKd29yZF9jb3VudBgFIAEoBRIqCgVmb3JtcxgGIAMoCzIbLmFwaS52MS5FdHltb2xvZ3lPcmlnaW5Gb3JtEhEKCWZyb21fZm9ybRgHIAEoCRIUCgxjb25jZXB0X2tleXMYCCADKAkSFQoNc2Vzc2lvbl90aXRsZRgJIAEoCSKPAgoTRXR5bW9sb2d5RGVmaW5pdGlvbhISCgpleHByZXNzaW9uGAEgASgJEg8KB21lYW5pbmcYAiABKAkSFgoOcGFydF9vZl9zcGVlY2gYAyABKAkSDAoEbm90ZRgEIAEoCRIxCgxvcmlnaW5fcGFydHMYBSADKAsyGy5hcGkudjEuRXR5bW9sb2d5T3JpZ2luUGFydBIVCg1ub3RlYm9va19uYW1lGAYgASgJEhAKCGV4YW1wbGVzGAcgAygJEhAKCGNvbnRleHRzGAggAygJEhIKCmlzX3NraXBwZWQYCSABKAgSGgoSc2tpcHBlZF9xdWl6X3R5cGVzGAogAygJEg8KB25vdGVfaWQYCyABKAMiVgoVRXR5bW9sb2d5TWVhbmluZ0dyb3VwEg8KB21lYW5pbmcYASABKAkSLAoHb3JpZ2lucxgCIAMoCzIbLmFwaS52MS5FdHltb2xvZ3lPcmlnaW5QYXJ0IjsKG0dldEV0eW1vbG9neU5vdGVib29rUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQASJbChVTZW1hbnRpY0NvbmNlcHRNZW1iZXISKwoGb3JpZ2luGAEgASgLMhsuYXBpLnYxLkV0eW1vbG9neU9yaWdpblBhcnQSFQoNc2Vzc2lvbl90aXRsZRgCIAEoCSJmCg9Db25jZXB0UmVsYXRpb24SDAoEdHlwZRgBIAEoCRITCgtpc19kaXJlY3RlZBgCIAEoCBIYChBmcm9tX2NvbmNlcHRfa2V5GAMgASgJEhYKDnRvX2NvbmNlcHRfa2V5GAQgASgJIr8BCg9TZW1hbnRpY0NvbmNlcHQSEwoLbm90ZWJvb2tfaWQYASABKAkSEwoLY29uY2VwdF9rZXkYAiABKAkSDwoHbWVhbmluZxgDIAEoCRIMCgRub3RlGAQgASgJEi4KB21lbWJlcnMYBSADKAsyHS5hcGkudjEuU2VtYW50aWNDb25jZXB0TWVtYmVyEjMKEm91dGdvaW5nX3JlbGF0aW9ucxgGIAMoCzIXLmFwaS52MS5Db25jZXB0UmVsYXRpb24ikAIKHEdldEV0eW1vbG9neU5vdGVib29rUmVzcG9uc2USLAoHb3JpZ2lucxgBIAMoCzIbLmFwaS52MS5FdHltb2xvZ3lPcmlnaW5QYXJ0EjAKC2RlZmluaXRpb25zGAIgAygLMhsuYXBpLnYxLkV0eW1vbG9neURlZmluaXRpb24SNQoObWVhbmluZ19ncm91cHMYAyADKAsyHS5hcGkudjEuRXR5bW9sb2d5TWVhbmluZ0dyb3VwEhQKDG9yaWdpbl9jb3VudBgEIAEoBRIYChBkZWZpbml0aW9uX2NvdW50GAUgASgFEikKCGNvbmNlcHRzGAYgAygLMhcuYXBpLnYxLlNlbWFudGljQ29uY2VwdDLpBwoPTm90ZWJvb2tTZXJ2aWNlElgKEUdldE5vdGVib29rRGV0YWlsEiAuYXBpLnYxLkdldE5vdGVib29rRGV0YWlsUmVxdWVzdBohLmFwaS52MS5HZXROb3RlYm9va0RldGFpbFJlc3BvbnNlElgKEUV4cG9ydE5vdGVib29rUERGEiAuYXBpLnYxLkV4cG9ydE5vdGVib29rUERGUmVxdWVzdBohLmFwaS52MS5FeHBvcnROb3RlYm9va1BERlJlc3BvbnNlEkMKCkxvb2t1cFdvcmQSGS5hcGkudjEuTG9va3VwV29yZFJlcXVlc3QaGi5hcGkudjEuTG9va3VwV29yZFJlc3BvbnNlElsKElJlZ2lzdGVyRGVmaW5pdGlvbhIhLmFwaS52MS5SZWdpc3RlckRlZmluaXRpb25SZXF1ZXN0GiIuYXBpLnYxLlJlZ2lzdGVyRGVmaW5pdGlvblJlc3BvbnNlElUKEERlbGV0ZURlZmluaXRpb24SHy5hcGkudjEuRGVsZXRlRGVmaW5pdGlvblJlcXVlc3QaIC5hcGkudjEuRGVsZXRlRGVmaW5pdGlvblJlc3BvbnNlEmEKFEdldEV0eW1vbG9neU5vdGVib29rEiMuYXBpLnYxLkdldEV0eW1vbG9neU5vdGVib29rUmVxdWVzdBokLmFwaS52MS5HZXRFdHltb2xvZ3lOb3RlYm9va1Jlc3BvbnNlEkkKDFB1c2hOb3RlYm9vaxIbLmFwaS52MS5QdXNoTm90ZWJvb2tSZXF1ZXN0GhwuYXBpLnYxLlB1c2hOb3RlYm9va1Jlc3BvbnNlEkkKDFB1bGxOb3RlYm9vaxIbLmFwaS52MS5QdWxsTm90ZWJvb2tSZXF1ZXN0GhwuYXBpLnYxLlB1bGxOb3RlYm9va1Jlc3BvbnNlElIKD0xpc3RNeU5vdGVib29rcxIeLmFwaS52MS5MaXN0TXlOb3RlYm9va3NSZXF1ZXN0Gh8uYXBpLnYxLkxpc3RNeU5vdGVib29rc1Jlc3BvbnNlEk8KDkRlbGV0ZU5vdGVib29rEh0uYXBpLnYxLkRlbGV0ZU5vdGVib29rUmVxdWVzdBoeLmFwaS52MS5EZWxldGVOb3RlYm9va1Jlc3BvbnNlEkYKC1NlYXJjaEJvb2tzEhouYXBpLnYxLlNlYXJjaEJvb2tzUmVxdWVzdBobLmFwaS52MS5TZWFyY2hCb29rc1Jlc3BvbnNlEkMKCkltcG9ydEJvb2sSGS5hcGkudjEuSW1wb3J0Qm9va1JlcXVlc3QaGi5hcGkudjEuSW1wb3J0Qm9va1Jlc3BvbnNlQjhaNmdpdGh1Yi5jb20vYXQtaXNoaWthd2EvbGFuZ25lci9nZW4tcHJvdG9zL2FwaS92MTthcGl2MWIGcHJvdG8z", [file_buf_validate_validate]);
+
+/**
+ * @generated from message api.v1.SearchBooksRequest
+ */
+export type SearchBooksRequest = Message<"api.v1.SearchBooksRequest"> & {
+  /**
+   * @generated from field: string query = 1;
+   */
+  query: string;
+};
+
+/**
+ * Describes the message api.v1.SearchBooksRequest.
+ * Use `create(SearchBooksRequestSchema)` to create a new message.
+ */
+export const SearchBooksRequestSchema: GenMessage<SearchBooksRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 0);
+
+/**
+ * BookResult is one catalog hit. source_id is the Gutenberg book id (as a
+ * string) passed back to ImportBook.
+ *
+ * @generated from message api.v1.BookResult
+ */
+export type BookResult = Message<"api.v1.BookResult"> & {
+  /**
+   * @generated from field: string source_id = 1;
+   */
+  sourceId: string;
+
+  /**
+   * @generated from field: string title = 2;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string author = 3;
+   */
+  author: string;
+
+  /**
+   * @generated from field: string language = 4;
+   */
+  language: string;
+};
+
+/**
+ * Describes the message api.v1.BookResult.
+ * Use `create(BookResultSchema)` to create a new message.
+ */
+export const BookResultSchema: GenMessage<BookResult> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 1);
+
+/**
+ * @generated from message api.v1.SearchBooksResponse
+ */
+export type SearchBooksResponse = Message<"api.v1.SearchBooksResponse"> & {
+  /**
+   * @generated from field: repeated api.v1.BookResult books = 1;
+   */
+  books: BookResult[];
+};
+
+/**
+ * Describes the message api.v1.SearchBooksResponse.
+ * Use `create(SearchBooksResponseSchema)` to create a new message.
+ */
+export const SearchBooksResponseSchema: GenMessage<SearchBooksResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 2);
+
+/**
+ * @generated from message api.v1.ImportBookRequest
+ */
+export type ImportBookRequest = Message<"api.v1.ImportBookRequest"> & {
+  /**
+   * @generated from field: string source_id = 1;
+   */
+  sourceId: string;
+};
+
+/**
+ * Describes the message api.v1.ImportBookRequest.
+ * Use `create(ImportBookRequestSchema)` to create a new message.
+ */
+export const ImportBookRequestSchema: GenMessage<ImportBookRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 3);
+
+/**
+ * @generated from message api.v1.ImportBookResponse
+ */
+export type ImportBookResponse = Message<"api.v1.ImportBookResponse"> & {
+  /**
+   * notebook_id is the deterministic shared id (`gutenberg-<source_id>`) the
+   * book was stored under; open the reader at /learn/<notebook_id>.
+   *
+   * @generated from field: string notebook_id = 1;
+   */
+  notebookId: string;
+};
+
+/**
+ * Describes the message api.v1.ImportBookResponse.
+ * Use `create(ImportBookResponseSchema)` to create a new message.
+ */
+export const ImportBookResponseSchema: GenMessage<ImportBookResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 4);
 
 /**
  * NotebookFile is one raw YAML file of a pushed bundle. path is relative to the
@@ -36,7 +142,7 @@ export type NotebookFile = Message<"api.v1.NotebookFile"> & {
  * Use `create(NotebookFileSchema)` to create a new message.
  */
 export const NotebookFileSchema: GenMessage<NotebookFile> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 0);
+  messageDesc(file_api_v1_notebook, 5);
 
 /**
  * @generated from message api.v1.PushNotebookRequest
@@ -82,7 +188,7 @@ export type PushNotebookRequest = Message<"api.v1.PushNotebookRequest"> & {
  * Use `create(PushNotebookRequestSchema)` to create a new message.
  */
 export const PushNotebookRequestSchema: GenMessage<PushNotebookRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 1);
+  messageDesc(file_api_v1_notebook, 6);
 
 /**
  * @generated from message api.v1.PushNotebookResponse
@@ -108,7 +214,7 @@ export type PushNotebookResponse = Message<"api.v1.PushNotebookResponse"> & {
  * Use `create(PushNotebookResponseSchema)` to create a new message.
  */
 export const PushNotebookResponseSchema: GenMessage<PushNotebookResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 2);
+  messageDesc(file_api_v1_notebook, 7);
 
 /**
  * @generated from message api.v1.DeleteNotebookRequest
@@ -128,7 +234,7 @@ export type DeleteNotebookRequest = Message<"api.v1.DeleteNotebookRequest"> & {
  * Use `create(DeleteNotebookRequestSchema)` to create a new message.
  */
 export const DeleteNotebookRequestSchema: GenMessage<DeleteNotebookRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 3);
+  messageDesc(file_api_v1_notebook, 8);
 
 /**
  * @generated from message api.v1.DeleteNotebookResponse
@@ -147,7 +253,7 @@ export type DeleteNotebookResponse = Message<"api.v1.DeleteNotebookResponse"> & 
  * Use `create(DeleteNotebookResponseSchema)` to create a new message.
  */
 export const DeleteNotebookResponseSchema: GenMessage<DeleteNotebookResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 4);
+  messageDesc(file_api_v1_notebook, 9);
 
 /**
  * @generated from message api.v1.PullNotebookRequest
@@ -164,7 +270,7 @@ export type PullNotebookRequest = Message<"api.v1.PullNotebookRequest"> & {
  * Use `create(PullNotebookRequestSchema)` to create a new message.
  */
 export const PullNotebookRequestSchema: GenMessage<PullNotebookRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 5);
+  messageDesc(file_api_v1_notebook, 10);
 
 /**
  * @generated from message api.v1.PullNotebookResponse
@@ -186,7 +292,7 @@ export type PullNotebookResponse = Message<"api.v1.PullNotebookResponse"> & {
  * Use `create(PullNotebookResponseSchema)` to create a new message.
  */
 export const PullNotebookResponseSchema: GenMessage<PullNotebookResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 6);
+  messageDesc(file_api_v1_notebook, 11);
 
 /**
  * @generated from message api.v1.ListMyNotebooksRequest
@@ -199,7 +305,7 @@ export type ListMyNotebooksRequest = Message<"api.v1.ListMyNotebooksRequest"> & 
  * Use `create(ListMyNotebooksRequestSchema)` to create a new message.
  */
 export const ListMyNotebooksRequestSchema: GenMessage<ListMyNotebooksRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 7);
+  messageDesc(file_api_v1_notebook, 12);
 
 /**
  * @generated from message api.v1.ListMyNotebooksResponse
@@ -216,7 +322,7 @@ export type ListMyNotebooksResponse = Message<"api.v1.ListMyNotebooksResponse"> 
  * Use `create(ListMyNotebooksResponseSchema)` to create a new message.
  */
 export const ListMyNotebooksResponseSchema: GenMessage<ListMyNotebooksResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 8);
+  messageDesc(file_api_v1_notebook, 13);
 
 /**
  * @generated from message api.v1.ListMyNotebooksResponse.Entry
@@ -258,7 +364,7 @@ export type ListMyNotebooksResponse_Entry = Message<"api.v1.ListMyNotebooksRespo
  * Use `create(ListMyNotebooksResponse_EntrySchema)` to create a new message.
  */
 export const ListMyNotebooksResponse_EntrySchema: GenMessage<ListMyNotebooksResponse_Entry> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 8, 0);
+  messageDesc(file_api_v1_notebook, 13, 0);
 
 /**
  * @generated from message api.v1.GetNotebookDetailRequest
@@ -275,7 +381,7 @@ export type GetNotebookDetailRequest = Message<"api.v1.GetNotebookDetailRequest"
  * Use `create(GetNotebookDetailRequestSchema)` to create a new message.
  */
 export const GetNotebookDetailRequestSchema: GenMessage<GetNotebookDetailRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 9);
+  messageDesc(file_api_v1_notebook, 14);
 
 /**
  * @generated from message api.v1.GetNotebookDetailResponse
@@ -307,7 +413,7 @@ export type GetNotebookDetailResponse = Message<"api.v1.GetNotebookDetailRespons
  * Use `create(GetNotebookDetailResponseSchema)` to create a new message.
  */
 export const GetNotebookDetailResponseSchema: GenMessage<GetNotebookDetailResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 10);
+  messageDesc(file_api_v1_notebook, 15);
 
 /**
  * @generated from message api.v1.StoryEntry
@@ -339,7 +445,7 @@ export type StoryEntry = Message<"api.v1.StoryEntry"> & {
  * Use `create(StoryEntrySchema)` to create a new message.
  */
 export const StoryEntrySchema: GenMessage<StoryEntry> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 11);
+  messageDesc(file_api_v1_notebook, 16);
 
 /**
  * @generated from message api.v1.StoryMetadata
@@ -366,7 +472,7 @@ export type StoryMetadata = Message<"api.v1.StoryMetadata"> & {
  * Use `create(StoryMetadataSchema)` to create a new message.
  */
 export const StoryMetadataSchema: GenMessage<StoryMetadata> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 12);
+  messageDesc(file_api_v1_notebook, 17);
 
 /**
  * @generated from message api.v1.StoryScene
@@ -398,7 +504,7 @@ export type StoryScene = Message<"api.v1.StoryScene"> & {
  * Use `create(StorySceneSchema)` to create a new message.
  */
 export const StorySceneSchema: GenMessage<StoryScene> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 13);
+  messageDesc(file_api_v1_notebook, 18);
 
 /**
  * @generated from message api.v1.Conversation
@@ -420,7 +526,7 @@ export type Conversation = Message<"api.v1.Conversation"> & {
  * Use `create(ConversationSchema)` to create a new message.
  */
 export const ConversationSchema: GenMessage<Conversation> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 14);
+  messageDesc(file_api_v1_notebook, 19);
 
 /**
  * @generated from message api.v1.NotebookWord
@@ -541,7 +647,7 @@ export type NotebookWord = Message<"api.v1.NotebookWord"> & {
  * Use `create(NotebookWordSchema)` to create a new message.
  */
 export const NotebookWordSchema: GenMessage<NotebookWord> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 15);
+  messageDesc(file_api_v1_notebook, 20);
 
 /**
  * @generated from message api.v1.LearningLogEntry
@@ -583,7 +689,7 @@ export type LearningLogEntry = Message<"api.v1.LearningLogEntry"> & {
  * Use `create(LearningLogEntrySchema)` to create a new message.
  */
 export const LearningLogEntrySchema: GenMessage<LearningLogEntry> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 16);
+  messageDesc(file_api_v1_notebook, 21);
 
 /**
  * @generated from message api.v1.ExportNotebookPDFRequest
@@ -600,7 +706,7 @@ export type ExportNotebookPDFRequest = Message<"api.v1.ExportNotebookPDFRequest"
  * Use `create(ExportNotebookPDFRequestSchema)` to create a new message.
  */
 export const ExportNotebookPDFRequestSchema: GenMessage<ExportNotebookPDFRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 17);
+  messageDesc(file_api_v1_notebook, 22);
 
 /**
  * @generated from message api.v1.ExportNotebookPDFResponse
@@ -622,7 +728,7 @@ export type ExportNotebookPDFResponse = Message<"api.v1.ExportNotebookPDFRespons
  * Use `create(ExportNotebookPDFResponseSchema)` to create a new message.
  */
 export const ExportNotebookPDFResponseSchema: GenMessage<ExportNotebookPDFResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 18);
+  messageDesc(file_api_v1_notebook, 23);
 
 /**
  * @generated from message api.v1.LookupWordRequest
@@ -649,7 +755,7 @@ export type LookupWordRequest = Message<"api.v1.LookupWordRequest"> & {
  * Use `create(LookupWordRequestSchema)` to create a new message.
  */
 export const LookupWordRequestSchema: GenMessage<LookupWordRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 19);
+  messageDesc(file_api_v1_notebook, 24);
 
 /**
  * @generated from message api.v1.WordDefinition
@@ -696,7 +802,34 @@ export type WordDefinition = Message<"api.v1.WordDefinition"> & {
  * Use `create(WordDefinitionSchema)` to create a new message.
  */
 export const WordDefinitionSchema: GenMessage<WordDefinition> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 20);
+  messageDesc(file_api_v1_notebook, 25);
+
+/**
+ * MeaningSuggestion is a meaning OTHER users privately saved for the same
+ * (notebook, expression). Shown as a prefill when the caller highlights the
+ * word; accepting it still stores the caller's OWN private copy (a suggestion
+ * never enters another user's quiz).
+ *
+ * @generated from message api.v1.MeaningSuggestion
+ */
+export type MeaningSuggestion = Message<"api.v1.MeaningSuggestion"> & {
+  /**
+   * @generated from field: string meaning = 1;
+   */
+  meaning: string;
+
+  /**
+   * @generated from field: int32 saved_by_count = 2;
+   */
+  savedByCount: number;
+};
+
+/**
+ * Describes the message api.v1.MeaningSuggestion.
+ * Use `create(MeaningSuggestionSchema)` to create a new message.
+ */
+export const MeaningSuggestionSchema: GenMessage<MeaningSuggestion> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 26);
 
 /**
  * @generated from message api.v1.LookupWordResponse
@@ -716,6 +849,14 @@ export type LookupWordResponse = Message<"api.v1.LookupWordResponse"> & {
    * @generated from field: string source = 3;
    */
   source: string;
+
+  /**
+   * suggestions are the distinct meanings other users saved for this
+   * (notebook_id, word) across the shared book. Empty when none / no DB.
+   *
+   * @generated from field: repeated api.v1.MeaningSuggestion suggestions = 4;
+   */
+  suggestions: MeaningSuggestion[];
 };
 
 /**
@@ -723,7 +864,7 @@ export type LookupWordResponse = Message<"api.v1.LookupWordResponse"> & {
  * Use `create(LookupWordResponseSchema)` to create a new message.
  */
 export const LookupWordResponseSchema: GenMessage<LookupWordResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 21);
+  messageDesc(file_api_v1_notebook, 27);
 
 /**
  * @generated from message api.v1.RegisterDefinitionRequest
@@ -770,7 +911,7 @@ export type RegisterDefinitionRequest = Message<"api.v1.RegisterDefinitionReques
  * Use `create(RegisterDefinitionRequestSchema)` to create a new message.
  */
 export const RegisterDefinitionRequestSchema: GenMessage<RegisterDefinitionRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 22);
+  messageDesc(file_api_v1_notebook, 28);
 
 /**
  * @generated from message api.v1.RegisterDefinitionResponse
@@ -783,7 +924,7 @@ export type RegisterDefinitionResponse = Message<"api.v1.RegisterDefinitionRespo
  * Use `create(RegisterDefinitionResponseSchema)` to create a new message.
  */
 export const RegisterDefinitionResponseSchema: GenMessage<RegisterDefinitionResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 23);
+  messageDesc(file_api_v1_notebook, 29);
 
 /**
  * @generated from message api.v1.DeleteDefinitionRequest
@@ -815,7 +956,7 @@ export type DeleteDefinitionRequest = Message<"api.v1.DeleteDefinitionRequest"> 
  * Use `create(DeleteDefinitionRequestSchema)` to create a new message.
  */
 export const DeleteDefinitionRequestSchema: GenMessage<DeleteDefinitionRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 24);
+  messageDesc(file_api_v1_notebook, 30);
 
 /**
  * @generated from message api.v1.DeleteDefinitionResponse
@@ -828,7 +969,7 @@ export type DeleteDefinitionResponse = Message<"api.v1.DeleteDefinitionResponse"
  * Use `create(DeleteDefinitionResponseSchema)` to create a new message.
  */
 export const DeleteDefinitionResponseSchema: GenMessage<DeleteDefinitionResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 25);
+  messageDesc(file_api_v1_notebook, 31);
 
 /**
  * EtymologyOriginForm is one inflectional / morphological variant of a
@@ -859,7 +1000,7 @@ export type EtymologyOriginForm = Message<"api.v1.EtymologyOriginForm"> & {
  * Use `create(EtymologyOriginFormSchema)` to create a new message.
  */
 export const EtymologyOriginFormSchema: GenMessage<EtymologyOriginForm> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 26);
+  messageDesc(file_api_v1_notebook, 32);
 
 /**
  * @generated from message api.v1.EtymologyOriginPart
@@ -936,7 +1077,7 @@ export type EtymologyOriginPart = Message<"api.v1.EtymologyOriginPart"> & {
  * Use `create(EtymologyOriginPartSchema)` to create a new message.
  */
 export const EtymologyOriginPartSchema: GenMessage<EtymologyOriginPart> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 27);
+  messageDesc(file_api_v1_notebook, 33);
 
 /**
  * @generated from message api.v1.EtymologyDefinition
@@ -1019,7 +1160,7 @@ export type EtymologyDefinition = Message<"api.v1.EtymologyDefinition"> & {
  * Use `create(EtymologyDefinitionSchema)` to create a new message.
  */
 export const EtymologyDefinitionSchema: GenMessage<EtymologyDefinition> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 28);
+  messageDesc(file_api_v1_notebook, 34);
 
 /**
  * @generated from message api.v1.EtymologyMeaningGroup
@@ -1041,7 +1182,7 @@ export type EtymologyMeaningGroup = Message<"api.v1.EtymologyMeaningGroup"> & {
  * Use `create(EtymologyMeaningGroupSchema)` to create a new message.
  */
 export const EtymologyMeaningGroupSchema: GenMessage<EtymologyMeaningGroup> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 29);
+  messageDesc(file_api_v1_notebook, 35);
 
 /**
  * @generated from message api.v1.GetEtymologyNotebookRequest
@@ -1058,7 +1199,7 @@ export type GetEtymologyNotebookRequest = Message<"api.v1.GetEtymologyNotebookRe
  * Use `create(GetEtymologyNotebookRequestSchema)` to create a new message.
  */
 export const GetEtymologyNotebookRequestSchema: GenMessage<GetEtymologyNotebookRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 30);
+  messageDesc(file_api_v1_notebook, 36);
 
 /**
  * SemanticConceptMember is one member of a semantic concept. The origin
@@ -1083,7 +1224,7 @@ export type SemanticConceptMember = Message<"api.v1.SemanticConceptMember"> & {
  * Use `create(SemanticConceptMemberSchema)` to create a new message.
  */
 export const SemanticConceptMemberSchema: GenMessage<SemanticConceptMember> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 31);
+  messageDesc(file_api_v1_notebook, 37);
 
 /**
  * ConceptRelation is a typed edge from this concept to another in the same
@@ -1119,7 +1260,7 @@ export type ConceptRelation = Message<"api.v1.ConceptRelation"> & {
  * Use `create(ConceptRelationSchema)` to create a new message.
  */
 export const ConceptRelationSchema: GenMessage<ConceptRelation> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 32);
+  messageDesc(file_api_v1_notebook, 38);
 
 /**
  * SemanticConcept groups origins that share an underlying meaning within a
@@ -1164,7 +1305,7 @@ export type SemanticConcept = Message<"api.v1.SemanticConcept"> & {
  * Use `create(SemanticConceptSchema)` to create a new message.
  */
 export const SemanticConceptSchema: GenMessage<SemanticConcept> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 33);
+  messageDesc(file_api_v1_notebook, 39);
 
 /**
  * @generated from message api.v1.GetEtymologyNotebookResponse
@@ -1206,7 +1347,7 @@ export type GetEtymologyNotebookResponse = Message<"api.v1.GetEtymologyNotebookR
  * Use `create(GetEtymologyNotebookResponseSchema)` to create a new message.
  */
 export const GetEtymologyNotebookResponseSchema: GenMessage<GetEtymologyNotebookResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 34);
+  messageDesc(file_api_v1_notebook, 40);
 
 /**
  * @generated from service api.v1.NotebookService
@@ -1297,6 +1438,29 @@ export const NotebookService: GenService<{
     methodKind: "unary";
     input: typeof DeleteNotebookRequestSchema;
     output: typeof DeleteNotebookResponseSchema;
+  },
+  /**
+   * Project Gutenberg books. SearchBooks queries the public catalog
+   * (keyless Gutendex) by free text. ImportBook downloads + parses a book and
+   * stores it ONCE as a shared, public, owner-less notebook under a
+   * deterministic id `gutenberg-<source_id>`; a re-import by anyone is an
+   * idempotent no-op. Every user can then read/quiz it; highlights stay
+   * private per user.
+   *
+   * @generated from rpc api.v1.NotebookService.SearchBooks
+   */
+  searchBooks: {
+    methodKind: "unary";
+    input: typeof SearchBooksRequestSchema;
+    output: typeof SearchBooksResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.NotebookService.ImportBook
+   */
+  importBook: {
+    methodKind: "unary";
+    input: typeof ImportBookRequestSchema;
+    output: typeof ImportBookResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_notebook, 0);
