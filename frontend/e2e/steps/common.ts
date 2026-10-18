@@ -65,6 +65,11 @@ Given("I am on the Settings page", async ({ page }) => {
   await page.goto("/settings");
 });
 
+// covers route: /books — the Project Gutenberg catalog (search + import).
+Given("I am on the Books page", async ({ page }) => {
+  await page.goto("/books");
+});
+
 When("I follow the {string} link", async ({ page }, name: string) => {
   await page.getByRole("link", { name: new RegExp(name, "i") }).first().click();
 });
