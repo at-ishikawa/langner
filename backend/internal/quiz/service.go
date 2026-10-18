@@ -426,7 +426,11 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		if !visible(id) {
 			continue
 		}
-		stories, err := reader.ReadStoryNotebooks(id)
+		// Overlay the user's private registered highlights so a shared book whose
+		// ONLY words are the ones this user saved still shows up in the quiz hub
+		// with a word/review count (otherwise an imported book with no authored
+		// definitions counts as 0 words and is filtered out of the list).
+		stories, err := s.readStoryNotebooksOverlaid(reader, userID, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read story notebook %q: %w", id, err)
 		}

@@ -221,6 +221,18 @@ func TestGutenbergBook_PerUserHighlightBridge_LivePostgres_Integration(t *testin
 	require.NoError(t, err)
 	assert.False(t, cardHasEntry(cardsB, "river"), "B must NOT get A's card")
 
+	// The quiz-hub listing must surface the book for A (its ONLY word is A's
+	// registration, so the summary has to count the per-user overlay or the book
+	// shows 0 words and gets filtered out of the picker). B's summary must not.
+	summariesA, err := f.svc.LoadNotebookSummaries(f.userA, true)
+	require.NoError(t, err)
+	assert.Positive(t, bookVocabCount(summariesA, "gutenberg-77"),
+		"A's quiz-hub summary must count the registered word so the book is listed")
+	summariesB, err := f.svc.LoadNotebookSummaries(f.userB, true)
+	require.NoError(t, err)
+	assert.Zero(t, bookVocabCount(summariesB, "gutenberg-77"),
+		"B registered nothing, so the shared book has no words for B")
+
 	// --- SRS persistence: a correct answer on the registered card MUST bind to
 	// its scene so the word is not forever "unstudied". Regression guard for the
 	// notes→content history binding: RegisterDefinition links notebook_notes with
@@ -275,6 +287,17 @@ func TestGutenbergBook_PerUserHighlightBridge_LivePostgres_Integration(t *testin
 
 	// The shared book content is still fully readable for everyone.
 	require.NotEmpty(t, detailB.Msg.Stories)
+}
+
+// bookVocabCount returns the VocabularyCount the quiz-hub summary reports for
+// notebookID, or 0 when the notebook isn't listed at all.
+func bookVocabCount(summaries []quiz.NotebookSummary, notebookID string) int {
+	for _, s := range summaries {
+		if s.NotebookID == notebookID {
+			return int(s.VocabularyCount)
+		}
+	}
+	return 0
 }
 
 func cardHasEntry(cards []quiz.Card, entry string) bool {
