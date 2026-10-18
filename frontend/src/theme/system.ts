@@ -1,57 +1,76 @@
-// Shared Chakra design system. Replaces the stock `defaultSystem` so every page
-// draws from one set of tokens (brand accent, fonts, radii) and theme-aware
-// semantic colors — instead of hardcoded palette literals + per-element `_dark`
-// overrides. Extend the tokens here (not per page) to evolve the look globally.
+// Langner "Lexicon" design system. One token source drives both themes; the
+// app styles through these tokens (never hardcoded palette literals), so the
+// whole product re-skins from here.
+//
+// Direction: a study tool about WORDS. Headwords/prompts get a reading serif;
+// UI is a clean sans; phonetics and data are mono. One calm teal "ink" accent
+// (colorPalette="brand"); state colors (due=orange, correct=green, missed=red)
+// stay separate from the accent and come from Chakra's built-in palettes.
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 
+const SERIF =
+  '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif';
 const SANS =
-  'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+  'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const MONO =
+  'ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
 
 const config = defineConfig({
-  // Comfortable defaults for readability on desktop. body/html inherit the
-  // theme-aware semantic bg/fg so a page never has to set them itself.
   globalCss: {
-    "html, body": {
-      bg: "bg",
-      color: "fg",
-      lineHeight: "1.6",
-    },
+    "html, body": { bg: "bg", color: "fg", lineHeight: "1.6" },
   },
   theme: {
     tokens: {
       fonts: {
-        heading: { value: SANS },
+        heading: { value: SERIF },
         body: { value: SANS },
+        mono: { value: MONO },
       },
-      // Brand accent ramp (a calm blue). Used via `colorPalette="brand"`.
+      // Teal "ink" accent ramp (Chakra cyan family).
       colors: {
         brand: {
-          50: { value: "#eef3ff" },
-          100: { value: "#dbe5ff" },
-          200: { value: "#bccfff" },
-          300: { value: "#92afff" },
-          400: { value: "#6286fb" },
-          500: { value: "#3d63ed" },
-          600: { value: "#2b49cf" },
-          700: { value: "#2239a6" },
-          800: { value: "#203686" },
-          900: { value: "#1f3270" },
-          950: { value: "#161f45" },
+          50: { value: "#ecfeff" },
+          100: { value: "#cffafe" },
+          200: { value: "#a5f3fc" },
+          300: { value: "#67e8f9" },
+          400: { value: "#22d3ee" },
+          500: { value: "#06b6d4" },
+          600: { value: "#0891b2" },
+          700: { value: "#0e7490" },
+          800: { value: "#155e75" },
+          900: { value: "#164e63" },
+          950: { value: "#083344" },
         },
       },
     },
     semanticTokens: {
       colors: {
-        // Makes `colorPalette="brand"` resolve (solid button, subtle bg, fg, …)
-        // in both light and dark.
+        // Deliberately-chosen cool (blue-biased) neutrals, overriding Chakra's
+        // default grays for the page ground + text so nothing reads as stock.
+        bg: {
+          DEFAULT: { value: { base: "#f4f6f7", _dark: "#0c131a" } },
+          subtle: { value: { base: "#eef2f3", _dark: "#0f1920" } },
+          muted: { value: { base: "#e7edef", _dark: "#131f28" } },
+        },
+        fg: {
+          DEFAULT: { value: { base: "#14212b", _dark: "#e8eef2" } },
+          muted: { value: { base: "#566a76", _dark: "#8ea3ae" } },
+        },
+        border: {
+          DEFAULT: { value: { base: "#dde5e9", _dark: "#243742" } },
+        },
+        // Panels/cards sit just above the page ground.
+        panel: {
+          DEFAULT: { value: { base: "#ffffff", _dark: "#131f28" } },
+        },
         brand: {
-          solid: { value: "{colors.brand.500}" },
-          contrast: { value: "white" },
+          solid: { value: { base: "{colors.brand.700}", _dark: "{colors.brand.400}" } },
+          contrast: { value: { base: "white", _dark: "#04121a" } },
           fg: { value: { base: "{colors.brand.700}", _dark: "{colors.brand.300}" } },
           muted: { value: { base: "{colors.brand.100}", _dark: "{colors.brand.900}" } },
           subtle: { value: { base: "{colors.brand.50}", _dark: "{colors.brand.950}" } },
           emphasized: { value: { base: "{colors.brand.200}", _dark: "{colors.brand.800}" } },
-          focusRing: { value: "{colors.brand.500}" },
+          focusRing: { value: { base: "{colors.brand.600}", _dark: "{colors.brand.400}" } },
         },
       },
     },
