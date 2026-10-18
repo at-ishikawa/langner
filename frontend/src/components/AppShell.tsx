@@ -12,9 +12,10 @@ import { logout } from "@/lib/auth";
 // top bar on desktop. Mapped to the app's real routes.
 const NAV: { href: string; label: string; icon: () => ReactNode; exact?: boolean }[] = [
   { href: "/", label: "Today", icon: IconToday, exact: true },
+  { href: "/books", label: "Books", icon: IconBooks },
+  { href: "/learn", label: "Words", icon: IconWords },
   { href: "/quiz", label: "Quiz", icon: IconQuiz },
   { href: "/analytics", label: "Progress", icon: IconProgress },
-  { href: "/learn", label: "Words", icon: IconWords },
 ];
 
 function Svg({ children }: { children: ReactNode }) {
@@ -28,6 +29,7 @@ function IconToday() { return <Svg><path d="M4 11.5 12 4l8 7.5" /><path d="M6 10
 function IconQuiz() { return <Svg><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18" /></Svg>; }
 function IconProgress() { return <Svg><path d="M4 19V5" /><path d="M4 15l4-4 3 2 5-6 4 4" /></Svg>; }
 function IconWords() { return <Svg><path d="M5 4h11l3 3v13H5z" /><path d="M9 4v16" /></Svg>; }
+function IconBooks() { return <Svg><path d="M4 5a2 2 0 0 1 2-2h5v18H6a2 2 0 0 1-2-2z" /><path d="M13 3h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5" /></Svg>; }
 
 // AppShell is the single application chrome: a slim top bar everywhere, a fixed
 // bottom tab bar on mobile, and the primary nav inline on desktop. It reserves

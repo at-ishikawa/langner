@@ -1,23 +1,28 @@
-// Langner "Lexicon" design system. One token source drives both themes; the
-// app styles through these tokens (never hardcoded palette literals), so the
+// Langner "Reading Room" design system. One token source drives both themes;
+// the app styles through these tokens (never hardcoded palette literals), so the
 // whole product re-skins from here.
 //
-// Direction: a study tool about WORDS. Headwords/prompts get a reading serif;
-// UI is a clean sans; phonetics and data are mono. One calm teal "ink" accent
-// (colorPalette="brand"); state colors (due=orange, correct=green, missed=red)
-// stay separate from the accent and come from Chakra's built-in palettes.
+// Direction: a beautifully typeset reader/dictionary. WARM PAPER ground with
+// near-black INK text (light is the hero; a warm-charcoal dark mirrors it).
+// Headwords, titles and prompts get a characterful serif (Fraunces); UI is a
+// clean grotesque (Hanken Grotesk); phonetics and SR numbers are mono
+// (JetBrains Mono). One confident INK-INDIGO accent (colorPalette="brand");
+// state colors (due=amber, correct=green, missed=red) stay separate from the
+// accent and come from Chakra's built-in palettes. Font families resolve to the
+// CSS variables next/font sets in layout.tsx, with print-safe fallbacks.
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 
-const SERIF =
-  '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif';
-const SANS =
-  'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-const MONO =
-  'ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
+const SERIF = 'var(--font-display), "Iowan Old Style", Georgia, "Times New Roman", serif';
+const SANS = 'var(--font-sans), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const MONO = 'var(--font-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 const config = defineConfig({
   globalCss: {
     "html, body": { bg: "bg", color: "fg", lineHeight: "1.6" },
+    // Editorial headings: tighter leading, balanced wrapping, warm ink.
+    "h1, h2, h3, h4": { fontFamily: "heading", letterSpacing: "-0.01em", textWrap: "balance" },
+    "::selection": { background: "{colors.brand.emphasized}", color: "{colors.brand.contrast}" },
+    "*:focus-visible": { outline: "2px solid {colors.brand.focusRing}", outlineOffset: "2px" },
   },
   theme: {
     tokens: {
@@ -26,52 +31,57 @@ const config = defineConfig({
         body: { value: SANS },
         mono: { value: MONO },
       },
-      // Teal "ink" accent ramp (Chakra cyan family).
+      // Ink-indigo accent ramp.
       colors: {
         brand: {
-          50: { value: "#ecfeff" },
-          100: { value: "#cffafe" },
-          200: { value: "#a5f3fc" },
-          300: { value: "#67e8f9" },
-          400: { value: "#22d3ee" },
-          500: { value: "#06b6d4" },
-          600: { value: "#0891b2" },
-          700: { value: "#0e7490" },
-          800: { value: "#155e75" },
-          900: { value: "#164e63" },
-          950: { value: "#083344" },
+          50: { value: "#eef1fb" },
+          100: { value: "#dfe4f8" },
+          200: { value: "#c2cbf0" },
+          300: { value: "#9ba8e6" },
+          400: { value: "#7482d7" },
+          500: { value: "#555fc4" },
+          600: { value: "#4444ab" },
+          700: { value: "#39388c" },
+          800: { value: "#302f70" },
+          900: { value: "#2a2a5c" },
+          950: { value: "#1a1938" },
         },
       },
     },
     semanticTokens: {
       colors: {
-        // Deliberately-chosen cool (blue-biased) neutrals, overriding Chakra's
-        // default grays for the page ground + text so nothing reads as stock.
+        // Warm "paper" neutrals (light is the hero); a warm charcoal dark mirror.
+        // Deliberately warm so nothing reads as a stock cool-gray UI.
         bg: {
-          DEFAULT: { value: { base: "#f4f6f7", _dark: "#0c131a" } },
-          subtle: { value: { base: "#eef2f3", _dark: "#0f1920" } },
-          muted: { value: { base: "#e7edef", _dark: "#131f28" } },
+          DEFAULT: { value: { base: "#f7f5f0", _dark: "#171612" } },
+          subtle: { value: { base: "#f1eee6", _dark: "#1c1b16" } },
+          muted: { value: { base: "#e9e5d9", _dark: "#23221c" } },
         },
         fg: {
-          DEFAULT: { value: { base: "#14212b", _dark: "#e8eef2" } },
-          muted: { value: { base: "#566a76", _dark: "#8ea3ae" } },
+          DEFAULT: { value: { base: "#1f1d18", _dark: "#ece7dc" } },
+          muted: { value: { base: "#6b6456", _dark: "#a7a090" } },
         },
         border: {
-          DEFAULT: { value: { base: "#dde5e9", _dark: "#243742" } },
+          DEFAULT: { value: { base: "#e4ded0", _dark: "#302e26" } },
         },
-        // Panels/cards sit just above the page ground.
+        // Panels/cards sit just above the paper ground.
         panel: {
-          DEFAULT: { value: { base: "#ffffff", _dark: "#131f28" } },
+          DEFAULT: { value: { base: "#fffdf8", _dark: "#201f19" } },
         },
         brand: {
           solid: { value: { base: "{colors.brand.700}", _dark: "{colors.brand.400}" } },
-          contrast: { value: { base: "white", _dark: "#04121a" } },
+          contrast: { value: { base: "#fffdf8", _dark: "#14132a" } },
           fg: { value: { base: "{colors.brand.700}", _dark: "{colors.brand.300}" } },
           muted: { value: { base: "{colors.brand.100}", _dark: "{colors.brand.900}" } },
           subtle: { value: { base: "{colors.brand.50}", _dark: "{colors.brand.950}" } },
           emphasized: { value: { base: "{colors.brand.200}", _dark: "{colors.brand.800}" } },
           focusRing: { value: { base: "{colors.brand.600}", _dark: "{colors.brand.400}" } },
         },
+      },
+      radii: {
+        l1: { value: "8px" },
+        l2: { value: "12px" },
+        l3: { value: "16px" },
       },
     },
   },
