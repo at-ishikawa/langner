@@ -169,7 +169,7 @@ export default function RelearnSessionPage() {
 
       {/* Prompt card — mirrors the source quiz's format. */}
       <Box bg="panel" borderRadius="lg" borderWidth="1px" borderColor="border" p={5} mb={4}>
-        <Text fontSize="xs" color="purple.fg" fontWeight="medium" mb={2}>
+        <Text fontSize="xs" color="brand.fg" fontWeight="medium" mb={2}>
           {sourceLabel(current.sourceQuizType)}
         </Text>
 
@@ -255,7 +255,7 @@ export default function RelearnSessionPage() {
                     {current.entry}
                   </Text>
                   {feedback.wordDetail?.pronunciation && (
-                    <Text fontSize="sm" color="fg.muted">/{feedback.wordDetail.pronunciation}/</Text>
+                    <Text fontSize="sm" color="fg.muted" fontFamily="mono">/{feedback.wordDetail.pronunciation}/</Text>
                   )}
                   <PronounceButton text={current.entry} />
                 </Box>

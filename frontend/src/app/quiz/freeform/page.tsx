@@ -144,7 +144,7 @@ export default function FreeformQuizPage() {
         </Box>
       ) : error ? (
         <VStack align="stretch" gap={4}>
-          <Text color="red.500">{error}</Text>
+          <Text color="red.fg">{error}</Text>
           <Button
             w="full"
             colorPalette="brand"
@@ -225,7 +225,7 @@ export default function FreeformQuizPage() {
             />
           </Box>
 
-          {error && <Text color="red.500">{error}</Text>}
+          {error && <Text color="red.fg">{error}</Text>}
 
           <Button
             colorPalette="brand"

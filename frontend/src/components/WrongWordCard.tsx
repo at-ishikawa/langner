@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Badge, Box, Button, HStack, Spinner, Text, VStack } from "@chakra-ui/react";
+import { Card } from "./Card";
 import { PatternGlyphs } from "./PatternGlyphs";
 import { QuizTypeChip } from "./QuizTypeChip";
 import { analyticsClient, type WrongWord, type AttemptEntry, type RelatedGroup } from "@/lib/client";
@@ -130,12 +131,9 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
   }
 
   return (
-    <Box
-      borderWidth="1px"
-      borderRadius="lg"
+    <Card
       p={4}
       mb={3}
-      bg="panel"
       data-testid={`wrong-word-${word.expression}-${word.quizType}`}
     >
       <Box as="button" onClick={toggle} width="100%" textAlign="left" aria-expanded={expanded}>
@@ -214,7 +212,13 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
               </Text>
               {(word.relatedGroups ?? []).map((g, i) => (
                 <Box key={`${g.kind}-${i}`} data-testid={`related-group-${g.kind}`}>
-                  <Text fontSize="xs" color="fg.muted" textTransform="uppercase">
+                  <Text
+                    fontFamily="mono"
+                    fontSize="xs"
+                    color="fg.muted"
+                    textTransform="uppercase"
+                    letterSpacing="0.12em"
+                  >
                     {g.kind === "concept"
                       ? "Same sense"
                       : g.kind === "origin_family"
@@ -265,6 +269,6 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
           )}
         </Box>
       )}
-    </Box>
+    </Card>
   );
 }

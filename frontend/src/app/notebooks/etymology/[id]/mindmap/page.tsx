@@ -81,9 +81,9 @@ function MindmapPage() {
   if (error || !origin) {
     return (
       <Box p={4} textAlign="center">
-        <Text color="red.500">{error ?? "No origin specified"}</Text>
+        <Text color="red.fg">{error ?? "No origin specified"}</Text>
         <Link href={`/notebooks/etymology/${id}`}>
-          <Text color="blue.600" _dark={{ color: "blue.300" }} mt={2}>
+          <Text color="brand.fg" mt={2}>
             Back to etymology notebook
           </Text>
         </Link>
@@ -95,10 +95,9 @@ function MindmapPage() {
     <Box w="100vw" h="calc(100dvh - 41px)" display="flex" flexDirection="column" overflow="hidden">
       {/* Header */}
       <Box
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+        bg="panel"
         borderBottomWidth="1px"
-        borderColor="gray.200"
+        borderColor="border"
         px={4}
         py={2}
         display="flex"
@@ -111,8 +110,7 @@ function MindmapPage() {
         >
           <Text
             fontSize="xs"
-            color="blue.600"
-            _dark={{ color: "blue.300" }}
+            color="brand.fg"
             _hover={{ textDecoration: "underline" }}
           >
             &lt; Origin Detail

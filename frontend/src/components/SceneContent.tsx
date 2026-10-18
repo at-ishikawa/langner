@@ -37,8 +37,7 @@ function renderHighlightedText(
           as="span"
           key={`m-${i}`}
           fontWeight="bold"
-          color="blue.600"
-          _dark={{ color: "blue.300" }}
+          color="brand.fg"
         >
           {markerParts[i].trim()}
         </Text>,
@@ -84,8 +83,7 @@ function renderHighlightedText(
             id={isTarget ? "learn-deep-link-target" : undefined}
             data-deep-link-flash={isTarget ? "true" : undefined}
             fontWeight="bold"
-            color="blue.600"
-            _dark={{ color: "blue.300" }}
+            color="brand.fg"
             css={
               isTarget
                 ? {
@@ -182,7 +180,7 @@ export function SceneContent({
           <VStack align="stretch" gap={1}>
             {scene.conversations.map((conv, i) => (
               <Text key={i} fontSize="sm" color="fg.muted">
-                <Text as="span" fontWeight="bold" color="fg.default">
+                <Text as="span" fontWeight="bold" color="fg">
                   {conv.speaker}:
                 </Text>{" "}
                 &ldquo;{renderHighlightedText(conv.quote, scene.definitions, targetWord, targetFoundRef)}&rdquo;

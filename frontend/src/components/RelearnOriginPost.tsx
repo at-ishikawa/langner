@@ -197,7 +197,7 @@ export function RelearnOriginPost({
   return (
     <Box pb={selected ? 80 : 0} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
-        <Text fontSize="xs" color="purple.fg" fontWeight="medium">
+        <Text fontSize="xs" color="brand.fg" fontWeight="medium">
           Etymology — recall each word
         </Text>
         <Text fontSize="xs" color="fg.muted" aria-live="polite">
@@ -259,7 +259,7 @@ export function RelearnOriginPost({
                   borderRadius="md"
                   bg={c.bg}
                   color={c.color}
-                  boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
+                  boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-brand-500)" : undefined}
                   maxW="100%"
                   overflowWrap="anywhere"
                 >
@@ -407,7 +407,7 @@ export function RelearnOriginPost({
         </Button>
       ) : (
         <Button
-          colorPalette="purple"
+          colorPalette="brand"
           w="full"
           size="lg"
           // A word committed just before Next is still grading; leaving Next
@@ -501,7 +501,7 @@ export function RelearnOriginPost({
               <Button
                 size="xs"
                 variant="outline"
-                colorPalette={selectedCorrect ? "red" : "blue"}
+                colorPalette={selectedCorrect ? "red" : "brand"}
                 mb={2}
                 onClick={() => toggleOverride(selectedKey)}
                 data-testid="relearn-origin-override"
@@ -516,7 +516,7 @@ export function RelearnOriginPost({
           <Box display="flex" alignItems="center" gap={2}>
             <Text fontWeight="bold">{selectedWord.entry}</Text>
             {selected.res.wordDetail?.pronunciation && (
-              <Text fontSize="sm" color="fg.muted">/{selected.res.wordDetail.pronunciation}/</Text>
+              <Text fontSize="sm" color="fg.muted" fontFamily="mono">/{selected.res.wordDetail.pronunciation}/</Text>
             )}
             <PronounceButton text={selectedWord.entry} />
           </Box>
@@ -604,8 +604,8 @@ function OriginHeader({
               px={2}
               py={0.5}
               borderRadius="md"
-              bg="purple.subtle"
-              color="purple.fg"
+              bg="brand.subtle"
+              color="brand.fg"
               overflowWrap="anywhere"
             >
               {form}

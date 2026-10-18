@@ -94,7 +94,7 @@ export function FeedbackActions({
         <Button
           w="full"
           variant="outline"
-          colorPalette={isCorrect ? "red" : "blue"}
+          colorPalette={isCorrect ? "red" : "brand"}
           onClick={onOverride}
         >
           {isCorrect ? "Mark as Incorrect" : "Mark as Correct"}

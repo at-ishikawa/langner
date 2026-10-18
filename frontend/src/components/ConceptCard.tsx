@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Heading, Text, VStack } from "@chakra-ui/react";
+import { Card } from "@/components/Card";
 import { RelationChip } from "@/components/RelationChip";
 import type { SemanticConcept } from "@/lib/client";
 
@@ -34,14 +35,7 @@ export function ConceptCard({
   const relations = concept.outgoingRelations ?? [];
 
   return (
-    <Box
-      p={3}
-      borderWidth="1px"
-      borderRadius="lg"
-      bg="white"
-      _dark={{ bg: "gray.800", borderColor: "gray.600" }}
-      borderColor="gray.200"
-    >
+    <Card p={3} borderRadius="12px">
       <Box display="flex" alignItems="baseline" gap={2} flexWrap="wrap" mb={1}>
         <Heading size="sm">{concept.meaning || concept.conceptKey}</Heading>
         <Text fontSize="xs" color="fg.muted" fontFamily="mono">
@@ -64,9 +58,8 @@ export function ConceptCard({
               borderRadius="md"
               borderWidth="1px"
               opacity={isThisSession ? 1 : 0.6}
-              bg={isThisSession ? "blue.50" : "transparent"}
-              _dark={{ bg: isThisSession ? "blue.900" : "transparent", borderColor: "gray.600" }}
-              borderColor="gray.200"
+              bg={isThisSession ? "brand.subtle" : "transparent"}
+              borderColor="border"
               display="inline-flex"
               alignItems="baseline"
               gap={1}
@@ -101,6 +94,6 @@ export function ConceptCard({
           })}
         </VStack>
       )}
-    </Box>
+    </Card>
   );
 }

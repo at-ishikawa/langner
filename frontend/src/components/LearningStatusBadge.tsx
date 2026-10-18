@@ -4,7 +4,7 @@ const statusConfig: Record<string, { label: string; colorPalette: string }> = {
   "": { label: "Learning", colorPalette: "gray" },
   misunderstood: { label: "Misunderstood", colorPalette: "red" },
   understood: { label: "Understood", colorPalette: "yellow" },
-  usable: { label: "Usable", colorPalette: "blue" },
+  usable: { label: "Usable", colorPalette: "brand" },
   intuitive: { label: "Intuitive", colorPalette: "green" },
   skipped: { label: "Skipped", colorPalette: "gray" },
 };

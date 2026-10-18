@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Box, HStack, Text } from "@chakra-ui/react";
+import { HStack, Text } from "@chakra-ui/react";
+import { Card } from "./Card";
 import { QuizTypeChip } from "./QuizTypeChip";
 import type { DailySummary } from "@/lib/client";
 
@@ -23,13 +24,9 @@ export function DayCard({ day, queryString }: { day: DailySummary; queryString: 
   const href = `/history/${day.date}${queryString ? `?${queryString}` : ""}`;
   return (
     <Link href={href} aria-label={`View ${formatDate(day.date)} detail`}>
-      <Box
+      <Card
         p={4}
-        borderWidth="1px"
-        borderRadius="lg"
-        bg="white"
-        _dark={{ bg: "gray.800" }}
-        _hover={{ borderColor: "blue.400" }}
+        _hover={{ borderColor: "brand.solid" }}
         opacity={muted ? 0.65 : 1}
         data-testid={`day-card-${day.date}`}
       >
@@ -52,7 +49,7 @@ export function DayCard({ day, queryString }: { day: DailySummary; queryString: 
             </Text>
           )}
         </HStack>
-      </Box>
+      </Card>
     </Link>
   );
 }

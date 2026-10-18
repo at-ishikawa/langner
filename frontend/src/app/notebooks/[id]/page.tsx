@@ -69,7 +69,7 @@ function SkippedTypeBadges({ types }: { types: string[] }) {
     .filter((l): l is string => Boolean(l));
   if (labels.length === 0) {
     return (
-      <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="sm">
+      <Box bg="bg.muted" px={2} py={0.5} borderRadius="sm">
         <Text fontSize="xs" color="fg.muted" fontStyle="italic">Skipped</Text>
       </Box>
     );
@@ -79,8 +79,7 @@ function SkippedTypeBadges({ types }: { types: string[] }) {
       {labels.map((label) => (
         <Box
           key={label}
-          bg="gray.100"
-          _dark={{ bg: "gray.700" }}
+          bg="bg.muted"
           px={2}
           py={0.5}
           borderRadius="sm"
@@ -98,7 +97,7 @@ function renderQuote(quote: string) {
   const parts = quote.split(/\{\{\s*([^}]+?)\s*\}\}/);
   return parts.map((part, i) =>
     i % 2 === 1 ? (
-      <Text as="span" key={i} fontWeight="bold" color="blue.600">
+      <Text as="span" key={i} fontWeight="bold" color="brand.fg">
         {part.trim()}
       </Text>
     ) : (
@@ -169,7 +168,7 @@ function highlightExcerpt(
   // split() with a capturing group returns matched parts at odd indices
   return parts.map((part, i) =>
     i % 2 === 1 ? (
-      <Text as="span" key={i} fontWeight="bold" color="blue.600">
+      <Text as="span" key={i} fontWeight="bold" color="brand.fg">
         {part}
       </Text>
     ) : (
@@ -308,7 +307,7 @@ export default function NotebookDetailPage() {
       <Box p={4} maxW="2xl" mx="auto">
         <Box mb={2}>
           <Text
-            color="blue.600"
+            color="brand.fg"
             fontSize="sm"
             cursor="pointer"
             onClick={() => setPickedStory(null)}
@@ -378,7 +377,7 @@ export default function NotebookDetailPage() {
     <Box p={4} maxW="2xl" mx="auto">
       <Box mb={2}>
         <Link href="/learn">
-          <Text color="blue.600" fontSize="sm">
+          <Text color="brand.fg" fontSize="sm">
             &larr; Back to Learn
           </Text>
         </Link>
@@ -409,7 +408,7 @@ export default function NotebookDetailPage() {
             )}
             <Button
               size="sm"
-              colorPalette="blue"
+              colorPalette="brand"
               onClick={() => setPdfOpen(true)}
             >
               Export PDF
@@ -446,6 +445,7 @@ export default function NotebookDetailPage() {
               key={i}
               p={3}
               borderWidth="1px"
+              borderColor="border"
               borderRadius="md"
               cursor="pointer"
               _hover={{ bg: "bg.muted" }}
@@ -511,7 +511,7 @@ function SceneRow({
   const matched = matchCount(scene.definitions, filter);
 
   return (
-    <Box borderWidth="1px" borderRadius="md" overflow="hidden">
+    <Box borderWidth="1px" borderColor="border" borderRadius="md" overflow="hidden">
       <Box
         p={3}
         cursor="pointer"
@@ -542,7 +542,7 @@ function SceneRow({
             <VStack align="stretch" gap={1} mb={3}>
               {scene.conversations.map((conv, i) => (
                 <Text key={i} fontSize="sm" color="fg.muted">
-                  <Text as="span" fontWeight="bold" color="fg.default">
+                  <Text as="span" fontWeight="bold" color="fg">
                     {conv.speaker}:
                   </Text>{" "}
                   &ldquo;{renderQuote(conv.quote)}&rdquo;
@@ -563,10 +563,9 @@ function SceneRow({
                     {excerpt && (
                       <Box
                         borderLeftWidth="2px"
-                        borderColor="blue.200"
+                        borderColor="brand.emphasized"
                         pl={2}
                         mb={1}
-                        _dark={{ borderColor: "blue.700" }}
                       >
                         <Text fontSize="xs" color="fg.muted" fontStyle="italic">
                           {highlightExcerpt(excerpt, word.expression)}
@@ -735,6 +734,7 @@ function WordCard({
     <Box
       id={`word-${anchorKey}`}
       borderWidth="1px"
+      borderColor="border"
       borderRadius="md"
       overflow="hidden"
       fontSize="sm"
@@ -745,7 +745,7 @@ function WordCard({
       transition="box-shadow 0.4s"
       css={{
         "&[data-deep-link-flash='true']": {
-          boxShadow: "0 0 0 2px var(--chakra-colors-blue-400)",
+          boxShadow: "0 0 0 2px var(--chakra-colors-brand-400)",
         },
       }}
     >
@@ -791,14 +791,14 @@ function WordCard({
         )}
         {etymologyData && (
           <Box mt={2}>
-            <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={1}>
+            <Text fontSize="xs" color="fg.muted" mb={1}>
               Origins:
             </Text>
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
               {etymologyData.parts.map((part, j) => (
                 <Box key={j} display="flex" alignItems="center" gap={1}>
                   {j > 0 && (
-                    <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
+                    <Text fontSize="xs" color="fg.muted">
                       +
                     </Text>
                   )}
@@ -813,13 +813,12 @@ function WordCard({
                       py={0.5}
                       borderRadius="full"
                       borderWidth="1px"
-                      borderColor="blue.600"
-                      bg="blue.50"
-                      _dark={{ bg: "blue.900", borderColor: "blue.400" }}
+                      borderColor="brand.solid"
+                      bg="brand.subtle"
                       cursor="pointer"
-                      _hover={{ bg: "blue.100" }}
+                      _hover={{ bg: "brand.muted" }}
                     >
-                      <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">
+                      <Text fontSize="xs" color="brand.fg" fontFamily="mono" fontWeight="medium">
                         {part.origin}
                       </Text>
                       {part.language && (
@@ -827,10 +826,9 @@ function WordCard({
                           px={1.5}
                           py={0}
                           borderRadius="full"
-                          bg="gray.100"
-                          _dark={{ bg: "gray.700", color: "gray.300" }}
+                          bg="bg.muted"
                           fontSize="2xs"
-                          color="gray.600"
+                          color="fg.muted"
                         >
                           {part.language}
                         </Box>
@@ -843,7 +841,7 @@ function WordCard({
           </Box>
         )}
         {word.nextReviewDate && (
-          <Text fontSize="xs" color="fg.subtle" mt={1}>
+          <Text fontSize="xs" color="fg.muted" mt={1}>
             Next review: {formatReviewDate(word.nextReviewDate)}
           </Text>
         )}

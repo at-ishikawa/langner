@@ -38,7 +38,7 @@ export default function RelearnCompletePage() {
       </Box>
 
       <VStack gap={2}>
-        <Button colorPalette="purple" w="full" onClick={goStart}>
+        <Button colorPalette="brand" w="full" onClick={goStart}>
           Relearn again
         </Button>
         <Button variant="outline" w="full" onClick={goHub}>

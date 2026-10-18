@@ -71,12 +71,12 @@ export default function LearnHubPage() {
   );
 
   return (
-    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh">
+    <Box maxW="sm" mx="auto" bg="bg" minH="100vh">
       {/* Header */}
-      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
+      <Box bg="panel" borderBottomWidth="1px" borderColor="border">
         <Box px={4} pt={2}>
           <Link href="/">
-            <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
+            <Text color="brand.fg" fontSize="xs">
               &lt; Home
             </Text>
           </Link>
@@ -88,10 +88,9 @@ export default function LearnHubPage() {
 
       {/* Tabs */}
       <Box
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+        bg="panel"
         borderBottomWidth="1px"
-        borderColor="gray.200"
+        borderColor="border"
         display="flex"
       >
         {TAB_LABELS.map(({ key, label }) => (
@@ -107,8 +106,7 @@ export default function LearnHubPage() {
             <Text
               fontSize="sm"
               fontWeight={tab === key ? "semibold" : "normal"}
-              color={tab === key ? "blue.600" : "gray.500"}
-              _dark={{ color: tab === key ? "blue.300" : "gray.400" }}
+              color={tab === key ? "brand.fg" : "fg.muted"}
             >
               {label}
             </Text>
@@ -121,8 +119,7 @@ export default function LearnHubPage() {
                 w="60%"
                 h="3px"
                 borderRadius="full"
-                bg="blue.600"
-                _dark={{ bg: "blue.300" }}
+                bg="brand.solid"
               />
             )}
           </Box>
@@ -149,12 +146,11 @@ export default function LearnHubPage() {
                 >
                   <Box
                     p={4}
-                    bg="white"
-                    _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+                    bg="panel"
                     borderWidth="1px"
-                    borderColor="gray.200"
-                    borderRadius="10px"
-                    _hover={{ bg: "gray.50" }}
+                    borderColor="border"
+                    borderRadius="12px"
+                    _hover={{ bg: "bg.subtle" }}
                     cursor="pointer"
                     display="flex"
                     alignItems="center"
@@ -164,10 +160,17 @@ export default function LearnHubPage() {
                       {notebook.name}
                     </Text>
                     <Box display="flex" alignItems="center" gap={2}>
-                      <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>
-                        {notebook.reviewCount} words
+                      <Text fontSize="xs" color="fg.muted">
+                        <Text
+                          as="span"
+                          fontFamily="mono"
+                          css={{ fontVariantNumeric: "tabular-nums" }}
+                        >
+                          {notebook.reviewCount}
+                        </Text>{" "}
+                        words
                       </Text>
-                      <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                      <Text fontSize="sm" color="fg.muted">
                         &rsaquo;
                       </Text>
                     </Box>
@@ -190,12 +193,11 @@ export default function LearnHubPage() {
                 >
                   <Box
                     p={4}
-                    bg="white"
-                    _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+                    bg="panel"
                     borderWidth="1px"
-                    borderColor="gray.200"
-                    borderRadius="10px"
-                    _hover={{ bg: "gray.50" }}
+                    borderColor="border"
+                    borderRadius="12px"
+                    _hover={{ bg: "bg.subtle" }}
                     cursor="pointer"
                     display="flex"
                     alignItems="center"
@@ -204,7 +206,7 @@ export default function LearnHubPage() {
                     <Text fontWeight="medium" fontSize="sm">
                       {notebook.name}
                     </Text>
-                    <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                    <Text fontSize="sm" color="fg.muted">
                       &rsaquo;
                     </Text>
                   </Box>
@@ -225,12 +227,11 @@ export default function LearnHubPage() {
               >
                 <Box
                   p={4}
-                  bg="white"
-                  _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+                  bg="panel"
                   borderWidth="1px"
-                  borderColor="gray.200"
-                  borderRadius="10px"
-                  _hover={{ bg: "gray.50" }}
+                  borderColor="border"
+                  borderRadius="12px"
+                  _hover={{ bg: "bg.subtle" }}
                   cursor="pointer"
                   display="flex"
                   alignItems="center"
@@ -240,11 +241,18 @@ export default function LearnHubPage() {
                     <Text fontWeight="medium" fontSize="sm">
                       {notebook.name}
                     </Text>
-                    <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
-                      {notebook.reviewCount} origins
+                    <Text fontSize="xs" color="fg.muted">
+                      <Text
+                        as="span"
+                        fontFamily="mono"
+                        css={{ fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {notebook.reviewCount}
+                      </Text>{" "}
+                      origins
                     </Text>
                   </Box>
-                  <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                  <Text fontSize="sm" color="fg.muted">
                     &rsaquo;
                   </Text>
                 </Box>
@@ -256,10 +264,9 @@ export default function LearnHubPage() {
 
       {/* Summary footer */}
       <Box
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+        bg="panel"
         borderTopWidth="1px"
-        borderColor="gray.200"
+        borderColor="border"
         py={3}
         textAlign="center"
         position="fixed"
@@ -269,7 +276,7 @@ export default function LearnHubPage() {
         maxW="sm"
         mx="auto"
       >
-        <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
+        <Text fontSize="sm" color="fg.muted">
           {tab === "vocabulary"
             ? `${vocabularyNotebooks.length} notebooks \u00B7 ${totalVocabWords} words`
             : tab === "journals"

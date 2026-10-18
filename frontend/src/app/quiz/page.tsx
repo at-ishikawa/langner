@@ -565,7 +565,12 @@ export default function QuizHubPage() {
                                   </Text>
                                 )}
                               </Text>
-                              <Text color="fg.muted" fontSize="sm">
+                              <Text
+                                color="fg.muted"
+                                fontSize="sm"
+                                fontFamily="mono"
+                                css={{ fontVariantNumeric: "tabular-nums" }}
+                              >
                                 {pickModeCount(notebook)}
                               </Text>
                             </Box>
@@ -599,7 +604,14 @@ export default function QuizHubPage() {
                               <Checkbox.Label fontSize="sm" color="fg" flex="1">
                                 <Box display="flex" justifyContent="space-between" w="full">
                                   <Text as="span" truncate>{section.title}</Text>
-                                  <Text as="span" color="fg.muted" fontSize="xs" ml={2}>
+                                  <Text
+                                    as="span"
+                                    color="fg.muted"
+                                    fontSize="xs"
+                                    ml={2}
+                                    fontFamily="mono"
+                                    css={{ fontVariantNumeric: "tabular-nums" }}
+                                  >
                                     {pickModeCount(section)}
                                   </Text>
                                 </Box>

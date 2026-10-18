@@ -94,8 +94,8 @@ export default function RelearnContext({ entry, scenes, exampleWords, graphConte
                 <Box
                   px={2}
                   py={0.5}
-                  bg="purple.subtle"
-                  color="purple.fg"
+                  bg="brand.subtle"
+                  color="brand.fg"
                   borderRadius="full"
                   fontSize="sm"
                 >

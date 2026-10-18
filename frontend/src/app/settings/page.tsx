@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Box, Button, Heading, Input, Text, VStack } from "@chakra-ui/react";
+import { Card } from "@/components/Card";
 import { useSession } from "@/components/SessionProvider";
 import {
   setLlmCredential,
@@ -96,13 +97,7 @@ export default function SettingsPage() {
         {providers.map((provider) => {
           const cred = credFor(provider);
           return (
-            <Box
-              key={provider}
-              borderWidth="1px"
-              borderColor="border"
-              borderRadius="md"
-              p={3}
-            >
+            <Card key={provider} p={3}>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                 <Heading size="sm" textTransform="capitalize">
                   {provider}
@@ -162,7 +157,7 @@ export default function SettingsPage() {
                   </Button>
                 )}
               </Box>
-            </Box>
+            </Card>
           );
         })}
       </VStack>

@@ -69,8 +69,8 @@ export default function RelearnStart() {
             py={2}
             borderWidth="1px"
             borderRadius="md"
-            borderColor={windowHours === opt.hours ? "purple.solid" : "border"}
-            bg={windowHours === opt.hours ? "purple.subtle" : "panel"}
+            borderColor={windowHours === opt.hours ? "brand.solid" : "border"}
+            bg={windowHours === opt.hours ? "brand.subtle" : "panel"}
           >
             <Text fontSize="sm">
               {opt.label}
@@ -105,7 +105,7 @@ export default function RelearnStart() {
       )}
 
       <Button
-        colorPalette="purple"
+        colorPalette="brand"
         w="full"
         mt={2}
         onClick={handleStart}

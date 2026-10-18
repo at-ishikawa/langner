@@ -128,7 +128,14 @@ export default function GrammarStart() {
                   <Checkbox.Label flex="1">
                     <Box display="flex" justifyContent="space-between" w="full">
                       <Text fontWeight="semibold">{n.name}</Text>
-                      <Text color="fg.muted" fontSize="sm">{n.grammarReviewCount}</Text>
+                      <Text
+                        color="fg.muted"
+                        fontSize="sm"
+                        fontFamily="mono"
+                        css={{ fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {n.grammarReviewCount}
+                      </Text>
                     </Box>
                   </Checkbox.Label>
                 </Checkbox.Root>
@@ -146,7 +153,14 @@ export default function GrammarStart() {
                       <Checkbox.Label flex="1">
                         <Box display="flex" justifyContent="space-between" w="full">
                           <Text fontSize="sm">{sec.title}</Text>
-                          <Text color="fg.muted" fontSize="sm">{sec.grammarReviewCount}</Text>
+                          <Text
+                            color="fg.muted"
+                            fontSize="sm"
+                            fontFamily="mono"
+                            css={{ fontVariantNumeric: "tabular-nums" }}
+                          >
+                            {sec.grammarReviewCount}
+                          </Text>
                         </Box>
                       </Checkbox.Label>
                     </Checkbox.Root>

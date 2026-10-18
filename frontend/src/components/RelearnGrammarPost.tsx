@@ -173,7 +173,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
   return (
     <Box pb={selected ? 80 : 0} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
-        <Text fontSize="xs" color="purple.fg" fontWeight="medium">
+        <Text fontSize="xs" color="brand.fg" fontWeight="medium">
           Grammar — fix the mistakes
         </Text>
         <Text fontSize="xs" color="fg.muted" aria-live="polite">
@@ -239,7 +239,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
                 overflowWrap="anywhere"
                 bg={c.bg}
                 color={c.color}
-                boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
+                boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-brand-500)" : undefined}
               >
                 <Text as="span" aria-hidden="true">
                   {c.glyph}{" "}
@@ -335,7 +335,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
         </Button>
       ) : (
         <Button
-          colorPalette="purple"
+          colorPalette="brand"
           w="full"
           size="lg"
           // A blank committed just before Next is still grading; disable Next

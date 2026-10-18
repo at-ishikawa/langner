@@ -223,7 +223,7 @@ export function QuizResultCard({
           <Button
             size="sm"
             variant="outline"
-            colorPalette={item.correct ? "red" : "blue"}
+            colorPalette={item.correct ? "red" : "brand"}
             onClick={() => onOverride(item)}
           >
             {item.correct ? "Mark as Incorrect" : "Mark as Correct"}

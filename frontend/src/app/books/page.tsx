@@ -21,6 +21,7 @@ import {
   type BookResult,
   type NotebookSummary,
 } from "@/lib/client";
+import { Card } from "@/components/Card";
 
 // BooksPage is the Project Gutenberg discovery surface (reached from the home
 // page). It BROWSES the popular catalog on load — no search required — and
@@ -106,7 +107,7 @@ export default function BooksPage() {
     <Box maxW="3xl" mx="auto" minH="100vh" p={{ base: 4, md: 6 }}>
       <Box mb={2}>
         <Link href="/">
-          <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
+          <Text color="brand.fg" fontSize="xs">
             &lt; Home
           </Text>
         </Link>
@@ -128,7 +129,7 @@ export default function BooksPage() {
           }}
           placeholder="Search title or author…"
         />
-        <Button colorPalette="blue" onClick={submitSearch} flexShrink={0}>
+        <Button colorPalette="brand" onClick={submitSearch} flexShrink={0}>
           Search
         </Button>
         {query !== "" && (
@@ -238,7 +239,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <Text
       fontFamily="mono"
       fontSize="xs"
-      letterSpacing="0.1em"
+      letterSpacing="0.12em"
       textTransform="uppercase"
       color="fg.muted"
       mb={2}
@@ -260,14 +261,11 @@ function BookCard({
   onImport: () => void;
 }) {
   return (
-    <Box
+    <Card
       p={3}
-      borderWidth="1px"
-      borderColor="border"
       borderRadius="12px"
       display="flex"
       gap={3}
-      bg="bg.panel"
     >
       <Box
         w="56px"
@@ -306,7 +304,7 @@ function BookCard({
         <Box mt="auto" pt={2}>
           <Button
             size="xs"
-            colorPalette="blue"
+            colorPalette="brand"
             onClick={onImport}
             loading={importing}
             disabled={disabled}
@@ -315,6 +313,6 @@ function BookCard({
           </Button>
         </Box>
       </Box>
-    </Box>
+    </Card>
   );
 }

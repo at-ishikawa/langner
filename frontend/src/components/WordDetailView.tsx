@@ -56,8 +56,8 @@ export function WordDetailView({ wordDetail }: WordDetailViewProps) {
               <Box key={i} display="flex" alignItems="center" gap={1}>
                 {i > 0 && <Text color="fg.muted">+</Text>}
                 <Text
-                  color="blue.600"
-                  _dark={{ color: "blue.300" }}
+                  color="brand.fg"
+                  fontFamily="mono"
                   fontWeight="medium"
                   fontSize="sm"
                 >
@@ -71,13 +71,11 @@ export function WordDetailView({ wordDetail }: WordDetailViewProps) {
                     px={1.5}
                     py={0}
                     borderRadius="full"
-                    bg="gray.100"
-                    _dark={{ bg: "gray.700" }}
+                    bg="bg.muted"
                   >
                     <Text
                       fontSize="xs"
-                      color="gray.600"
-                      _dark={{ color: "gray.300" }}
+                      color="fg.muted"
                     >
                       {p.language}
                     </Text>

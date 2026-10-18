@@ -65,16 +65,15 @@ function MistakeRow({
   return (
     <Box
       borderWidth="1px"
-      borderColor="gray.200"
-      _dark={{ bg: "gray.800", borderColor: "gray.600" }}
-      bg="white"
+      borderColor="border"
+      bg="panel"
       borderRadius="md"
       p={3}
       opacity={excluded ? 0.7 : 1}
     >
       <Box display="flex" alignItems="center" gap={2} mb={2} flexWrap="wrap">
         {excluded && (
-          <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="full">
+          <Box bg="bg.muted" px={2} py={0.5} borderRadius="full">
             <Text fontSize="xs" fontWeight="medium" color="fg.muted">
               Excluded
             </Text>
@@ -131,7 +130,7 @@ function MistakeRow({
           marker on this surface (quiz-ui-invariants U1/U2). */}
       <Box>
         {excluded ? (
-          <Button size="sm" variant="outline" colorPalette="blue" onClick={toggle} disabled={busy}>
+          <Button size="sm" variant="outline" colorPalette="brand" onClick={toggle} disabled={busy}>
             Resume
           </Button>
         ) : (
@@ -238,7 +237,7 @@ export default function JournalDetailPage() {
       <Box p={4} maxW="3xl" mx="auto">
         <Box mb={2}>
           <Link href="/learn">
-            <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="sm">
+            <Text color="brand.fg" fontSize="sm">
               &larr; Back to Learn
             </Text>
           </Link>
@@ -254,7 +253,7 @@ export default function JournalDetailPage() {
     <Box p={4} maxW="3xl" mx="auto">
       <Box mb={2}>
         <Link href="/learn">
-          <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="sm">
+          <Text color="brand.fg" fontSize="sm">
             &larr; Back to Learn
           </Text>
         </Link>

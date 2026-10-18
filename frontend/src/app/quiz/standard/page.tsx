@@ -188,7 +188,12 @@ export default function QuizCardPage() {
   return (
     <PageShell maxW="xl">
       <Box mb={4}>
-        <Text fontSize="sm" mb={1}>
+        <Text
+          fontSize="sm"
+          mb={1}
+          fontFamily="mono"
+          css={{ fontVariantNumeric: "tabular-nums" }}
+        >
           {currentIndex + 1} / {total}
         </Text>
         <Progress.Root value={progress} size="sm">
@@ -266,7 +271,7 @@ export default function QuizCardPage() {
 
           {error && (
             <VStack align="stretch" gap={2}>
-              <Text color="red.500">{error}</Text>
+              <Text color="red.fg">{error}</Text>
               {pendingRetry && (
                 <Button w="full" colorPalette="brand" variant="outline" onClick={handleRetry}>
                   Retry grading
