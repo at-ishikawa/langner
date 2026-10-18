@@ -189,6 +189,13 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		`INSERT INTO user_llm_credentials (user_id, provider, api_key_encrypted, model)
 		 SELECT id, 'openai', '\x0123456789abcdef'::bytea, 'gpt-4o-mini'
 		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
+	// user_notebook_definitions (migration 036): a per-user private book-highlight
+	// registration, attributed to the seeded user and an existing note, so the new
+	// table dumps + restores (examples is JSON text).
+	seedIfEmpty(ctx, t, db, "user_notebook_definitions",
+		`INSERT INTO user_notebook_definitions (user_id, notebook_id, note_id, event, scene_index, meaning, part_of_speech, examples)
+		 SELECT (SELECT id FROM users WHERE google_sub='roundtrip-seed-sub'), 'roundtrip-seed', MIN(id), 'CHAPTER I', 0, 'a seeded meaning', 'noun', '[]'
+		 FROM notes`)
 
 	// Every table must actually carry rows so the round trip is meaningful —
 	// especially the tables the notebook-shaped ExportAll never exported.

@@ -535,7 +535,8 @@ func TestQuizHandler_BatchSubmitAnswers_ReorderedResultsMapByExpression(t *testi
 	assert.True(t, resp.Msg.GetResponses()[1].GetCorrect(), "hit the sack was correct")
 	assert.Equal(t, "hit the sack", resp.Msg.GetResponses()[1].GetReason())
 	assert.False(t, resp.Msg.GetResponses()[2].GetCorrect(), "spill the beans answer was wrong")
-	assert.Equal(t, "spill the beans", resp.Msg.GetResponses()[2].GetReason())
+	// Grade still maps to its own word; an incorrect verdict also gets the expected answer appended (actionable-reason contract).
+	assert.Contains(t, resp.Msg.GetResponses()[2].GetReason(), "spill the beans", "grade must map to its own word")
 }
 
 // TestQuizHandler_BatchSubmitReverseAnswers_FallsBackOnDuplicateIndex proves the

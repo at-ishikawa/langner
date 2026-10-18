@@ -23,6 +23,50 @@ service NotebookService {
   rpc PullNotebook(PullNotebookRequest) returns (PullNotebookResponse);
   rpc ListMyNotebooks(ListMyNotebooksRequest) returns (ListMyNotebooksResponse);
   rpc DeleteNotebook(DeleteNotebookRequest) returns (DeleteNotebookResponse);
+
+  // Project Gutenberg books. SearchBooks queries the public catalog
+  // (keyless Gutendex) by free text. ImportBook downloads + parses a book and
+  // stores it ONCE as a shared, public, owner-less notebook under a
+  // deterministic id `gutenberg-<source_id>`; a re-import by anyone is an
+  // idempotent no-op. Every user can then read/quiz it; highlights stay
+  // private per user.
+  rpc SearchBooks(SearchBooksRequest) returns (SearchBooksResponse);
+  rpc ImportBook(ImportBookRequest) returns (ImportBookResponse);
+}
+
+message SearchBooksRequest {
+  // query is optional: empty browses the popular catalog (fast + cached by
+  // Gutendex); non-empty runs a free-text search. page is 1-based (0 or 1 =
+  // first page) so the catalog pages without a query.
+  string query = 1;
+  int32 page = 2;
+}
+
+// BookResult is one catalog hit. source_id is the Gutenberg book id (as a
+// string) passed back to ImportBook. cover_url is a thumbnail when Gutendex has one.
+message BookResult {
+  string source_id = 1;
+  string title = 2;
+  string author = 3;
+  string language = 4;
+  string cover_url = 5;
+}
+
+message SearchBooksResponse {
+  repeated BookResult books = 1;
+  bool has_next = 2;
+  bool has_prev = 3;
+  int32 page = 4;
+}
+
+message ImportBookRequest {
+  string source_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ImportBookResponse {
+  // notebook_id is the deterministic shared id (`gutenberg-<source_id>`) the
+  // book was stored under; open the reader at /learn/<notebook_id>.
+  string notebook_id = 1;
 }
 
 // NotebookFile is one raw YAML file of a pushed bundle. path is relative to the
@@ -192,10 +236,22 @@ message WordDefinition {
   string origin = 7;
 }
 
+// MeaningSuggestion is a meaning OTHER users privately saved for the same
+// (notebook, expression). Shown as a prefill when the caller highlights the
+// word; accepting it still stores the caller's OWN private copy (a suggestion
+// never enters another user's quiz).
+message MeaningSuggestion {
+  string meaning = 1;
+  int32 saved_by_count = 2;
+}
+
 message LookupWordResponse {
   string word = 1;
   repeated WordDefinition definitions = 2;
   string source = 3;
+  // suggestions are the distinct meanings other users saved for this
+  // (notebook_id, word) across the shared book. Empty when none / no DB.
+  repeated MeaningSuggestion suggestions = 4;
 }
 
 message RegisterDefinitionRequest {

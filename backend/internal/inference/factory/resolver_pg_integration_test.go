@@ -50,8 +50,13 @@ func TestResolver_LivePostgres_Integration(t *testing.T) {
 	_, err = resolver.ResolveClient(ctx, user.ID)
 	require.True(t, errors.Is(err, inference.ErrNoCredential), "no credential must resolve to ErrNoCredential, got %v", err)
 
-	// One provider → a concrete client, NOT a fallback wrapper.
+	// One provider → a concrete client, NOT a fallback wrapper. Invalidate after
+	// the credential change to mirror the production contract: the LLMCredential
+	// handler calls resolver.Invalidate on every add/rotate/delete so the client
+	// cache never serves a client built from stale credentials. (This test drives
+	// repo.SetCredential directly, bypassing that handler, so it invalidates here.)
 	require.NoError(t, repo.SetCredential(ctx, user.ID, "openai", "sk-primary", "", false))
+	resolver.Invalidate(user.ID)
 	single, err := resolver.ResolveClient(ctx, user.ID)
 	require.NoError(t, err)
 	_, isFallback := single.(*fallback.Client)
@@ -59,6 +64,7 @@ func TestResolver_LivePostgres_Integration(t *testing.T) {
 
 	// A second provider → fallback wrapper (primary + the other as fallback).
 	require.NoError(t, repo.SetCredential(ctx, user.ID, "gemini", "gm-secondary", "", false))
+	resolver.Invalidate(user.ID)
 	paired, err := resolver.ResolveClient(ctx, user.ID)
 	require.NoError(t, err)
 	_, isFallback = paired.(*fallback.Client)

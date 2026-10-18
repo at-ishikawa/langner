@@ -42,9 +42,20 @@ type Conversation struct {
 }
 
 func (reader *Reader) ReadStoryNotebooks(storyID string) ([]StoryNotebook, error) {
+	result, _, err := reader.ReadStoryNotebooksWithPaths(storyID)
+	return result, err
+}
+
+// ReadStoryNotebooksWithPaths is ReadStoryNotebooks that ALSO returns the
+// notebook-file path parallel to each returned StoryNotebook (one entry per
+// notebook, so a multi-entry file repeats its path). Callers that layer a
+// per-user definitions overlay on top of the content-declared definitions need
+// these paths to call MergeDefinitionsIntoNotebooks with the SAME keys the
+// content merge used — the plain ReadStoryNotebooks discards them.
+func (reader *Reader) ReadStoryNotebooksWithPaths(storyID string) ([]StoryNotebook, []string, error) {
 	index, ok := reader.indexes[storyID]
 	if !ok {
-		return nil, fmt.Errorf("story %s not found", storyID)
+		return nil, nil, fmt.Errorf("story %s not found", storyID)
 	}
 
 	result := make([]StoryNotebook, 0)
@@ -71,7 +82,7 @@ func (reader *Reader) ReadStoryNotebooks(storyID string) ([]StoryNotebook, error
 	// Merge definitions from separate definitions files
 	result = MergeDefinitionsIntoNotebooks(storyID, result, notebookPaths, reader.definitionsMap)
 
-	return result, nil
+	return result, notebookPaths, nil
 }
 
 // ReadAllStoryNotebooksMap reads all story notebooks and returns them as a map keyed by notebook ID

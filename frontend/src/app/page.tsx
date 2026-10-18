@@ -1,113 +1,97 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import NextLink from "next/link";
-import { Box, Button, SimpleGrid, Spinner, Text, VStack } from "@chakra-ui/react";
-import { quizClient, type NotebookSummary } from "@/lib/client";
-import { PageShell } from "@/components/PageShell";
-import { Card } from "@/components/Card";
-import { StatTile } from "@/components/StatTile";
-import { StatusBadge } from "@/components/StatusBadge";
+import Link from "next/link";
+import { Box, Heading, Text } from "@chakra-ui/react";
 
-// Today: the daily entry point. Shows what's actually due (from the same quiz
-// options the Quiz hub reads) and gets you into a session in one tap — replacing
-// the old static link grid (that role is now the nav).
-export default function TodayPage() {
-  const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+const features = [
+  {
+    href: "/books",
+    title: "Books",
+    description: "Browse and read Project Gutenberg books, and mine new words",
+    icon: "B",
+  },
+  {
+    href: "/learn",
+    title: "Learn",
+    description: "Read notebooks and browse vocabulary and etymology",
+    icon: "L",
+  },
+  {
+    href: "/quiz",
+    title: "Quiz",
+    description: "Practice vocabulary and etymology with spaced repetition",
+    icon: "Q",
+  },
+  {
+    href: "/analytics",
+    title: "Analytics",
+    description: "See your learning trends over time",
+    icon: "A",
+  },
+  {
+    href: "/history",
+    title: "History",
+    description: "Review which words you got wrong, day by day",
+    icon: "H",
+  },
+];
 
-  useEffect(() => {
-    quizClient
-      .getQuizOptions({ includeUnstudied: false })
-      .then((r) => setNotebooks(r.notebooks ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const wordsDue = notebooks.reduce((s, n) => s + n.reviewCount, 0);
-  const grammarDue = notebooks.reduce((s, n) => s + n.grammarReviewCount, 0);
-  const dueNotebooks = notebooks
-    .filter((n) => n.reviewCount > 0)
-    .sort((a, b) => b.reviewCount - a.reviewCount);
-  const nothingDue = wordsDue === 0 && grammarDue === 0;
-
-  if (loading) {
-    return (
-      <PageShell title="Today" maxW="xl">
-        <Box textAlign="center" py={12}>
-          <Spinner size="lg" />
-        </Box>
-      </PageShell>
-    );
-  }
-
+export default function HomePage() {
   return (
-    <PageShell title="Today" maxW="xl">
-      <SimpleGrid columns={2} gap={3} mb={5}>
-        <StatTile accent value={wordsDue} label="words due" />
-        <StatTile value={grammarDue} label="grammar notes" />
-      </SimpleGrid>
-
-      <Button asChild colorPalette="brand" size="lg" w="full" mb={3}>
-        <NextLink href="/quiz">
-          {wordsDue > 0 ? `Review ${wordsDue} due →` : "Start a quiz →"}
-        </NextLink>
-      </Button>
-
-      <Box textAlign="center" mb={7}>
-        <Button asChild variant="plain" size="sm" color="fg.muted" h="auto" py={1}>
-          <NextLink href="/history">History — review past days</NextLink>
-        </Button>
+    <Box p={6} maxW="sm" mx="auto">
+      <Box textAlign="center" mb={8}>
+        <Heading size="xl" mb={2}>
+          Langner
+        </Heading>
+        <Text color="fg.muted">What would you like to do?</Text>
       </Box>
 
-      {dueNotebooks.length > 0 && (
-        <>
-          <Text
-            fontFamily="mono"
-            fontSize="xs"
-            letterSpacing="0.1em"
-            textTransform="uppercase"
-            color="fg.muted"
-            mb={2}
-          >
-            Due by notebook
-          </Text>
-          <Card overflow="hidden">
-            <VStack align="stretch" gap={0}>
-              {dueNotebooks.map((n, i) => (
-                <Box
-                  key={n.notebookId}
-                  display="flex"
-                  alignItems="center"
-                  gap={3}
-                  px={4}
-                  py={3}
-                  borderTopWidth={i === 0 ? "0" : "1px"}
-                  borderColor="border"
-                >
-                  <Text fontWeight="600" fontSize="sm" flex="1" truncate>
-                    {n.name}
-                  </Text>
-                  <StatusBadge status="due">{n.reviewCount} due</StatusBadge>
-                </Box>
-              ))}
-            </VStack>
-          </Card>
-        </>
-      )}
-
-      {nothingDue && (
-        <Card px={6} py={8}>
-          <VStack gap={3}>
-            <Text color="fg.muted" textAlign="center">
-              Nothing due right now — nice work.
-            </Text>
-            <Button asChild variant="outline">
-              <NextLink href="/learn">Browse your words</NextLink>
-            </Button>
-          </VStack>
-        </Card>
-      )}
-    </PageShell>
+      <Box display="flex" flexDirection="column" gap={4}>
+        {features.map((feature) => (
+          <Link key={feature.href} href={feature.href}>
+            <Box
+              p={5}
+              bg="white"
+              _dark={{ bg: "gray.800" }}
+              borderWidth="1px"
+              borderColor="gray.200"
+              _hover={{ bg: "bg.muted", borderColor: "blue.400" }}
+              borderRadius="lg"
+              cursor="pointer"
+              display="flex"
+              alignItems="center"
+              gap={4}
+            >
+              <Box
+                w="48px"
+                h="48px"
+                borderRadius="10px"
+                bg="blue.50"
+                _dark={{ bg: "blue.900" }}
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                flexShrink={0}
+              >
+                <Text fontSize="xl" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
+                  {feature.icon}
+                </Text>
+              </Box>
+              <Box flex="1">
+                <Text fontWeight="semibold" fontSize="lg">
+                  {feature.title}
+                </Text>
+                <Text fontSize="sm" color="fg.muted">
+                  {feature.description}
+                </Text>
+              </Box>
+              <Text fontSize="md" color="gray.500" _dark={{ color: "gray.400" }} flexShrink={0}>
+                &rsaquo;
+              </Text>
+            </Box>
+          </Link>
+        ))}
+      </Box>
+    </Box>
   );
 }

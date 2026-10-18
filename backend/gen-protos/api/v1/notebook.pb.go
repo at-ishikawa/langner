@@ -22,6 +22,297 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type SearchBooksRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// query is optional: empty browses the popular catalog (fast + cached by
+	// Gutendex); non-empty runs a free-text search. page is 1-based (0 or 1 =
+	// first page) so the catalog pages without a query.
+	Query         string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Page          int32  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchBooksRequest) Reset() {
+	*x = SearchBooksRequest{}
+	mi := &file_api_v1_notebook_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchBooksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchBooksRequest) ProtoMessage() {}
+
+func (x *SearchBooksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchBooksRequest.ProtoReflect.Descriptor instead.
+func (*SearchBooksRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *SearchBooksRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *SearchBooksRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+// BookResult is one catalog hit. source_id is the Gutenberg book id (as a
+// string) passed back to ImportBook. cover_url is a thumbnail when Gutendex has one.
+type BookResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SourceId      string                 `protobuf:"bytes,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Author        string                 `protobuf:"bytes,3,opt,name=author,proto3" json:"author,omitempty"`
+	Language      string                 `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
+	CoverUrl      string                 `protobuf:"bytes,5,opt,name=cover_url,json=coverUrl,proto3" json:"cover_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BookResult) Reset() {
+	*x = BookResult{}
+	mi := &file_api_v1_notebook_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BookResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BookResult) ProtoMessage() {}
+
+func (x *BookResult) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BookResult.ProtoReflect.Descriptor instead.
+func (*BookResult) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BookResult) GetSourceId() string {
+	if x != nil {
+		return x.SourceId
+	}
+	return ""
+}
+
+func (x *BookResult) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *BookResult) GetAuthor() string {
+	if x != nil {
+		return x.Author
+	}
+	return ""
+}
+
+func (x *BookResult) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *BookResult) GetCoverUrl() string {
+	if x != nil {
+		return x.CoverUrl
+	}
+	return ""
+}
+
+type SearchBooksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Books         []*BookResult          `protobuf:"bytes,1,rep,name=books,proto3" json:"books,omitempty"`
+	HasNext       bool                   `protobuf:"varint,2,opt,name=has_next,json=hasNext,proto3" json:"has_next,omitempty"`
+	HasPrev       bool                   `protobuf:"varint,3,opt,name=has_prev,json=hasPrev,proto3" json:"has_prev,omitempty"`
+	Page          int32                  `protobuf:"varint,4,opt,name=page,proto3" json:"page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchBooksResponse) Reset() {
+	*x = SearchBooksResponse{}
+	mi := &file_api_v1_notebook_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchBooksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchBooksResponse) ProtoMessage() {}
+
+func (x *SearchBooksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchBooksResponse.ProtoReflect.Descriptor instead.
+func (*SearchBooksResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SearchBooksResponse) GetBooks() []*BookResult {
+	if x != nil {
+		return x.Books
+	}
+	return nil
+}
+
+func (x *SearchBooksResponse) GetHasNext() bool {
+	if x != nil {
+		return x.HasNext
+	}
+	return false
+}
+
+func (x *SearchBooksResponse) GetHasPrev() bool {
+	if x != nil {
+		return x.HasPrev
+	}
+	return false
+}
+
+func (x *SearchBooksResponse) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+type ImportBookRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SourceId      string                 `protobuf:"bytes,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportBookRequest) Reset() {
+	*x = ImportBookRequest{}
+	mi := &file_api_v1_notebook_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportBookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportBookRequest) ProtoMessage() {}
+
+func (x *ImportBookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportBookRequest.ProtoReflect.Descriptor instead.
+func (*ImportBookRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ImportBookRequest) GetSourceId() string {
+	if x != nil {
+		return x.SourceId
+	}
+	return ""
+}
+
+type ImportBookResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// notebook_id is the deterministic shared id (`gutenberg-<source_id>`) the
+	// book was stored under; open the reader at /learn/<notebook_id>.
+	NotebookId    string `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportBookResponse) Reset() {
+	*x = ImportBookResponse{}
+	mi := &file_api_v1_notebook_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportBookResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportBookResponse) ProtoMessage() {}
+
+func (x *ImportBookResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportBookResponse.ProtoReflect.Descriptor instead.
+func (*ImportBookResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ImportBookResponse) GetNotebookId() string {
+	if x != nil {
+		return x.NotebookId
+	}
+	return ""
+}
+
 // NotebookFile is one raw YAML file of a pushed bundle. path is relative to the
 // bundle root (e.g. "index.yml", "cards.yml").
 type NotebookFile struct {
@@ -34,7 +325,7 @@ type NotebookFile struct {
 
 func (x *NotebookFile) Reset() {
 	*x = NotebookFile{}
-	mi := &file_api_v1_notebook_proto_msgTypes[0]
+	mi := &file_api_v1_notebook_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +337,7 @@ func (x *NotebookFile) String() string {
 func (*NotebookFile) ProtoMessage() {}
 
 func (x *NotebookFile) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[0]
+	mi := &file_api_v1_notebook_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +350,7 @@ func (x *NotebookFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotebookFile.ProtoReflect.Descriptor instead.
 func (*NotebookFile) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{0}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *NotebookFile) GetPath() string {
@@ -91,7 +382,7 @@ type PushNotebookRequest struct {
 
 func (x *PushNotebookRequest) Reset() {
 	*x = PushNotebookRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[1]
+	mi := &file_api_v1_notebook_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +394,7 @@ func (x *PushNotebookRequest) String() string {
 func (*PushNotebookRequest) ProtoMessage() {}
 
 func (x *PushNotebookRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[1]
+	mi := &file_api_v1_notebook_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +407,7 @@ func (x *PushNotebookRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushNotebookRequest.ProtoReflect.Descriptor instead.
 func (*PushNotebookRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{1}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PushNotebookRequest) GetNotebookId() string {
@@ -164,7 +455,7 @@ type PushNotebookResponse struct {
 
 func (x *PushNotebookResponse) Reset() {
 	*x = PushNotebookResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[2]
+	mi := &file_api_v1_notebook_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -176,7 +467,7 @@ func (x *PushNotebookResponse) String() string {
 func (*PushNotebookResponse) ProtoMessage() {}
 
 func (x *PushNotebookResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[2]
+	mi := &file_api_v1_notebook_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -189,7 +480,7 @@ func (x *PushNotebookResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushNotebookResponse.ProtoReflect.Descriptor instead.
 func (*PushNotebookResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{2}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PushNotebookResponse) GetNotebookId() string {
@@ -217,7 +508,7 @@ type DeleteNotebookRequest struct {
 
 func (x *DeleteNotebookRequest) Reset() {
 	*x = DeleteNotebookRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[3]
+	mi := &file_api_v1_notebook_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -229,7 +520,7 @@ func (x *DeleteNotebookRequest) String() string {
 func (*DeleteNotebookRequest) ProtoMessage() {}
 
 func (x *DeleteNotebookRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[3]
+	mi := &file_api_v1_notebook_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -242,7 +533,7 @@ func (x *DeleteNotebookRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNotebookRequest.ProtoReflect.Descriptor instead.
 func (*DeleteNotebookRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{3}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DeleteNotebookRequest) GetNotebookId() string {
@@ -261,7 +552,7 @@ type DeleteNotebookResponse struct {
 
 func (x *DeleteNotebookResponse) Reset() {
 	*x = DeleteNotebookResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[4]
+	mi := &file_api_v1_notebook_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -273,7 +564,7 @@ func (x *DeleteNotebookResponse) String() string {
 func (*DeleteNotebookResponse) ProtoMessage() {}
 
 func (x *DeleteNotebookResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[4]
+	mi := &file_api_v1_notebook_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -286,7 +577,7 @@ func (x *DeleteNotebookResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNotebookResponse.ProtoReflect.Descriptor instead.
 func (*DeleteNotebookResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{4}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeleteNotebookResponse) GetNotebookId() string {
@@ -305,7 +596,7 @@ type PullNotebookRequest struct {
 
 func (x *PullNotebookRequest) Reset() {
 	*x = PullNotebookRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[5]
+	mi := &file_api_v1_notebook_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -317,7 +608,7 @@ func (x *PullNotebookRequest) String() string {
 func (*PullNotebookRequest) ProtoMessage() {}
 
 func (x *PullNotebookRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[5]
+	mi := &file_api_v1_notebook_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -330,7 +621,7 @@ func (x *PullNotebookRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullNotebookRequest.ProtoReflect.Descriptor instead.
 func (*PullNotebookRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{5}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PullNotebookRequest) GetNotebookId() string {
@@ -350,7 +641,7 @@ type PullNotebookResponse struct {
 
 func (x *PullNotebookResponse) Reset() {
 	*x = PullNotebookResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[6]
+	mi := &file_api_v1_notebook_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -362,7 +653,7 @@ func (x *PullNotebookResponse) String() string {
 func (*PullNotebookResponse) ProtoMessage() {}
 
 func (x *PullNotebookResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[6]
+	mi := &file_api_v1_notebook_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -375,7 +666,7 @@ func (x *PullNotebookResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullNotebookResponse.ProtoReflect.Descriptor instead.
 func (*PullNotebookResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{6}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PullNotebookResponse) GetFiles() []*NotebookFile {
@@ -400,7 +691,7 @@ type ListMyNotebooksRequest struct {
 
 func (x *ListMyNotebooksRequest) Reset() {
 	*x = ListMyNotebooksRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[7]
+	mi := &file_api_v1_notebook_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -412,7 +703,7 @@ func (x *ListMyNotebooksRequest) String() string {
 func (*ListMyNotebooksRequest) ProtoMessage() {}
 
 func (x *ListMyNotebooksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[7]
+	mi := &file_api_v1_notebook_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -425,7 +716,7 @@ func (x *ListMyNotebooksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyNotebooksRequest.ProtoReflect.Descriptor instead.
 func (*ListMyNotebooksRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{7}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{12}
 }
 
 type ListMyNotebooksResponse struct {
@@ -437,7 +728,7 @@ type ListMyNotebooksResponse struct {
 
 func (x *ListMyNotebooksResponse) Reset() {
 	*x = ListMyNotebooksResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[8]
+	mi := &file_api_v1_notebook_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -449,7 +740,7 @@ func (x *ListMyNotebooksResponse) String() string {
 func (*ListMyNotebooksResponse) ProtoMessage() {}
 
 func (x *ListMyNotebooksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[8]
+	mi := &file_api_v1_notebook_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -462,7 +753,7 @@ func (x *ListMyNotebooksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyNotebooksResponse.ProtoReflect.Descriptor instead.
 func (*ListMyNotebooksResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{8}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListMyNotebooksResponse) GetNotebooks() []*ListMyNotebooksResponse_Entry {
@@ -481,7 +772,7 @@ type GetNotebookDetailRequest struct {
 
 func (x *GetNotebookDetailRequest) Reset() {
 	*x = GetNotebookDetailRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[9]
+	mi := &file_api_v1_notebook_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +784,7 @@ func (x *GetNotebookDetailRequest) String() string {
 func (*GetNotebookDetailRequest) ProtoMessage() {}
 
 func (x *GetNotebookDetailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[9]
+	mi := &file_api_v1_notebook_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +797,7 @@ func (x *GetNotebookDetailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNotebookDetailRequest.ProtoReflect.Descriptor instead.
 func (*GetNotebookDetailRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{9}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetNotebookDetailRequest) GetNotebookId() string {
@@ -528,7 +819,7 @@ type GetNotebookDetailResponse struct {
 
 func (x *GetNotebookDetailResponse) Reset() {
 	*x = GetNotebookDetailResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[10]
+	mi := &file_api_v1_notebook_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -540,7 +831,7 @@ func (x *GetNotebookDetailResponse) String() string {
 func (*GetNotebookDetailResponse) ProtoMessage() {}
 
 func (x *GetNotebookDetailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[10]
+	mi := &file_api_v1_notebook_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -553,7 +844,7 @@ func (x *GetNotebookDetailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNotebookDetailResponse.ProtoReflect.Descriptor instead.
 func (*GetNotebookDetailResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{10}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetNotebookDetailResponse) GetNotebookId() string {
@@ -596,7 +887,7 @@ type StoryEntry struct {
 
 func (x *StoryEntry) Reset() {
 	*x = StoryEntry{}
-	mi := &file_api_v1_notebook_proto_msgTypes[11]
+	mi := &file_api_v1_notebook_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -608,7 +899,7 @@ func (x *StoryEntry) String() string {
 func (*StoryEntry) ProtoMessage() {}
 
 func (x *StoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[11]
+	mi := &file_api_v1_notebook_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -621,7 +912,7 @@ func (x *StoryEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoryEntry.ProtoReflect.Descriptor instead.
 func (*StoryEntry) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{11}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *StoryEntry) GetEvent() string {
@@ -663,7 +954,7 @@ type StoryMetadata struct {
 
 func (x *StoryMetadata) Reset() {
 	*x = StoryMetadata{}
-	mi := &file_api_v1_notebook_proto_msgTypes[12]
+	mi := &file_api_v1_notebook_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -675,7 +966,7 @@ func (x *StoryMetadata) String() string {
 func (*StoryMetadata) ProtoMessage() {}
 
 func (x *StoryMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[12]
+	mi := &file_api_v1_notebook_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -688,7 +979,7 @@ func (x *StoryMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoryMetadata.ProtoReflect.Descriptor instead.
 func (*StoryMetadata) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{12}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *StoryMetadata) GetSeries() string {
@@ -724,7 +1015,7 @@ type StoryScene struct {
 
 func (x *StoryScene) Reset() {
 	*x = StoryScene{}
-	mi := &file_api_v1_notebook_proto_msgTypes[13]
+	mi := &file_api_v1_notebook_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -736,7 +1027,7 @@ func (x *StoryScene) String() string {
 func (*StoryScene) ProtoMessage() {}
 
 func (x *StoryScene) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[13]
+	mi := &file_api_v1_notebook_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -749,7 +1040,7 @@ func (x *StoryScene) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoryScene.ProtoReflect.Descriptor instead.
 func (*StoryScene) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{13}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *StoryScene) GetTitle() string {
@@ -790,7 +1081,7 @@ type Conversation struct {
 
 func (x *Conversation) Reset() {
 	*x = Conversation{}
-	mi := &file_api_v1_notebook_proto_msgTypes[14]
+	mi := &file_api_v1_notebook_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -802,7 +1093,7 @@ func (x *Conversation) String() string {
 func (*Conversation) ProtoMessage() {}
 
 func (x *Conversation) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[14]
+	mi := &file_api_v1_notebook_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -815,7 +1106,7 @@ func (x *Conversation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Conversation.ProtoReflect.Descriptor instead.
 func (*Conversation) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{14}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *Conversation) GetSpeaker() string {
@@ -873,7 +1164,7 @@ type NotebookWord struct {
 
 func (x *NotebookWord) Reset() {
 	*x = NotebookWord{}
-	mi := &file_api_v1_notebook_proto_msgTypes[15]
+	mi := &file_api_v1_notebook_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -885,7 +1176,7 @@ func (x *NotebookWord) String() string {
 func (*NotebookWord) ProtoMessage() {}
 
 func (x *NotebookWord) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[15]
+	mi := &file_api_v1_notebook_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -898,7 +1189,7 @@ func (x *NotebookWord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotebookWord.ProtoReflect.Descriptor instead.
 func (*NotebookWord) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{15}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *NotebookWord) GetExpression() string {
@@ -1041,7 +1332,7 @@ type LearningLogEntry struct {
 
 func (x *LearningLogEntry) Reset() {
 	*x = LearningLogEntry{}
-	mi := &file_api_v1_notebook_proto_msgTypes[16]
+	mi := &file_api_v1_notebook_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1053,7 +1344,7 @@ func (x *LearningLogEntry) String() string {
 func (*LearningLogEntry) ProtoMessage() {}
 
 func (x *LearningLogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[16]
+	mi := &file_api_v1_notebook_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1066,7 +1357,7 @@ func (x *LearningLogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LearningLogEntry.ProtoReflect.Descriptor instead.
 func (*LearningLogEntry) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{16}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *LearningLogEntry) GetStatus() string {
@@ -1120,7 +1411,7 @@ type ExportNotebookPDFRequest struct {
 
 func (x *ExportNotebookPDFRequest) Reset() {
 	*x = ExportNotebookPDFRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[17]
+	mi := &file_api_v1_notebook_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1132,7 +1423,7 @@ func (x *ExportNotebookPDFRequest) String() string {
 func (*ExportNotebookPDFRequest) ProtoMessage() {}
 
 func (x *ExportNotebookPDFRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[17]
+	mi := &file_api_v1_notebook_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1145,7 +1436,7 @@ func (x *ExportNotebookPDFRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportNotebookPDFRequest.ProtoReflect.Descriptor instead.
 func (*ExportNotebookPDFRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{17}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ExportNotebookPDFRequest) GetNotebookId() string {
@@ -1165,7 +1456,7 @@ type ExportNotebookPDFResponse struct {
 
 func (x *ExportNotebookPDFResponse) Reset() {
 	*x = ExportNotebookPDFResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[18]
+	mi := &file_api_v1_notebook_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1177,7 +1468,7 @@ func (x *ExportNotebookPDFResponse) String() string {
 func (*ExportNotebookPDFResponse) ProtoMessage() {}
 
 func (x *ExportNotebookPDFResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[18]
+	mi := &file_api_v1_notebook_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1190,7 +1481,7 @@ func (x *ExportNotebookPDFResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportNotebookPDFResponse.ProtoReflect.Descriptor instead.
 func (*ExportNotebookPDFResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{18}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ExportNotebookPDFResponse) GetPdfContent() []byte {
@@ -1218,7 +1509,7 @@ type LookupWordRequest struct {
 
 func (x *LookupWordRequest) Reset() {
 	*x = LookupWordRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[19]
+	mi := &file_api_v1_notebook_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1230,7 +1521,7 @@ func (x *LookupWordRequest) String() string {
 func (*LookupWordRequest) ProtoMessage() {}
 
 func (x *LookupWordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[19]
+	mi := &file_api_v1_notebook_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1243,7 +1534,7 @@ func (x *LookupWordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupWordRequest.ProtoReflect.Descriptor instead.
 func (*LookupWordRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{19}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *LookupWordRequest) GetWord() string {
@@ -1282,7 +1573,7 @@ type WordDefinition struct {
 
 func (x *WordDefinition) Reset() {
 	*x = WordDefinition{}
-	mi := &file_api_v1_notebook_proto_msgTypes[20]
+	mi := &file_api_v1_notebook_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1294,7 +1585,7 @@ func (x *WordDefinition) String() string {
 func (*WordDefinition) ProtoMessage() {}
 
 func (x *WordDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[20]
+	mi := &file_api_v1_notebook_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1307,7 +1598,7 @@ func (x *WordDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WordDefinition.ProtoReflect.Descriptor instead.
 func (*WordDefinition) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{20}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *WordDefinition) GetPartOfSpeech() string {
@@ -1359,18 +1650,77 @@ func (x *WordDefinition) GetOrigin() string {
 	return ""
 }
 
-type LookupWordResponse struct {
+// MeaningSuggestion is a meaning OTHER users privately saved for the same
+// (notebook, expression). Shown as a prefill when the caller highlights the
+// word; accepting it still stores the caller's OWN private copy (a suggestion
+// never enters another user's quiz).
+type MeaningSuggestion struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Word          string                 `protobuf:"bytes,1,opt,name=word,proto3" json:"word,omitempty"`
-	Definitions   []*WordDefinition      `protobuf:"bytes,2,rep,name=definitions,proto3" json:"definitions,omitempty"`
-	Source        string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	Meaning       string                 `protobuf:"bytes,1,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	SavedByCount  int32                  `protobuf:"varint,2,opt,name=saved_by_count,json=savedByCount,proto3" json:"saved_by_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeaningSuggestion) Reset() {
+	*x = MeaningSuggestion{}
+	mi := &file_api_v1_notebook_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeaningSuggestion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeaningSuggestion) ProtoMessage() {}
+
+func (x *MeaningSuggestion) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeaningSuggestion.ProtoReflect.Descriptor instead.
+func (*MeaningSuggestion) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *MeaningSuggestion) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *MeaningSuggestion) GetSavedByCount() int32 {
+	if x != nil {
+		return x.SavedByCount
+	}
+	return 0
+}
+
+type LookupWordResponse struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Word        string                 `protobuf:"bytes,1,opt,name=word,proto3" json:"word,omitempty"`
+	Definitions []*WordDefinition      `protobuf:"bytes,2,rep,name=definitions,proto3" json:"definitions,omitempty"`
+	Source      string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	// suggestions are the distinct meanings other users saved for this
+	// (notebook_id, word) across the shared book. Empty when none / no DB.
+	Suggestions   []*MeaningSuggestion `protobuf:"bytes,4,rep,name=suggestions,proto3" json:"suggestions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LookupWordResponse) Reset() {
 	*x = LookupWordResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[21]
+	mi := &file_api_v1_notebook_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1382,7 +1732,7 @@ func (x *LookupWordResponse) String() string {
 func (*LookupWordResponse) ProtoMessage() {}
 
 func (x *LookupWordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[21]
+	mi := &file_api_v1_notebook_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1395,7 +1745,7 @@ func (x *LookupWordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupWordResponse.ProtoReflect.Descriptor instead.
 func (*LookupWordResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{21}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *LookupWordResponse) GetWord() string {
@@ -1419,6 +1769,13 @@ func (x *LookupWordResponse) GetSource() string {
 	return ""
 }
 
+func (x *LookupWordResponse) GetSuggestions() []*MeaningSuggestion {
+	if x != nil {
+		return x.Suggestions
+	}
+	return nil
+}
+
 type RegisterDefinitionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NotebookId    string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
@@ -1434,7 +1791,7 @@ type RegisterDefinitionRequest struct {
 
 func (x *RegisterDefinitionRequest) Reset() {
 	*x = RegisterDefinitionRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[22]
+	mi := &file_api_v1_notebook_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1446,7 +1803,7 @@ func (x *RegisterDefinitionRequest) String() string {
 func (*RegisterDefinitionRequest) ProtoMessage() {}
 
 func (x *RegisterDefinitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[22]
+	mi := &file_api_v1_notebook_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1459,7 +1816,7 @@ func (x *RegisterDefinitionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterDefinitionRequest.ProtoReflect.Descriptor instead.
 func (*RegisterDefinitionRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{22}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *RegisterDefinitionRequest) GetNotebookId() string {
@@ -1519,7 +1876,7 @@ type RegisterDefinitionResponse struct {
 
 func (x *RegisterDefinitionResponse) Reset() {
 	*x = RegisterDefinitionResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[23]
+	mi := &file_api_v1_notebook_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1531,7 +1888,7 @@ func (x *RegisterDefinitionResponse) String() string {
 func (*RegisterDefinitionResponse) ProtoMessage() {}
 
 func (x *RegisterDefinitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[23]
+	mi := &file_api_v1_notebook_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1544,7 +1901,7 @@ func (x *RegisterDefinitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterDefinitionResponse.ProtoReflect.Descriptor instead.
 func (*RegisterDefinitionResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{23}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{29}
 }
 
 type DeleteDefinitionRequest struct {
@@ -1559,7 +1916,7 @@ type DeleteDefinitionRequest struct {
 
 func (x *DeleteDefinitionRequest) Reset() {
 	*x = DeleteDefinitionRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[24]
+	mi := &file_api_v1_notebook_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1571,7 +1928,7 @@ func (x *DeleteDefinitionRequest) String() string {
 func (*DeleteDefinitionRequest) ProtoMessage() {}
 
 func (x *DeleteDefinitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[24]
+	mi := &file_api_v1_notebook_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1584,7 +1941,7 @@ func (x *DeleteDefinitionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDefinitionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDefinitionRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{24}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DeleteDefinitionRequest) GetNotebookId() string {
@@ -1623,7 +1980,7 @@ type DeleteDefinitionResponse struct {
 
 func (x *DeleteDefinitionResponse) Reset() {
 	*x = DeleteDefinitionResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[25]
+	mi := &file_api_v1_notebook_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1635,7 +1992,7 @@ func (x *DeleteDefinitionResponse) String() string {
 func (*DeleteDefinitionResponse) ProtoMessage() {}
 
 func (x *DeleteDefinitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[25]
+	mi := &file_api_v1_notebook_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1648,7 +2005,7 @@ func (x *DeleteDefinitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDefinitionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDefinitionResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{25}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{31}
 }
 
 // EtymologyOriginForm is one inflectional / morphological variant of a
@@ -1665,7 +2022,7 @@ type EtymologyOriginForm struct {
 
 func (x *EtymologyOriginForm) Reset() {
 	*x = EtymologyOriginForm{}
-	mi := &file_api_v1_notebook_proto_msgTypes[26]
+	mi := &file_api_v1_notebook_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1677,7 +2034,7 @@ func (x *EtymologyOriginForm) String() string {
 func (*EtymologyOriginForm) ProtoMessage() {}
 
 func (x *EtymologyOriginForm) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[26]
+	mi := &file_api_v1_notebook_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1690,7 +2047,7 @@ func (x *EtymologyOriginForm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EtymologyOriginForm.ProtoReflect.Descriptor instead.
 func (*EtymologyOriginForm) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{26}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *EtymologyOriginForm) GetForm() string {
@@ -1747,7 +2104,7 @@ type EtymologyOriginPart struct {
 
 func (x *EtymologyOriginPart) Reset() {
 	*x = EtymologyOriginPart{}
-	mi := &file_api_v1_notebook_proto_msgTypes[27]
+	mi := &file_api_v1_notebook_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1759,7 +2116,7 @@ func (x *EtymologyOriginPart) String() string {
 func (*EtymologyOriginPart) ProtoMessage() {}
 
 func (x *EtymologyOriginPart) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[27]
+	mi := &file_api_v1_notebook_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1772,7 +2129,7 @@ func (x *EtymologyOriginPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EtymologyOriginPart.ProtoReflect.Descriptor instead.
 func (*EtymologyOriginPart) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{27}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *EtymologyOriginPart) GetOrigin() string {
@@ -1868,7 +2225,7 @@ type EtymologyDefinition struct {
 
 func (x *EtymologyDefinition) Reset() {
 	*x = EtymologyDefinition{}
-	mi := &file_api_v1_notebook_proto_msgTypes[28]
+	mi := &file_api_v1_notebook_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1880,7 +2237,7 @@ func (x *EtymologyDefinition) String() string {
 func (*EtymologyDefinition) ProtoMessage() {}
 
 func (x *EtymologyDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[28]
+	mi := &file_api_v1_notebook_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1893,7 +2250,7 @@ func (x *EtymologyDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EtymologyDefinition.ProtoReflect.Descriptor instead.
 func (*EtymologyDefinition) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{28}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *EtymologyDefinition) GetExpression() string {
@@ -1983,7 +2340,7 @@ type EtymologyMeaningGroup struct {
 
 func (x *EtymologyMeaningGroup) Reset() {
 	*x = EtymologyMeaningGroup{}
-	mi := &file_api_v1_notebook_proto_msgTypes[29]
+	mi := &file_api_v1_notebook_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1995,7 +2352,7 @@ func (x *EtymologyMeaningGroup) String() string {
 func (*EtymologyMeaningGroup) ProtoMessage() {}
 
 func (x *EtymologyMeaningGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[29]
+	mi := &file_api_v1_notebook_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2008,7 +2365,7 @@ func (x *EtymologyMeaningGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EtymologyMeaningGroup.ProtoReflect.Descriptor instead.
 func (*EtymologyMeaningGroup) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{29}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *EtymologyMeaningGroup) GetMeaning() string {
@@ -2034,7 +2391,7 @@ type GetEtymologyNotebookRequest struct {
 
 func (x *GetEtymologyNotebookRequest) Reset() {
 	*x = GetEtymologyNotebookRequest{}
-	mi := &file_api_v1_notebook_proto_msgTypes[30]
+	mi := &file_api_v1_notebook_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2046,7 +2403,7 @@ func (x *GetEtymologyNotebookRequest) String() string {
 func (*GetEtymologyNotebookRequest) ProtoMessage() {}
 
 func (x *GetEtymologyNotebookRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[30]
+	mi := &file_api_v1_notebook_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2059,7 +2416,7 @@ func (x *GetEtymologyNotebookRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEtymologyNotebookRequest.ProtoReflect.Descriptor instead.
 func (*GetEtymologyNotebookRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{30}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GetEtymologyNotebookRequest) GetNotebookId() string {
@@ -2081,7 +2438,7 @@ type SemanticConceptMember struct {
 
 func (x *SemanticConceptMember) Reset() {
 	*x = SemanticConceptMember{}
-	mi := &file_api_v1_notebook_proto_msgTypes[31]
+	mi := &file_api_v1_notebook_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2093,7 +2450,7 @@ func (x *SemanticConceptMember) String() string {
 func (*SemanticConceptMember) ProtoMessage() {}
 
 func (x *SemanticConceptMember) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[31]
+	mi := &file_api_v1_notebook_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2106,7 +2463,7 @@ func (x *SemanticConceptMember) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SemanticConceptMember.ProtoReflect.Descriptor instead.
 func (*SemanticConceptMember) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{31}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SemanticConceptMember) GetOrigin() *EtymologyOriginPart {
@@ -2138,7 +2495,7 @@ type ConceptRelation struct {
 
 func (x *ConceptRelation) Reset() {
 	*x = ConceptRelation{}
-	mi := &file_api_v1_notebook_proto_msgTypes[32]
+	mi := &file_api_v1_notebook_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2150,7 +2507,7 @@ func (x *ConceptRelation) String() string {
 func (*ConceptRelation) ProtoMessage() {}
 
 func (x *ConceptRelation) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[32]
+	mi := &file_api_v1_notebook_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2163,7 +2520,7 @@ func (x *ConceptRelation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConceptRelation.ProtoReflect.Descriptor instead.
 func (*ConceptRelation) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{32}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ConceptRelation) GetType() string {
@@ -2210,7 +2567,7 @@ type SemanticConcept struct {
 
 func (x *SemanticConcept) Reset() {
 	*x = SemanticConcept{}
-	mi := &file_api_v1_notebook_proto_msgTypes[33]
+	mi := &file_api_v1_notebook_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2222,7 +2579,7 @@ func (x *SemanticConcept) String() string {
 func (*SemanticConcept) ProtoMessage() {}
 
 func (x *SemanticConcept) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[33]
+	mi := &file_api_v1_notebook_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2235,7 +2592,7 @@ func (x *SemanticConcept) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SemanticConcept.ProtoReflect.Descriptor instead.
 func (*SemanticConcept) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{33}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *SemanticConcept) GetNotebookId() string {
@@ -2294,7 +2651,7 @@ type GetEtymologyNotebookResponse struct {
 
 func (x *GetEtymologyNotebookResponse) Reset() {
 	*x = GetEtymologyNotebookResponse{}
-	mi := &file_api_v1_notebook_proto_msgTypes[34]
+	mi := &file_api_v1_notebook_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2306,7 +2663,7 @@ func (x *GetEtymologyNotebookResponse) String() string {
 func (*GetEtymologyNotebookResponse) ProtoMessage() {}
 
 func (x *GetEtymologyNotebookResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[34]
+	mi := &file_api_v1_notebook_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2319,7 +2676,7 @@ func (x *GetEtymologyNotebookResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEtymologyNotebookResponse.ProtoReflect.Descriptor instead.
 func (*GetEtymologyNotebookResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{34}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetEtymologyNotebookResponse) GetOrigins() []*EtymologyOriginPart {
@@ -2378,7 +2735,7 @@ type ListMyNotebooksResponse_Entry struct {
 
 func (x *ListMyNotebooksResponse_Entry) Reset() {
 	*x = ListMyNotebooksResponse_Entry{}
-	mi := &file_api_v1_notebook_proto_msgTypes[36]
+	mi := &file_api_v1_notebook_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2390,7 +2747,7 @@ func (x *ListMyNotebooksResponse_Entry) String() string {
 func (*ListMyNotebooksResponse_Entry) ProtoMessage() {}
 
 func (x *ListMyNotebooksResponse_Entry) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_notebook_proto_msgTypes[36]
+	mi := &file_api_v1_notebook_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2403,7 +2760,7 @@ func (x *ListMyNotebooksResponse_Entry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyNotebooksResponse_Entry.ProtoReflect.Descriptor instead.
 func (*ListMyNotebooksResponse_Entry) Descriptor() ([]byte, []int) {
-	return file_api_v1_notebook_proto_rawDescGZIP(), []int{8, 0}
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{13, 0}
 }
 
 func (x *ListMyNotebooksResponse_Entry) GetNotebookId() string {
@@ -2452,7 +2809,27 @@ var File_api_v1_notebook_proto protoreflect.FileDescriptor
 
 const file_api_v1_notebook_proto_rawDesc = "" +
 	"\n" +
-	"\x15api/v1/notebook.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"<\n" +
+	"\x15api/v1/notebook.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\">\n" +
+	"\x12SearchBooksRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x12\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\"\x90\x01\n" +
+	"\n" +
+	"BookResult\x12\x1b\n" +
+	"\tsource_id\x18\x01 \x01(\tR\bsourceId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
+	"\x06author\x18\x03 \x01(\tR\x06author\x12\x1a\n" +
+	"\blanguage\x18\x04 \x01(\tR\blanguage\x12\x1b\n" +
+	"\tcover_url\x18\x05 \x01(\tR\bcoverUrl\"\x89\x01\n" +
+	"\x13SearchBooksResponse\x12(\n" +
+	"\x05books\x18\x01 \x03(\v2\x12.api.v1.BookResultR\x05books\x12\x19\n" +
+	"\bhas_next\x18\x02 \x01(\bR\ahasNext\x12\x19\n" +
+	"\bhas_prev\x18\x03 \x01(\bR\ahasPrev\x12\x12\n" +
+	"\x04page\x18\x04 \x01(\x05R\x04page\"9\n" +
+	"\x11ImportBookRequest\x12$\n" +
+	"\tsource_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bsourceId\"5\n" +
+	"\x12ImportBookResponse\x12\x1f\n" +
+	"\vnotebook_id\x18\x01 \x01(\tR\n" +
+	"notebookId\"<\n" +
 	"\fNotebookFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\"\xb7\x01\n" +
@@ -2580,11 +2957,15 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\bsynonyms\x18\x04 \x03(\tR\bsynonyms\x12$\n" +
 	"\rpronunciation\x18\x05 \x01(\tR\rpronunciation\x12\x1a\n" +
 	"\bantonyms\x18\x06 \x03(\tR\bantonyms\x12\x16\n" +
-	"\x06origin\x18\a \x01(\tR\x06origin\"z\n" +
+	"\x06origin\x18\a \x01(\tR\x06origin\"S\n" +
+	"\x11MeaningSuggestion\x12\x18\n" +
+	"\ameaning\x18\x01 \x01(\tR\ameaning\x12$\n" +
+	"\x0esaved_by_count\x18\x02 \x01(\x05R\fsavedByCount\"\xb7\x01\n" +
 	"\x12LookupWordResponse\x12\x12\n" +
 	"\x04word\x18\x01 \x01(\tR\x04word\x128\n" +
 	"\vdefinitions\x18\x02 \x03(\v2\x16.api.v1.WordDefinitionR\vdefinitions\x12\x16\n" +
-	"\x06source\x18\x03 \x01(\tR\x06source\"\x99\x02\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\x12;\n" +
+	"\vsuggestions\x18\x04 \x03(\v2\x19.api.v1.MeaningSuggestionR\vsuggestions\"\x99\x02\n" +
 	"\x19RegisterDefinitionRequest\x12(\n" +
 	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"notebookId\x12#\n" +
@@ -2669,7 +3050,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\x0emeaning_groups\x18\x03 \x03(\v2\x1d.api.v1.EtymologyMeaningGroupR\rmeaningGroups\x12!\n" +
 	"\forigin_count\x18\x04 \x01(\x05R\voriginCount\x12)\n" +
 	"\x10definition_count\x18\x05 \x01(\x05R\x0fdefinitionCount\x123\n" +
-	"\bconcepts\x18\x06 \x03(\v2\x17.api.v1.SemanticConceptR\bconcepts2\xdc\x06\n" +
+	"\bconcepts\x18\x06 \x03(\v2\x17.api.v1.SemanticConceptR\bconcepts2\xe9\a\n" +
 	"\x0fNotebookService\x12X\n" +
 	"\x11GetNotebookDetail\x12 .api.v1.GetNotebookDetailRequest\x1a!.api.v1.GetNotebookDetailResponse\x12X\n" +
 	"\x11ExportNotebookPDF\x12 .api.v1.ExportNotebookPDFRequest\x1a!.api.v1.ExportNotebookPDFResponse\x12C\n" +
@@ -2681,7 +3062,10 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\fPushNotebook\x12\x1b.api.v1.PushNotebookRequest\x1a\x1c.api.v1.PushNotebookResponse\x12I\n" +
 	"\fPullNotebook\x12\x1b.api.v1.PullNotebookRequest\x1a\x1c.api.v1.PullNotebookResponse\x12R\n" +
 	"\x0fListMyNotebooks\x12\x1e.api.v1.ListMyNotebooksRequest\x1a\x1f.api.v1.ListMyNotebooksResponse\x12O\n" +
-	"\x0eDeleteNotebook\x12\x1d.api.v1.DeleteNotebookRequest\x1a\x1e.api.v1.DeleteNotebookResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x0eDeleteNotebook\x12\x1d.api.v1.DeleteNotebookRequest\x1a\x1e.api.v1.DeleteNotebookResponse\x12F\n" +
+	"\vSearchBooks\x12\x1a.api.v1.SearchBooksRequest\x1a\x1b.api.v1.SearchBooksResponse\x12C\n" +
+	"\n" +
+	"ImportBook\x12\x19.api.v1.ImportBookRequest\x1a\x1a.api.v1.ImportBookResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_notebook_proto_rawDescOnce sync.Once
@@ -2695,93 +3079,105 @@ func file_api_v1_notebook_proto_rawDescGZIP() []byte {
 	return file_api_v1_notebook_proto_rawDescData
 }
 
-var file_api_v1_notebook_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
+var file_api_v1_notebook_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_api_v1_notebook_proto_goTypes = []any{
-	(*NotebookFile)(nil),                  // 0: api.v1.NotebookFile
-	(*PushNotebookRequest)(nil),           // 1: api.v1.PushNotebookRequest
-	(*PushNotebookResponse)(nil),          // 2: api.v1.PushNotebookResponse
-	(*DeleteNotebookRequest)(nil),         // 3: api.v1.DeleteNotebookRequest
-	(*DeleteNotebookResponse)(nil),        // 4: api.v1.DeleteNotebookResponse
-	(*PullNotebookRequest)(nil),           // 5: api.v1.PullNotebookRequest
-	(*PullNotebookResponse)(nil),          // 6: api.v1.PullNotebookResponse
-	(*ListMyNotebooksRequest)(nil),        // 7: api.v1.ListMyNotebooksRequest
-	(*ListMyNotebooksResponse)(nil),       // 8: api.v1.ListMyNotebooksResponse
-	(*GetNotebookDetailRequest)(nil),      // 9: api.v1.GetNotebookDetailRequest
-	(*GetNotebookDetailResponse)(nil),     // 10: api.v1.GetNotebookDetailResponse
-	(*StoryEntry)(nil),                    // 11: api.v1.StoryEntry
-	(*StoryMetadata)(nil),                 // 12: api.v1.StoryMetadata
-	(*StoryScene)(nil),                    // 13: api.v1.StoryScene
-	(*Conversation)(nil),                  // 14: api.v1.Conversation
-	(*NotebookWord)(nil),                  // 15: api.v1.NotebookWord
-	(*LearningLogEntry)(nil),              // 16: api.v1.LearningLogEntry
-	(*ExportNotebookPDFRequest)(nil),      // 17: api.v1.ExportNotebookPDFRequest
-	(*ExportNotebookPDFResponse)(nil),     // 18: api.v1.ExportNotebookPDFResponse
-	(*LookupWordRequest)(nil),             // 19: api.v1.LookupWordRequest
-	(*WordDefinition)(nil),                // 20: api.v1.WordDefinition
-	(*LookupWordResponse)(nil),            // 21: api.v1.LookupWordResponse
-	(*RegisterDefinitionRequest)(nil),     // 22: api.v1.RegisterDefinitionRequest
-	(*RegisterDefinitionResponse)(nil),    // 23: api.v1.RegisterDefinitionResponse
-	(*DeleteDefinitionRequest)(nil),       // 24: api.v1.DeleteDefinitionRequest
-	(*DeleteDefinitionResponse)(nil),      // 25: api.v1.DeleteDefinitionResponse
-	(*EtymologyOriginForm)(nil),           // 26: api.v1.EtymologyOriginForm
-	(*EtymologyOriginPart)(nil),           // 27: api.v1.EtymologyOriginPart
-	(*EtymologyDefinition)(nil),           // 28: api.v1.EtymologyDefinition
-	(*EtymologyMeaningGroup)(nil),         // 29: api.v1.EtymologyMeaningGroup
-	(*GetEtymologyNotebookRequest)(nil),   // 30: api.v1.GetEtymologyNotebookRequest
-	(*SemanticConceptMember)(nil),         // 31: api.v1.SemanticConceptMember
-	(*ConceptRelation)(nil),               // 32: api.v1.ConceptRelation
-	(*SemanticConcept)(nil),               // 33: api.v1.SemanticConcept
-	(*GetEtymologyNotebookResponse)(nil),  // 34: api.v1.GetEtymologyNotebookResponse
-	nil,                                   // 35: api.v1.PushNotebookResponse.ImportedRowsEntry
-	(*ListMyNotebooksResponse_Entry)(nil), // 36: api.v1.ListMyNotebooksResponse.Entry
+	(*SearchBooksRequest)(nil),            // 0: api.v1.SearchBooksRequest
+	(*BookResult)(nil),                    // 1: api.v1.BookResult
+	(*SearchBooksResponse)(nil),           // 2: api.v1.SearchBooksResponse
+	(*ImportBookRequest)(nil),             // 3: api.v1.ImportBookRequest
+	(*ImportBookResponse)(nil),            // 4: api.v1.ImportBookResponse
+	(*NotebookFile)(nil),                  // 5: api.v1.NotebookFile
+	(*PushNotebookRequest)(nil),           // 6: api.v1.PushNotebookRequest
+	(*PushNotebookResponse)(nil),          // 7: api.v1.PushNotebookResponse
+	(*DeleteNotebookRequest)(nil),         // 8: api.v1.DeleteNotebookRequest
+	(*DeleteNotebookResponse)(nil),        // 9: api.v1.DeleteNotebookResponse
+	(*PullNotebookRequest)(nil),           // 10: api.v1.PullNotebookRequest
+	(*PullNotebookResponse)(nil),          // 11: api.v1.PullNotebookResponse
+	(*ListMyNotebooksRequest)(nil),        // 12: api.v1.ListMyNotebooksRequest
+	(*ListMyNotebooksResponse)(nil),       // 13: api.v1.ListMyNotebooksResponse
+	(*GetNotebookDetailRequest)(nil),      // 14: api.v1.GetNotebookDetailRequest
+	(*GetNotebookDetailResponse)(nil),     // 15: api.v1.GetNotebookDetailResponse
+	(*StoryEntry)(nil),                    // 16: api.v1.StoryEntry
+	(*StoryMetadata)(nil),                 // 17: api.v1.StoryMetadata
+	(*StoryScene)(nil),                    // 18: api.v1.StoryScene
+	(*Conversation)(nil),                  // 19: api.v1.Conversation
+	(*NotebookWord)(nil),                  // 20: api.v1.NotebookWord
+	(*LearningLogEntry)(nil),              // 21: api.v1.LearningLogEntry
+	(*ExportNotebookPDFRequest)(nil),      // 22: api.v1.ExportNotebookPDFRequest
+	(*ExportNotebookPDFResponse)(nil),     // 23: api.v1.ExportNotebookPDFResponse
+	(*LookupWordRequest)(nil),             // 24: api.v1.LookupWordRequest
+	(*WordDefinition)(nil),                // 25: api.v1.WordDefinition
+	(*MeaningSuggestion)(nil),             // 26: api.v1.MeaningSuggestion
+	(*LookupWordResponse)(nil),            // 27: api.v1.LookupWordResponse
+	(*RegisterDefinitionRequest)(nil),     // 28: api.v1.RegisterDefinitionRequest
+	(*RegisterDefinitionResponse)(nil),    // 29: api.v1.RegisterDefinitionResponse
+	(*DeleteDefinitionRequest)(nil),       // 30: api.v1.DeleteDefinitionRequest
+	(*DeleteDefinitionResponse)(nil),      // 31: api.v1.DeleteDefinitionResponse
+	(*EtymologyOriginForm)(nil),           // 32: api.v1.EtymologyOriginForm
+	(*EtymologyOriginPart)(nil),           // 33: api.v1.EtymologyOriginPart
+	(*EtymologyDefinition)(nil),           // 34: api.v1.EtymologyDefinition
+	(*EtymologyMeaningGroup)(nil),         // 35: api.v1.EtymologyMeaningGroup
+	(*GetEtymologyNotebookRequest)(nil),   // 36: api.v1.GetEtymologyNotebookRequest
+	(*SemanticConceptMember)(nil),         // 37: api.v1.SemanticConceptMember
+	(*ConceptRelation)(nil),               // 38: api.v1.ConceptRelation
+	(*SemanticConcept)(nil),               // 39: api.v1.SemanticConcept
+	(*GetEtymologyNotebookResponse)(nil),  // 40: api.v1.GetEtymologyNotebookResponse
+	nil,                                   // 41: api.v1.PushNotebookResponse.ImportedRowsEntry
+	(*ListMyNotebooksResponse_Entry)(nil), // 42: api.v1.ListMyNotebooksResponse.Entry
 }
 var file_api_v1_notebook_proto_depIdxs = []int32{
-	0,  // 0: api.v1.PushNotebookRequest.files:type_name -> api.v1.NotebookFile
-	35, // 1: api.v1.PushNotebookResponse.imported_rows:type_name -> api.v1.PushNotebookResponse.ImportedRowsEntry
-	0,  // 2: api.v1.PullNotebookResponse.files:type_name -> api.v1.NotebookFile
-	36, // 3: api.v1.ListMyNotebooksResponse.notebooks:type_name -> api.v1.ListMyNotebooksResponse.Entry
-	11, // 4: api.v1.GetNotebookDetailResponse.stories:type_name -> api.v1.StoryEntry
-	12, // 5: api.v1.StoryEntry.metadata:type_name -> api.v1.StoryMetadata
-	13, // 6: api.v1.StoryEntry.scenes:type_name -> api.v1.StoryScene
-	14, // 7: api.v1.StoryScene.conversations:type_name -> api.v1.Conversation
-	15, // 8: api.v1.StoryScene.definitions:type_name -> api.v1.NotebookWord
-	16, // 9: api.v1.NotebookWord.learned_logs:type_name -> api.v1.LearningLogEntry
-	20, // 10: api.v1.LookupWordResponse.definitions:type_name -> api.v1.WordDefinition
-	26, // 11: api.v1.EtymologyOriginPart.forms:type_name -> api.v1.EtymologyOriginForm
-	27, // 12: api.v1.EtymologyDefinition.origin_parts:type_name -> api.v1.EtymologyOriginPart
-	27, // 13: api.v1.EtymologyMeaningGroup.origins:type_name -> api.v1.EtymologyOriginPart
-	27, // 14: api.v1.SemanticConceptMember.origin:type_name -> api.v1.EtymologyOriginPart
-	31, // 15: api.v1.SemanticConcept.members:type_name -> api.v1.SemanticConceptMember
-	32, // 16: api.v1.SemanticConcept.outgoing_relations:type_name -> api.v1.ConceptRelation
-	27, // 17: api.v1.GetEtymologyNotebookResponse.origins:type_name -> api.v1.EtymologyOriginPart
-	28, // 18: api.v1.GetEtymologyNotebookResponse.definitions:type_name -> api.v1.EtymologyDefinition
-	29, // 19: api.v1.GetEtymologyNotebookResponse.meaning_groups:type_name -> api.v1.EtymologyMeaningGroup
-	33, // 20: api.v1.GetEtymologyNotebookResponse.concepts:type_name -> api.v1.SemanticConcept
-	9,  // 21: api.v1.NotebookService.GetNotebookDetail:input_type -> api.v1.GetNotebookDetailRequest
-	17, // 22: api.v1.NotebookService.ExportNotebookPDF:input_type -> api.v1.ExportNotebookPDFRequest
-	19, // 23: api.v1.NotebookService.LookupWord:input_type -> api.v1.LookupWordRequest
-	22, // 24: api.v1.NotebookService.RegisterDefinition:input_type -> api.v1.RegisterDefinitionRequest
-	24, // 25: api.v1.NotebookService.DeleteDefinition:input_type -> api.v1.DeleteDefinitionRequest
-	30, // 26: api.v1.NotebookService.GetEtymologyNotebook:input_type -> api.v1.GetEtymologyNotebookRequest
-	1,  // 27: api.v1.NotebookService.PushNotebook:input_type -> api.v1.PushNotebookRequest
-	5,  // 28: api.v1.NotebookService.PullNotebook:input_type -> api.v1.PullNotebookRequest
-	7,  // 29: api.v1.NotebookService.ListMyNotebooks:input_type -> api.v1.ListMyNotebooksRequest
-	3,  // 30: api.v1.NotebookService.DeleteNotebook:input_type -> api.v1.DeleteNotebookRequest
-	10, // 31: api.v1.NotebookService.GetNotebookDetail:output_type -> api.v1.GetNotebookDetailResponse
-	18, // 32: api.v1.NotebookService.ExportNotebookPDF:output_type -> api.v1.ExportNotebookPDFResponse
-	21, // 33: api.v1.NotebookService.LookupWord:output_type -> api.v1.LookupWordResponse
-	23, // 34: api.v1.NotebookService.RegisterDefinition:output_type -> api.v1.RegisterDefinitionResponse
-	25, // 35: api.v1.NotebookService.DeleteDefinition:output_type -> api.v1.DeleteDefinitionResponse
-	34, // 36: api.v1.NotebookService.GetEtymologyNotebook:output_type -> api.v1.GetEtymologyNotebookResponse
-	2,  // 37: api.v1.NotebookService.PushNotebook:output_type -> api.v1.PushNotebookResponse
-	6,  // 38: api.v1.NotebookService.PullNotebook:output_type -> api.v1.PullNotebookResponse
-	8,  // 39: api.v1.NotebookService.ListMyNotebooks:output_type -> api.v1.ListMyNotebooksResponse
-	4,  // 40: api.v1.NotebookService.DeleteNotebook:output_type -> api.v1.DeleteNotebookResponse
-	31, // [31:41] is the sub-list for method output_type
-	21, // [21:31] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	1,  // 0: api.v1.SearchBooksResponse.books:type_name -> api.v1.BookResult
+	5,  // 1: api.v1.PushNotebookRequest.files:type_name -> api.v1.NotebookFile
+	41, // 2: api.v1.PushNotebookResponse.imported_rows:type_name -> api.v1.PushNotebookResponse.ImportedRowsEntry
+	5,  // 3: api.v1.PullNotebookResponse.files:type_name -> api.v1.NotebookFile
+	42, // 4: api.v1.ListMyNotebooksResponse.notebooks:type_name -> api.v1.ListMyNotebooksResponse.Entry
+	16, // 5: api.v1.GetNotebookDetailResponse.stories:type_name -> api.v1.StoryEntry
+	17, // 6: api.v1.StoryEntry.metadata:type_name -> api.v1.StoryMetadata
+	18, // 7: api.v1.StoryEntry.scenes:type_name -> api.v1.StoryScene
+	19, // 8: api.v1.StoryScene.conversations:type_name -> api.v1.Conversation
+	20, // 9: api.v1.StoryScene.definitions:type_name -> api.v1.NotebookWord
+	21, // 10: api.v1.NotebookWord.learned_logs:type_name -> api.v1.LearningLogEntry
+	25, // 11: api.v1.LookupWordResponse.definitions:type_name -> api.v1.WordDefinition
+	26, // 12: api.v1.LookupWordResponse.suggestions:type_name -> api.v1.MeaningSuggestion
+	32, // 13: api.v1.EtymologyOriginPart.forms:type_name -> api.v1.EtymologyOriginForm
+	33, // 14: api.v1.EtymologyDefinition.origin_parts:type_name -> api.v1.EtymologyOriginPart
+	33, // 15: api.v1.EtymologyMeaningGroup.origins:type_name -> api.v1.EtymologyOriginPart
+	33, // 16: api.v1.SemanticConceptMember.origin:type_name -> api.v1.EtymologyOriginPart
+	37, // 17: api.v1.SemanticConcept.members:type_name -> api.v1.SemanticConceptMember
+	38, // 18: api.v1.SemanticConcept.outgoing_relations:type_name -> api.v1.ConceptRelation
+	33, // 19: api.v1.GetEtymologyNotebookResponse.origins:type_name -> api.v1.EtymologyOriginPart
+	34, // 20: api.v1.GetEtymologyNotebookResponse.definitions:type_name -> api.v1.EtymologyDefinition
+	35, // 21: api.v1.GetEtymologyNotebookResponse.meaning_groups:type_name -> api.v1.EtymologyMeaningGroup
+	39, // 22: api.v1.GetEtymologyNotebookResponse.concepts:type_name -> api.v1.SemanticConcept
+	14, // 23: api.v1.NotebookService.GetNotebookDetail:input_type -> api.v1.GetNotebookDetailRequest
+	22, // 24: api.v1.NotebookService.ExportNotebookPDF:input_type -> api.v1.ExportNotebookPDFRequest
+	24, // 25: api.v1.NotebookService.LookupWord:input_type -> api.v1.LookupWordRequest
+	28, // 26: api.v1.NotebookService.RegisterDefinition:input_type -> api.v1.RegisterDefinitionRequest
+	30, // 27: api.v1.NotebookService.DeleteDefinition:input_type -> api.v1.DeleteDefinitionRequest
+	36, // 28: api.v1.NotebookService.GetEtymologyNotebook:input_type -> api.v1.GetEtymologyNotebookRequest
+	6,  // 29: api.v1.NotebookService.PushNotebook:input_type -> api.v1.PushNotebookRequest
+	10, // 30: api.v1.NotebookService.PullNotebook:input_type -> api.v1.PullNotebookRequest
+	12, // 31: api.v1.NotebookService.ListMyNotebooks:input_type -> api.v1.ListMyNotebooksRequest
+	8,  // 32: api.v1.NotebookService.DeleteNotebook:input_type -> api.v1.DeleteNotebookRequest
+	0,  // 33: api.v1.NotebookService.SearchBooks:input_type -> api.v1.SearchBooksRequest
+	3,  // 34: api.v1.NotebookService.ImportBook:input_type -> api.v1.ImportBookRequest
+	15, // 35: api.v1.NotebookService.GetNotebookDetail:output_type -> api.v1.GetNotebookDetailResponse
+	23, // 36: api.v1.NotebookService.ExportNotebookPDF:output_type -> api.v1.ExportNotebookPDFResponse
+	27, // 37: api.v1.NotebookService.LookupWord:output_type -> api.v1.LookupWordResponse
+	29, // 38: api.v1.NotebookService.RegisterDefinition:output_type -> api.v1.RegisterDefinitionResponse
+	31, // 39: api.v1.NotebookService.DeleteDefinition:output_type -> api.v1.DeleteDefinitionResponse
+	40, // 40: api.v1.NotebookService.GetEtymologyNotebook:output_type -> api.v1.GetEtymologyNotebookResponse
+	7,  // 41: api.v1.NotebookService.PushNotebook:output_type -> api.v1.PushNotebookResponse
+	11, // 42: api.v1.NotebookService.PullNotebook:output_type -> api.v1.PullNotebookResponse
+	13, // 43: api.v1.NotebookService.ListMyNotebooks:output_type -> api.v1.ListMyNotebooksResponse
+	9,  // 44: api.v1.NotebookService.DeleteNotebook:output_type -> api.v1.DeleteNotebookResponse
+	2,  // 45: api.v1.NotebookService.SearchBooks:output_type -> api.v1.SearchBooksResponse
+	4,  // 46: api.v1.NotebookService.ImportBook:output_type -> api.v1.ImportBookResponse
+	35, // [35:47] is the sub-list for method output_type
+	23, // [23:35] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_notebook_proto_init() }
@@ -2795,7 +3191,7 @@ func file_api_v1_notebook_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_notebook_proto_rawDesc), len(file_api_v1_notebook_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   37,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

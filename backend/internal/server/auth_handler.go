@@ -50,6 +50,23 @@ type AuthHandler struct {
 	cookieSecure   bool
 	cookieSameSite http.SameSite
 	now            func() time.Time
+	// onCredentialChange, when set, is called with the user id after their LLM
+	// credentials are added/rotated/deleted so a cached inference client is
+	// dropped and the new key takes effect immediately (not after the resolver's
+	// cache TTL). Nil in tests / when no caching resolver is wired.
+	onCredentialChange func(userID int64)
+}
+
+// SetCredentialInvalidator wires the hook called after a user's LLM credentials
+// change. Set once at construction in serverapp; nil-safe if never set.
+func (h *AuthHandler) SetCredentialInvalidator(fn func(userID int64)) {
+	h.onCredentialChange = fn
+}
+
+func (h *AuthHandler) invalidateCredential(userID int64) {
+	if h.onCredentialChange != nil {
+		h.onCredentialChange(userID)
+	}
 }
 
 // AuthHandlerConfig wires an AuthHandler.
@@ -446,6 +463,7 @@ func (h *AuthHandler) LLMCredential(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "api key is required", http.StatusBadRequest)
 			return
 		}
+		h.invalidateCredential(sess.UserID)
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodDelete:
 		provider := strings.TrimSpace(r.URL.Query().Get("provider"))
@@ -458,6 +476,7 @@ func (h *AuthHandler) LLMCredential(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
+		h.invalidateCredential(sess.UserID)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

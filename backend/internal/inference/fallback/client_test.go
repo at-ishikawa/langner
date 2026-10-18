@@ -91,6 +91,42 @@ func TestFallback_QuotaSignals_FailOver(t *testing.T) {
 	}
 }
 
+// TestFallback_TypedProviderError_Classifies pins failover on the TYPED
+// *inference.ProviderError (status/code), independent of the error body wording:
+// a 429 rate-limit or a quota exhaustion fails over; a 5xx or invalid-key does
+// not. This is the reliable path for Gemini/OpenAI 429s surfaced as ProviderError.
+func TestFallback_TypedProviderError_Classifies(t *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		wantOver bool
+	}{
+		{"gemini 429 resource_exhausted", &inference.ProviderError{Provider: "gemini", StatusCode: 429, Code: "RESOURCE_EXHAUSTED"}, true},
+		{"openai 429 insufficient_quota", &inference.ProviderError{Provider: "openai", StatusCode: 429, Code: "insufficient_quota"}, true},
+		{"quota 402", &inference.ProviderError{Provider: "openai", StatusCode: 402}, true},
+		{"wrapped 429", fmt.Errorf("grade correction: %w", &inference.ProviderError{Provider: "gemini", StatusCode: 429}), true},
+		{"server 500 (no failover)", &inference.ProviderError{Provider: "openai", StatusCode: 500}, false},
+		{"invalid key 401 (no failover)", &inference.ProviderError{Provider: "openai", StatusCode: 401, Code: "invalid_api_key"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			primary := &fakeClient{name: "primary", err: tc.err}
+			secondary := &fakeClient{name: "secondary"}
+			c := NewClient(primary, secondary)
+			res, err := c.GradeCorrection(context.Background(), inference.GradeCorrectionRequest{})
+			assert.Equal(t, 1, primary.gradeCalls, "primary is always called exactly once")
+			if tc.wantOver {
+				require.NoError(t, err)
+				assert.Equal(t, "secondary", res.Reason)
+				assert.Equal(t, 1, secondary.gradeCalls, "rate-limit/quota must fail over to the secondary once")
+			} else {
+				require.Error(t, err)
+				assert.Equal(t, 0, secondary.gradeCalls, "non-rate-limit/quota typed error must not fail over")
+			}
+		})
+	}
+}
+
 func TestFallback_NonRateLimitError_NoFailover(t *testing.T) {
 	boom := errors.New("failed to grade answer: connection reset by peer")
 	primary := &fakeClient{name: "primary", err: boom}

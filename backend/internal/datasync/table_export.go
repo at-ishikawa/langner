@@ -61,6 +61,7 @@ func DataTablesInDependencyOrder() []string {
 		"semantic_concept_members",
 		"concept_relations",
 		"definition_concept_members",
+		"user_notebook_definitions", // -> users, notes (migration 036 per-user book highlights)
 		"notes",
 		"etymology_origins",
 		"semantic_concepts",
