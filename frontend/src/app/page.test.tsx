@@ -1,83 +1,107 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
-import HomePage from "./page";
+import TodayPage from "./page";
+import * as client from "@/lib/client";
+
+vi.mock("@/lib/client", () => ({
+  quizClient: { getQuizOptions: vi.fn() },
+}));
+
+vi.mock("next/link", () => ({
+  default: ({ children, ...props }: { children: React.ReactNode; href: string }) => (
+    <a {...props}>{children}</a>
+  ),
+}));
+
+function nb(partial: Partial<client.NotebookSummary> & { notebookId: string; name: string }) {
+  return {
+    reviewCount: 0,
+    reverseReviewCount: 0,
+    etymologyReviewCount: 0,
+    etymologyReverseReviewCount: 0,
+    grammarReviewCount: 0,
+    vocabularyCount: 0,
+    kind: "",
+    hasContent: true,
+    sections: [],
+    ...partial,
+  } as client.NotebookSummary;
+}
 
 function renderPage() {
   return render(
     <ChakraProvider value={defaultSystem}>
-      <HomePage />
-    </ChakraProvider>
+      <TodayPage />
+    </ChakraProvider>,
   );
 }
 
-function renderPageDark() {
-  document.documentElement.classList.add("dark");
-  document.documentElement.setAttribute("data-theme", "dark");
-  return renderPage();
-}
-
-describe("HomePage", () => {
+describe("TodayPage", () => {
   afterEach(() => {
     document.documentElement.classList.remove("dark");
     document.documentElement.removeAttribute("data-theme");
+    vi.clearAllMocks();
   });
 
-  it("renders app title", () => {
+  it("shows total due and a one-tap review button to the quiz hub", async () => {
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [
+        nb({ notebookId: "a", name: "Word Power", reviewCount: 14, vocabularyCount: 412 }),
+        nb({ notebookId: "b", name: "Latin Roots", reviewCount: 9, vocabularyCount: 230 }),
+        nb({ notebookId: "g", name: "Grammar — tenses", grammarReviewCount: 6 }),
+      ],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
     renderPage();
-    expect(screen.getByText("Langner")).toBeInTheDocument();
+
+    expect(await screen.findByText("Today")).toBeInTheDocument();
+    // 14 + 9 words due across notebooks.
+    expect(await screen.findByText("23")).toBeInTheDocument();
+    const review = screen.getByText(/Review 23 due/).closest("a");
+    expect(review).toHaveAttribute("href", "/quiz");
+    // Per-notebook due breakdown.
+    expect(screen.getByText("Word Power")).toBeInTheDocument();
+    expect(screen.getByText("Latin Roots")).toBeInTheDocument();
   });
 
-  it("shows Books feature link", () => {
+  it("lists imported books under Continue reading", async () => {
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [
+        nb({ notebookId: "gutenberg-84", name: "Frankenstein", reviewCount: 3, vocabularyCount: 5 }),
+      ],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
     renderPage();
-    expect(screen.getByText("Books")).toBeInTheDocument();
-    const link = screen.getByText("Books").closest("a");
-    expect(link).toHaveAttribute("href", "/books");
+
+    expect(await screen.findByText("Continue reading")).toBeInTheDocument();
+    // The book is both due and continuable; the Continue-reading entry is the link.
+    const book = screen.getByRole("link", { name: "Frankenstein" });
+    expect(book).toHaveAttribute("href", "/learn/gutenberg-84");
   });
 
-  it("shows Learn feature link", () => {
+  it("shows an all-clear state with links when nothing is due", async () => {
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [nb({ notebookId: "a", name: "Word Power", vocabularyCount: 412 })],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
     renderPage();
-    expect(screen.getByText("Learn")).toBeInTheDocument();
-    const link = screen.getByText("Learn").closest("a");
-    expect(link).toHaveAttribute("href", "/learn");
+
+    expect(await screen.findByText(/Nothing due right now/)).toBeInTheDocument();
+    const browse = screen.getByText("Browse your words").closest("a");
+    expect(browse).toHaveAttribute("href", "/learn");
+    const find = screen.getByText("Find a book").closest("a");
+    expect(find).toHaveAttribute("href", "/books");
   });
 
-  it("shows Quiz feature link", () => {
+  it("renders in dark mode without errors", async () => {
+    document.documentElement.classList.add("dark");
+    document.documentElement.setAttribute("data-theme", "dark");
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [nb({ notebookId: "a", name: "Word Power", reviewCount: 3, vocabularyCount: 10 })],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
     renderPage();
-    expect(screen.getByText("Quiz")).toBeInTheDocument();
-    expect(screen.getByText("Practice vocabulary and etymology with spaced repetition")).toBeInTheDocument();
-    const link = screen.getByText("Quiz").closest("a");
-    expect(link).toHaveAttribute("href", "/quiz");
-  });
-
-  it("shows Analytics feature link", () => {
-    renderPage();
-    expect(screen.getByText("Analytics")).toBeInTheDocument();
-    const link = screen.getByText("Analytics").closest("a");
-    expect(link).toHaveAttribute("href", "/analytics");
-  });
-
-  it("shows History feature link", () => {
-    renderPage();
-    expect(screen.getByText("History")).toBeInTheDocument();
-    const link = screen.getByText("History").closest("a");
-    expect(link).toHaveAttribute("href", "/history");
-  });
-
-  it("renders exactly 5 feature cards", () => {
-    renderPage();
-    const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(5);
-  });
-
-  it("renders in dark mode without errors", () => {
-    renderPageDark();
-    expect(screen.getByText("Langner")).toBeInTheDocument();
-    expect(screen.getByText("Books")).toBeInTheDocument();
-    expect(screen.getByText("Learn")).toBeInTheDocument();
-    expect(screen.getByText("Quiz")).toBeInTheDocument();
-    expect(screen.getByText("Analytics")).toBeInTheDocument();
-    expect(screen.getByText("History")).toBeInTheDocument();
-    expect(screen.getAllByRole("link")).toHaveLength(5);
+    expect(await screen.findByText("Today")).toBeInTheDocument();
   });
 });

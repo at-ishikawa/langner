@@ -1,97 +1,160 @@
 "use client";
 
-import Link from "next/link";
-import { Box, Heading, Text } from "@chakra-ui/react";
+import { useEffect, useState } from "react";
+import NextLink from "next/link";
+import { Box, Button, SimpleGrid, Spinner, Text, VStack } from "@chakra-ui/react";
+import { quizClient, type NotebookSummary } from "@/lib/client";
+import { PageShell } from "@/components/PageShell";
+import { Card } from "@/components/Card";
+import { StatTile } from "@/components/StatTile";
 
-const features = [
-  {
-    href: "/books",
-    title: "Books",
-    description: "Browse and read Project Gutenberg books, and mine new words",
-    icon: "B",
-  },
-  {
-    href: "/learn",
-    title: "Learn",
-    description: "Read notebooks and browse vocabulary and etymology",
-    icon: "L",
-  },
-  {
-    href: "/quiz",
-    title: "Quiz",
-    description: "Practice vocabulary and etymology with spaced repetition",
-    icon: "Q",
-  },
-  {
-    href: "/analytics",
-    title: "Analytics",
-    description: "See your learning trends over time",
-    icon: "A",
-  },
-  {
-    href: "/history",
-    title: "History",
-    description: "Review which words you got wrong, day by day",
-    icon: "H",
-  },
-];
+// Today: the daily entry point. Shows what's actually due (from the same quiz
+// options the Quiz hub reads) and gets you into a session in one tap. Primary
+// navigation lives in the bottom tab bar, so this screen stays focused on "what
+// should I do right now".
+export default function TodayPage() {
+  const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
-export default function HomePage() {
+  useEffect(() => {
+    quizClient
+      .getQuizOptions({ includeUnstudied: false })
+      .then((r) => setNotebooks(r.notebooks ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const wordsDue = notebooks.reduce((s, n) => s + n.reviewCount, 0);
+  const grammarDue = notebooks.reduce((s, n) => s + n.grammarReviewCount, 0);
+  const dueNotebooks = notebooks
+    .filter((n) => n.reviewCount > 0)
+    .sort((a, b) => b.reviewCount - a.reviewCount);
+  const books = notebooks.filter((n) => n.notebookId.startsWith("gutenberg-"));
+  const nothingDue = wordsDue === 0 && grammarDue === 0;
+
+  if (loading) {
+    return (
+      <PageShell title="Today" maxW="xl">
+        <Box textAlign="center" py={16}>
+          <Spinner size="lg" color="brand.solid" />
+        </Box>
+      </PageShell>
+    );
+  }
+
   return (
-    <Box p={6} maxW="sm" mx="auto">
-      <Box textAlign="center" mb={8}>
-        <Heading size="xl" mb={2}>
-          Langner
-        </Heading>
-        <Text color="fg.muted">What would you like to do?</Text>
-      </Box>
+    <PageShell title="Today" maxW="xl">
+      <SimpleGrid columns={2} gap={3} mb={5}>
+        <StatTile accent value={wordsDue} label="words due" />
+        <StatTile value={grammarDue} label="grammar notes" />
+      </SimpleGrid>
 
-      <Box display="flex" flexDirection="column" gap={4}>
-        {features.map((feature) => (
-          <Link key={feature.href} href={feature.href}>
-            <Box
-              p={5}
-              bg="white"
-              _dark={{ bg: "gray.800" }}
-              borderWidth="1px"
-              borderColor="gray.200"
-              _hover={{ bg: "bg.muted", borderColor: "blue.400" }}
-              borderRadius="lg"
-              cursor="pointer"
-              display="flex"
-              alignItems="center"
-              gap={4}
-            >
-              <Box
-                w="48px"
-                h="48px"
-                borderRadius="10px"
-                bg="blue.50"
-                _dark={{ bg: "blue.900" }}
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                flexShrink={0}
+      <Button asChild colorPalette="brand" size="lg" w="full" mb={6}>
+        <NextLink href="/quiz">
+          {wordsDue > 0 ? `Review ${wordsDue} due →` : "Start a quiz →"}
+        </NextLink>
+      </Button>
+
+      {dueNotebooks.length > 0 && (
+        <Box mb={6}>
+          <SectionLabel>Due by notebook</SectionLabel>
+          <Card overflow="hidden">
+            <VStack align="stretch" gap={0}>
+              {dueNotebooks.map((n, i) => (
+                <Box
+                  key={n.notebookId}
+                  display="flex"
+                  alignItems="center"
+                  gap={3}
+                  px={4}
+                  py={3}
+                  borderTopWidth={i === 0 ? "0" : "1px"}
+                  borderColor="border"
+                >
+                  <Text fontWeight="500" fontSize="sm" flex="1" truncate>
+                    {n.name}
+                  </Text>
+                  <Text
+                    fontFamily="mono"
+                    fontSize="sm"
+                    color="brand.fg"
+                    css={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {n.reviewCount}
+                  </Text>
+                </Box>
+              ))}
+            </VStack>
+          </Card>
+        </Box>
+      )}
+
+      {books.length > 0 && (
+        <Box mb={6}>
+          <SectionLabel>Continue reading</SectionLabel>
+          <VStack align="stretch" gap={2}>
+            {books.map((n) => (
+              <Button
+                key={n.notebookId}
+                asChild
+                variant="outline"
+                justifyContent="space-between"
+                h="auto"
+                py={3}
+                px={4}
               >
-                <Text fontSize="xl" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
-                  {feature.icon}
-                </Text>
-              </Box>
-              <Box flex="1">
-                <Text fontWeight="semibold" fontSize="lg">
-                  {feature.title}
-                </Text>
-                <Text fontSize="sm" color="fg.muted">
-                  {feature.description}
-                </Text>
-              </Box>
-              <Text fontSize="md" color="gray.500" _dark={{ color: "gray.400" }} flexShrink={0}>
-                &rsaquo;
-              </Text>
+                <NextLink href={`/learn/${n.notebookId}`}>
+                  <Text fontWeight="500" fontSize="sm" truncate>
+                    {n.name}
+                  </Text>
+                  <Text aria-hidden color="fg.muted">
+                    ›
+                  </Text>
+                </NextLink>
+              </Button>
+            ))}
+          </VStack>
+        </Box>
+      )}
+
+      {nothingDue && (
+        <Card px={6} py={10} mb={6}>
+          <VStack gap={4}>
+            <Text
+              color="fg.muted"
+              textAlign="center"
+              fontFamily="heading"
+              fontSize="lg"
+              fontStyle="italic"
+            >
+              Nothing due right now — nice work.
+            </Text>
+            <Box display="flex" gap={3} flexWrap="wrap" justifyContent="center">
+              <Button asChild variant="outline">
+                <NextLink href="/books">Find a book</NextLink>
+              </Button>
+              <Button asChild variant="outline">
+                <NextLink href="/learn">Browse your words</NextLink>
+              </Button>
             </Box>
-          </Link>
-        ))}
-      </Box>
-    </Box>
+          </VStack>
+        </Card>
+      )}
+    </PageShell>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Text
+      fontFamily="mono"
+      fontSize="xs"
+      letterSpacing="0.12em"
+      textTransform="uppercase"
+      color="fg.muted"
+      mb={2}
+    >
+      {children}
+    </Text>
   );
 }
