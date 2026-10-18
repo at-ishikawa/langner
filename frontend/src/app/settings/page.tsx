@@ -21,14 +21,14 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <Box p={4} maxW="md" mx="auto">
+      <Box p={4} maxW="2xl" mx="auto">
         <Text color="fg.muted">Loading…</Text>
       </Box>
     );
   }
   if (!user) {
     return (
-      <Box p={4} maxW="md" mx="auto">
+      <Box p={4} maxW="2xl" mx="auto">
         <Text color="fg.muted">You must be signed in to manage settings.</Text>
       </Box>
     );
@@ -59,10 +59,10 @@ export default function SettingsPage() {
     });
 
   return (
-    <Box p={4} maxW="md" mx="auto">
+    <Box p={4} maxW="2xl" mx="auto">
       <Box mb={4}>
         <Link href="/">
-          <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
+          <Text color="brand.fg" fontSize="xs">
             &lt; Home
           </Text>
         </Link>
@@ -108,7 +108,7 @@ export default function SettingsPage() {
                   {provider}
                 </Heading>
                 {cred?.primary && (
-                  <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="bold">
+                  <Text fontSize="xs" color="brand.fg" fontWeight="bold">
                     primary
                   </Text>
                 )}
@@ -134,7 +134,7 @@ export default function SettingsPage() {
               />
               <Box display="flex" gap={3}>
                 <Button
-                  colorPalette="blue"
+                  colorPalette="brand"
                   size="sm"
                   onClick={() => save(provider)}
                   loading={status === "saving"}

@@ -47,7 +47,7 @@ function LoginContent() {
             {message}
           </Box>
         )}
-        <Button colorPalette="blue" onClick={() => login()} w="100%">
+        <Button colorPalette="brand" onClick={() => login()} w="100%">
           Sign in with Google
         </Button>
       </VStack>
