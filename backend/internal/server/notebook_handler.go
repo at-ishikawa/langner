@@ -20,6 +20,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/gutenberg"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -55,6 +56,23 @@ type NotebookHandler struct {
 	db            *sqlx.DB
 	fileRepo      *notebook.NotebookFileRepository
 	contentSource notebook.ContentSource
+	// userDefsRepo is the per-user private registration store (Gutenberg books
+	// feature). RegisterDefinition/DeleteDefinition write it; GetNotebookDetail
+	// overlays the caller's rows onto the shared book's scenes; LookupWord reads
+	// cross-user suggestions from it. Nil in YAML-only / no-DB dev, where
+	// RegisterDefinition falls back to the YAML note repository.
+	userDefsRepo *notebook.UserDefinitionsRepository
+	// bookHTTPClient is the (injectable) HTTP client gutenberg Search/Fetch use.
+	// Nil falls back to a default client with a timeout; tests inject a fake.
+	bookHTTPClient gutenberg.HTTPClient
+}
+
+// SetBookDeps installs the per-user definitions store and the Gutenberg HTTP
+// client (DB mode). Called from bootstrap once the database is connected; a nil
+// userDefsRepo keeps RegisterDefinition on the YAML note repository.
+func (h *NotebookHandler) SetBookDeps(userDefsRepo *notebook.UserDefinitionsRepository, bookHTTPClient gutenberg.HTTPClient) {
+	h.userDefsRepo = userDefsRepo
+	h.bookHTTPClient = bookHTTPClient
 }
 
 // SetNotebookACL installs the notebook visibility resolver (auth Phase 3).
@@ -222,13 +240,18 @@ func (h *NotebookHandler) GetNotebookDetail(
 
 	noteIDByExpr := h.loadNoteIDsForNotebook(ctx, notebookID)
 
-	storyNotebooks, err := reader.ReadStoryNotebooks(notebookID)
+	storyNotebooks, notebookPaths, err := reader.ReadStoryNotebooksWithPaths(notebookID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return h.getFlashcardNotebookDetail(notebookID, reader, learningHistory, noteIDByExpr)
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read story notebooks: %w", err))
 	}
+
+	// Overlay the requesting user's PRIVATE registered highlights onto the
+	// shared book's scenes (additive, never replacing content-declared defs) so
+	// the reader bolds them and shows their status — scoped to this user only.
+	storyNotebooks = h.overlayUserDefinitions(ctx, userID, notebookID, storyNotebooks, notebookPaths)
 
 	indexName := notebookID
 	if idx, ok := reader.GetStoryIndexes()[notebookID]; ok {
@@ -711,8 +734,14 @@ func (h *NotebookHandler) LookupWord(
 
 	word := req.Msg.GetWord()
 
+	// Shared suggestions: the DISTINCT meanings OTHER users privately saved for
+	// this (notebook, word) in the book. Advisory prefill only — a suggestion
+	// never enters another user's quiz. Attached to whichever response wins
+	// below; the dictionary/AI lookup stays the primary content.
+	suggestions := h.lookupSuggestions(ctx, req.Msg.GetNotebookId(), word)
+
 	if resp, ok := h.dictionaryMap[word]; ok {
-		return connect.NewResponse(rapidAPIToLookupResponse(word, resp, "dictionary")), nil
+		return connect.NewResponse(withSuggestions(rapidAPIToLookupResponse(word, resp, "dictionary"), suggestions)), nil
 	}
 
 	if h.dictionaryReader != nil {
@@ -720,7 +749,7 @@ func (h *NotebookHandler) LookupWord(
 		if err != nil {
 			slog.Warn("dictionary lookup failed", "word", word, "error", err)
 		} else if len(resp.Results) > 0 {
-			return connect.NewResponse(rapidAPIToLookupResponse(word, resp, "dictionary")), nil
+			return connect.NewResponse(withSuggestions(rapidAPIToLookupResponse(word, resp, "dictionary"), suggestions)), nil
 		}
 	}
 
@@ -750,15 +779,41 @@ func (h *NotebookHandler) LookupWord(
 					Origin:        d.Origin,
 				})
 			}
-			return connect.NewResponse(&apiv1.LookupWordResponse{
+			return connect.NewResponse(withSuggestions(&apiv1.LookupWordResponse{
 				Word:        word,
 				Definitions: defs,
 				Source:      "openai",
-			}), nil
+			}, suggestions)), nil
 		}
 	}
 
-	return connect.NewResponse(&apiv1.LookupWordResponse{Word: word}), nil
+	return connect.NewResponse(withSuggestions(&apiv1.LookupWordResponse{Word: word}, suggestions)), nil
+}
+
+// lookupSuggestions returns the cross-user meaning suggestions for
+// (notebookID, word), or nil when the per-user store isn't configured, the
+// notebook id is empty, or the query fails (suggestions are advisory, so a
+// failure never breaks the lookup).
+func (h *NotebookHandler) lookupSuggestions(ctx context.Context, notebookID, word string) []*apiv1.MeaningSuggestion {
+	if h.userDefsRepo == nil || strings.TrimSpace(notebookID) == "" {
+		return nil
+	}
+	rows, err := h.userDefsRepo.Suggestions(ctx, notebookID, word)
+	if err != nil {
+		slog.Warn("lookup word suggestions failed", "notebook", notebookID, "word", word, "error", err)
+		return nil
+	}
+	out := make([]*apiv1.MeaningSuggestion, 0, len(rows))
+	for _, s := range rows {
+		out = append(out, &apiv1.MeaningSuggestion{Meaning: s.Meaning, SavedByCount: int32(s.SavedByCount)})
+	}
+	return out
+}
+
+// withSuggestions attaches cross-user suggestions to a lookup response.
+func withSuggestions(resp *apiv1.LookupWordResponse, suggestions []*apiv1.MeaningSuggestion) *apiv1.LookupWordResponse {
+	resp.Suggestions = suggestions
+	return resp
 }
 
 func rapidAPIToLookupResponse(word string, resp rapidapi.Response, source string) *apiv1.LookupWordResponse {
@@ -1198,7 +1253,30 @@ func (h *NotebookHandler) loadEtymologyConcepts(
 	return out, conceptKeysByOrigin, nil
 }
 
-// RegisterDefinition adds a definition via the repository.
+// overlayUserDefinitions merges the requesting user's PRIVATE registrations
+// (user_notebook_definitions) onto already-read story notebooks, additively, so
+// registered words surface as highlights/cards for THAT user only. No-op when
+// the per-user store isn't configured (YAML-only / no-DB dev) or the user isn't
+// signed in. This is the reader side of the notes→content bridge (the quiz side
+// lives in quiz.Service).
+func (h *NotebookHandler) overlayUserDefinitions(ctx context.Context, userID int64, notebookID string, notebooks []notebook.StoryNotebook, notebookPaths []string) []notebook.StoryNotebook {
+	if h.userDefsRepo == nil || userID <= 0 {
+		return notebooks
+	}
+	rows, err := h.userDefsRepo.ListForUser(ctx, userID, notebookID)
+	if err != nil {
+		slog.Warn("load user definitions overlay failed", "notebook", notebookID, "error", err)
+		return notebooks
+	}
+	return notebook.ApplyUserDefinitionsOverlay(notebookID, notebooks, notebookPaths, rows)
+}
+
+// RegisterDefinition saves the caller's PRIVATE highlight registration. In DB
+// mode it ensures the global notes identity row (find-or-create by
+// sense/expression — a stable WORD identity so per-user learning_logs bind) and
+// upserts the caller's OWN row in user_notebook_definitions (their authoritative
+// meaning/pos/examples + where in the book); another user's copy is untouched.
+// In YAML-only / no-DB dev it falls back to the YAML note repository.
 func (h *NotebookHandler) RegisterDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.RegisterDefinitionRequest],
@@ -1207,14 +1285,14 @@ func (h *NotebookHandler) RegisterDefinition(
 		return nil, err
 	}
 	userID, _ := auth.UserIDFromContext(ctx)
-	if err := h.ensureNotebookVisible(ctx, userID, req.Msg.GetNotebookId()); err != nil {
+	notebookIDRaw := req.Msg.GetNotebookId()
+	if err := h.ensureNotebookVisible(ctx, userID, notebookIDRaw); err != nil {
 		return nil, err
 	}
 	defsDir := "notebooks/definitions"
 	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
 		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
 	}
-	notebookIDRaw := req.Msg.GetNotebookId()
 	checkPath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
 	rel, err := filepath.Rel(defsDir, checkPath)
 	if err != nil || strings.HasPrefix(rel, "..") {
@@ -1222,20 +1300,84 @@ func (h *NotebookHandler) RegisterDefinition(
 	}
 	expression := req.Msg.GetExpression()
 	meaning := req.Msg.GetMeaning()
+	sceneIndex := int(req.Msg.GetSceneIndex())
+
+	// The learning-history reconstruction keys a note's scene by its
+	// notebook_notes Group (the event TITLE) and Subgroup (the scene TITLE), and
+	// the quiz binds a card's logs via GetLogs(event, scene.Title, …). So the
+	// link MUST carry the resolved event+scene titles, not the raw request field
+	// — otherwise a registered word's card is reconstructed under scene "" and
+	// GetLogs never matches, leaving the card permanently "unstudied" (its SRS
+	// state never persists). We resolve the titles from the served content, which
+	// also makes the per-user overlay key (event) agree with the history key. In
+	// YAML-only / no-DB dev we keep the original behavior (Group = notebook_file).
+	group := req.Msg.GetNotebookFile()
+	subgroup := ""
+	if h.userDefsRepo != nil {
+		group, subgroup = h.resolveSceneLocation(notebookIDRaw, req.Msg.GetNotebookFile(), sceneIndex)
+	}
+
 	note := &notebook.NoteRecord{
 		Usage: expression, Entry: expression, Meaning: meaning,
 		DefinitionsDir: defsDir, NotebookFile: req.Msg.GetNotebookFile(),
-		SceneIndex:   int(req.Msg.GetSceneIndex()),
+		SceneIndex:   sceneIndex,
 		PartOfSpeech: req.Msg.GetPartOfSpeech(), Examples: req.Msg.GetExamples(),
-		NotebookNotes: []notebook.NotebookNote{{NotebookType: "book", NotebookID: notebookIDRaw, Group: req.Msg.GetNotebookFile()}},
+		NotebookNotes: []notebook.NotebookNote{{NotebookType: "book", NotebookID: notebookIDRaw, Group: group, Subgroup: subgroup}},
 	}
+	// Always ensure the global notes identity row (also the YAML-mode write path).
 	if err := h.noteRepository.Create(ctx, note); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create note: %w", err))
+	}
+	// DB mode: the registration is PRIVATE — store the caller's own copy keyed by
+	// note identity, meaning the shared notes row is only a word-identity anchor.
+	// The overlay row's `event` is the resolved event title so the reader/quiz
+	// overlay lands on the same scene the history binds to.
+	if h.userDefsRepo != nil {
+		if err := h.userDefsRepo.Upsert(ctx, userID, notebookIDRaw, note.ID,
+			group, sceneIndex,
+			meaning, req.Msg.GetPartOfSpeech(), req.Msg.GetExamples()); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save user definition: %w", err))
+		}
 	}
 	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }
 
-// DeleteDefinition removes a definition via the repository.
+// resolveSceneLocation reads the served content for notebookID and returns the
+// event TITLE and scene TITLE for the scene identified by notebookFile (matched
+// by file path first, then by event title) and sceneIndex. These are the exact
+// keys the learning-history reconstruction (notebook_notes Group/Subgroup) and
+// the quiz's GetLogs bind on, so a registered word's card retains its SRS state.
+// Best-effort: on any resolution miss it falls back to (notebookFile, "") so a
+// registration still succeeds (it just won't bind history until re-resolved).
+func (h *NotebookHandler) resolveSceneLocation(notebookID, notebookFile string, sceneIndex int) (eventTitle, sceneTitle string) {
+	eventTitle, sceneTitle = notebookFile, ""
+	reader, err := h.newReader()
+	if err != nil {
+		return
+	}
+	notebooks, paths, err := reader.ReadStoryNotebooksWithPaths(notebookID)
+	if err != nil {
+		return
+	}
+	for i, nb := range notebooks {
+		path := ""
+		if i < len(paths) {
+			path = paths[i]
+		}
+		if notebookFile == path || notebookFile == nb.Event {
+			eventTitle = nb.Event
+			if sceneIndex >= 0 && sceneIndex < len(nb.Scenes) {
+				sceneTitle = nb.Scenes[sceneIndex].Title
+			}
+			return
+		}
+	}
+	return
+}
+
+// DeleteDefinition removes ONLY the caller's own registration (scoped by
+// user_id) in DB mode; in YAML-only / no-DB dev it falls back to the YAML note
+// repository. The shared global notes row and other users' copies are untouched.
 func (h *NotebookHandler) DeleteDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.DeleteDefinitionRequest],
@@ -1246,6 +1388,12 @@ func (h *NotebookHandler) DeleteDefinition(
 	userID, _ := auth.UserIDFromContext(ctx)
 	if err := h.ensureNotebookVisible(ctx, userID, req.Msg.GetNotebookId()); err != nil {
 		return nil, err
+	}
+	if h.userDefsRepo != nil {
+		if err := h.userDefsRepo.DeleteForUserByExpression(ctx, userID, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete user definition: %w", err))
+		}
+		return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil
 	}
 	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err))

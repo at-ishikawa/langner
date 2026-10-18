@@ -63,6 +63,12 @@ const (
 	// NotebookServiceDeleteNotebookProcedure is the fully-qualified name of the NotebookService's
 	// DeleteNotebook RPC.
 	NotebookServiceDeleteNotebookProcedure = "/api.v1.NotebookService/DeleteNotebook"
+	// NotebookServiceSearchBooksProcedure is the fully-qualified name of the NotebookService's
+	// SearchBooks RPC.
+	NotebookServiceSearchBooksProcedure = "/api.v1.NotebookService/SearchBooks"
+	// NotebookServiceImportBookProcedure is the fully-qualified name of the NotebookService's
+	// ImportBook RPC.
+	NotebookServiceImportBookProcedure = "/api.v1.NotebookService/ImportBook"
 )
 
 // NotebookServiceClient is a client for the api.v1.NotebookService service.
@@ -82,6 +88,14 @@ type NotebookServiceClient interface {
 	PullNotebook(context.Context, *connect.Request[v1.PullNotebookRequest]) (*connect.Response[v1.PullNotebookResponse], error)
 	ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error)
 	DeleteNotebook(context.Context, *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error)
+	// Project Gutenberg books. SearchBooks queries the public catalog
+	// (keyless Gutendex) by free text. ImportBook downloads + parses a book and
+	// stores it ONCE as a shared, public, owner-less notebook under a
+	// deterministic id `gutenberg-<source_id>`; a re-import by anyone is an
+	// idempotent no-op. Every user can then read/quiz it; highlights stay
+	// private per user.
+	SearchBooks(context.Context, *connect.Request[v1.SearchBooksRequest]) (*connect.Response[v1.SearchBooksResponse], error)
+	ImportBook(context.Context, *connect.Request[v1.ImportBookRequest]) (*connect.Response[v1.ImportBookResponse], error)
 }
 
 // NewNotebookServiceClient constructs a client for the api.v1.NotebookService service. By default,
@@ -155,6 +169,18 @@ func NewNotebookServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(notebookServiceMethods.ByName("DeleteNotebook")),
 			connect.WithClientOptions(opts...),
 		),
+		searchBooks: connect.NewClient[v1.SearchBooksRequest, v1.SearchBooksResponse](
+			httpClient,
+			baseURL+NotebookServiceSearchBooksProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("SearchBooks")),
+			connect.WithClientOptions(opts...),
+		),
+		importBook: connect.NewClient[v1.ImportBookRequest, v1.ImportBookResponse](
+			httpClient,
+			baseURL+NotebookServiceImportBookProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("ImportBook")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -170,6 +196,8 @@ type notebookServiceClient struct {
 	pullNotebook         *connect.Client[v1.PullNotebookRequest, v1.PullNotebookResponse]
 	listMyNotebooks      *connect.Client[v1.ListMyNotebooksRequest, v1.ListMyNotebooksResponse]
 	deleteNotebook       *connect.Client[v1.DeleteNotebookRequest, v1.DeleteNotebookResponse]
+	searchBooks          *connect.Client[v1.SearchBooksRequest, v1.SearchBooksResponse]
+	importBook           *connect.Client[v1.ImportBookRequest, v1.ImportBookResponse]
 }
 
 // GetNotebookDetail calls api.v1.NotebookService.GetNotebookDetail.
@@ -222,6 +250,16 @@ func (c *notebookServiceClient) DeleteNotebook(ctx context.Context, req *connect
 	return c.deleteNotebook.CallUnary(ctx, req)
 }
 
+// SearchBooks calls api.v1.NotebookService.SearchBooks.
+func (c *notebookServiceClient) SearchBooks(ctx context.Context, req *connect.Request[v1.SearchBooksRequest]) (*connect.Response[v1.SearchBooksResponse], error) {
+	return c.searchBooks.CallUnary(ctx, req)
+}
+
+// ImportBook calls api.v1.NotebookService.ImportBook.
+func (c *notebookServiceClient) ImportBook(ctx context.Context, req *connect.Request[v1.ImportBookRequest]) (*connect.Response[v1.ImportBookResponse], error) {
+	return c.importBook.CallUnary(ctx, req)
+}
+
 // NotebookServiceHandler is an implementation of the api.v1.NotebookService service.
 type NotebookServiceHandler interface {
 	GetNotebookDetail(context.Context, *connect.Request[v1.GetNotebookDetailRequest]) (*connect.Response[v1.GetNotebookDetailResponse], error)
@@ -239,6 +277,14 @@ type NotebookServiceHandler interface {
 	PullNotebook(context.Context, *connect.Request[v1.PullNotebookRequest]) (*connect.Response[v1.PullNotebookResponse], error)
 	ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error)
 	DeleteNotebook(context.Context, *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error)
+	// Project Gutenberg books. SearchBooks queries the public catalog
+	// (keyless Gutendex) by free text. ImportBook downloads + parses a book and
+	// stores it ONCE as a shared, public, owner-less notebook under a
+	// deterministic id `gutenberg-<source_id>`; a re-import by anyone is an
+	// idempotent no-op. Every user can then read/quiz it; highlights stay
+	// private per user.
+	SearchBooks(context.Context, *connect.Request[v1.SearchBooksRequest]) (*connect.Response[v1.SearchBooksResponse], error)
+	ImportBook(context.Context, *connect.Request[v1.ImportBookRequest]) (*connect.Response[v1.ImportBookResponse], error)
 }
 
 // NewNotebookServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -308,6 +354,18 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 		connect.WithSchema(notebookServiceMethods.ByName("DeleteNotebook")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notebookServiceSearchBooksHandler := connect.NewUnaryHandler(
+		NotebookServiceSearchBooksProcedure,
+		svc.SearchBooks,
+		connect.WithSchema(notebookServiceMethods.ByName("SearchBooks")),
+		connect.WithHandlerOptions(opts...),
+	)
+	notebookServiceImportBookHandler := connect.NewUnaryHandler(
+		NotebookServiceImportBookProcedure,
+		svc.ImportBook,
+		connect.WithSchema(notebookServiceMethods.ByName("ImportBook")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.NotebookService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NotebookServiceGetNotebookDetailProcedure:
@@ -330,6 +388,10 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 			notebookServiceListMyNotebooksHandler.ServeHTTP(w, r)
 		case NotebookServiceDeleteNotebookProcedure:
 			notebookServiceDeleteNotebookHandler.ServeHTTP(w, r)
+		case NotebookServiceSearchBooksProcedure:
+			notebookServiceSearchBooksHandler.ServeHTTP(w, r)
+		case NotebookServiceImportBookProcedure:
+			notebookServiceImportBookHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -377,4 +439,12 @@ func (UnimplementedNotebookServiceHandler) ListMyNotebooks(context.Context, *con
 
 func (UnimplementedNotebookServiceHandler) DeleteNotebook(context.Context, *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.DeleteNotebook is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) SearchBooks(context.Context, *connect.Request[v1.SearchBooksRequest]) (*connect.Response[v1.SearchBooksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.SearchBooks is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) ImportBook(context.Context, *connect.Request[v1.ImportBookRequest]) (*connect.Response[v1.ImportBookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.ImportBook is not implemented"))
 }

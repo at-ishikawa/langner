@@ -216,6 +216,7 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	// Dirs() is fingerprint-cached, so one call shared across readers is cheap.
 	var dbFileRepo *notebook.NotebookFileRepository
 	var dbContentSource *notebook.DBContentSource
+	var userDefsRepo *notebook.UserDefinitionsRepository
 	contentDirs := notebook.ContentDirs{
 		Stories:     cfg.Notebooks.StoriesDirectories,
 		Flashcards:  cfg.Notebooks.FlashcardsDirectories,
@@ -228,6 +229,7 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	if db != nil {
 		dbFileRepo = notebook.NewNotebookFileRepository(db)
 		dbContentSource = notebook.NewDBContentSource(dbFileRepo)
+		userDefsRepo = notebook.NewUserDefinitionsRepository(db)
 		if dirs, derr := dbContentSource.Dirs(context.Background()); derr != nil {
 			slog.Warn("DB content dirs unavailable; readers fall back to filesystem dirs", "error", derr)
 		} else {
@@ -285,6 +287,8 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	// above — one content path across analytics / quiz / ensure, no filesystem.
 	if dbContentSource != nil {
 		svc.SetContentSource(dbContentSource)
+		// Per-user highlight overlay on the quiz card loaders (DB mode only).
+		svc.SetUserDefinitionsRepo(userDefsRepo)
 
 		if ensureReader, rerr := notebook.NewReader(
 			contentDirs.Stories,
@@ -326,6 +330,10 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	// reusing the content source already installed on the quiz service above.
 	if db != nil {
 		notebookHandler.SetPushDeps(db, dbFileRepo, dbContentSource)
+		// Per-user registrations + Gutenberg import (DB mode). A nil HTTP client
+		// makes gutenberg use a default client with a timeout; real outbound HTTP
+		// runs only in preview/prod.
+		notebookHandler.SetBookDeps(userDefsRepo, nil)
 	}
 
 	handler := server.NewQuizHandler(svc)

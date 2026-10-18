@@ -72,6 +72,12 @@ type Service struct {
 	// catalog. It materializes stored blobs and the SAME parsers read them, so
 	// user notebooks are quizzed through one code path. Nil in YAML-only mode.
 	contentSource notebook.ContentSource
+	// userDefsRepo, when set (DB mode), is the per-user private registration
+	// store. The story card/reverse-card loaders overlay the requesting user's
+	// registered highlights onto the shared book's scenes so a registered word
+	// becomes THAT user's Standard/Reverse card — privately, never leaking to
+	// other readers of a shared book. Nil in YAML-only / no-DB dev.
+	userDefsRepo *notebook.UserDefinitionsRepository
 }
 
 // NoteEnsurer additively creates any notes a notebook's YAML declares but the
@@ -151,6 +157,36 @@ func (s *Service) SetNotebookACL(aclRepo notebook.NotebookVisibility) {
 // filesystem catalog.
 func (s *Service) SetContentSource(cs notebook.ContentSource) {
 	s.contentSource = cs
+}
+
+// SetUserDefinitionsRepo installs the per-user private registration store so
+// the card loaders overlay a user's registered highlights onto shared books.
+// Called from bootstrap once the database is connected; nil (YAML-only / no-DB
+// dev) means no overlay (registrations surface only through content defs).
+func (s *Service) SetUserDefinitionsRepo(repo *notebook.UserDefinitionsRepository) {
+	s.userDefsRepo = repo
+}
+
+// readStoryNotebooksOverlaid reads a story/book's notebooks and merges the
+// requesting user's PRIVATE registered highlights onto them (additive), so the
+// quiz builds that user's cards from both content-declared and registered
+// words. No-op overlay when the per-user store isn't configured or the user
+// isn't signed in. This is the quiz side of the notes→content bridge (the
+// reader side lives in server.NotebookHandler).
+func (s *Service) readStoryNotebooksOverlaid(reader *notebook.Reader, userID int64, notebookID string) ([]notebook.StoryNotebook, error) {
+	stories, paths, err := reader.ReadStoryNotebooksWithPaths(notebookID)
+	if err != nil {
+		return nil, err
+	}
+	if s.userDefsRepo == nil || userID <= 0 {
+		return stories, nil
+	}
+	rows, rerr := s.userDefsRepo.ListForUser(context.Background(), userID, notebookID)
+	if rerr != nil {
+		slog.Warn("load user definitions overlay failed (quiz)", "notebook", notebookID, "error", rerr)
+		return stories, nil
+	}
+	return notebook.ApplyUserDefinitionsOverlay(notebookID, stories, paths, rows), nil
 }
 
 // contentDirs returns the directory roots the reader walks. It is the ONE place
@@ -390,7 +426,11 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		if !visible(id) {
 			continue
 		}
-		stories, err := reader.ReadStoryNotebooks(id)
+		// Overlay the user's private registered highlights so a shared book whose
+		// ONLY words are the ones this user saved still shows up in the quiz hub
+		// with a word/review count (otherwise an imported book with no authored
+		// definitions counts as 0 words and is filtered out of the list).
+		stories, err := s.readStoryNotebooksOverlaid(reader, userID, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read story notebook %q: %w", id, err)
 		}
@@ -742,7 +782,7 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 		}
 
 		if isStory {
-			storyCards, err := s.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied, originMap, sectionFilter)
+			storyCards, err := s.loadStoryCards(reader, userID, notebookID, learningHistories, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story cards for notebook %q: %w", notebookID, err)
 			}
@@ -806,13 +846,14 @@ func deduplicateCards(cards []Card) []Card {
 
 func (s *Service) loadStoryCards(
 	reader *notebook.Reader,
+	userID int64,
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
 	originMap map[string]notebook.EtymologyOrigin,
 	sectionFilter []string,
 ) ([]Card, error) {
-	stories, err := reader.ReadStoryNotebooks(notebookID)
+	stories, err := s.readStoryNotebooksOverlaid(reader, userID, notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read story notebook %q: %w", notebookID, err)
 	}
@@ -1360,28 +1401,47 @@ func countFlashcardCards(notebooks []notebook.FlashcardNotebook) int {
 	return len(seen)
 }
 
+// maxStatementExamples caps how many prose sentences a single card pulls as
+// examples, so a chapter-sized book scene (many statements) can't flood one card.
+const maxStatementExamples = 3
+
 func buildFromConversations(scene *notebook.StoryScene, definition *notebook.Note) ([]Example, []inference.Context) {
 	var examples []Example
 	var contexts []inference.Context
+	add := func(text, speaker string) {
+		examples = append(examples, Example{Text: text, Speaker: speaker})
+		contexts = append(contexts, inference.Context{Context: text, ReferenceDefinition: definition.Meaning})
+	}
+
 	for _, conv := range scene.Conversations {
 		if conv.Quote == "" {
 			continue
 		}
-
-		quoteLower := strings.ToLower(conv.Quote)
-		if !containsExpression(quoteLower, definition.Expression, definition.Definition) {
+		if !containsExpression(strings.ToLower(conv.Quote), definition.Expression, definition.Definition) {
 			continue
 		}
+		add(notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, ""), conv.Speaker)
+	}
 
-		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
-		examples = append(examples, Example{
-			Text:    cleaned,
-			Speaker: conv.Speaker,
-		})
-		contexts = append(contexts, inference.Context{
-			Context:             cleaned,
-			ReferenceDefinition: definition.Meaning,
-		})
+	// Prose (books and statement-based stories) carries its text as statements,
+	// not dialogue, so pull the sentence(s) containing the word as the
+	// example/context too. Without this a word registered in a Gutenberg book has
+	// NO example from the book on its quiz card (and the reverse quiz has nothing
+	// to mask). Capped so a whole-chapter scene doesn't overwhelm the card.
+	statementExamples := 0
+	for _, stmt := range scene.Statements {
+		if statementExamples >= maxStatementExamples {
+			break
+		}
+		cleaned := notebook.ConvertMarkersInText(stmt, nil, notebook.ConversionStylePlain, "")
+		if strings.TrimSpace(cleaned) == "" {
+			continue
+		}
+		if !containsExpression(strings.ToLower(cleaned), definition.Expression, definition.Definition) {
+			continue
+		}
+		add(cleaned, "")
+		statementExamples++
 	}
 	return examples, contexts
 }
@@ -1571,7 +1631,7 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 		}
 
 		if isStory {
-			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext, includeUnstudied, originMap, sectionFilter)
+			reverseCards, err := s.loadStoryReverseCards(reader, userID, notebookID, learningHistories, listMissingContext, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -1662,6 +1722,7 @@ func deduplicateReverseCards(cards []ReverseCard) []ReverseCard {
 
 func (s *Service) loadStoryReverseCards(
 	reader *notebook.Reader,
+	userID int64,
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
@@ -1669,7 +1730,7 @@ func (s *Service) loadStoryReverseCards(
 	originMap map[string]notebook.EtymologyOrigin,
 	sectionFilter []string,
 ) ([]ReverseCard, error) {
-	stories, err := reader.ReadStoryNotebooks(notebookID)
+	stories, err := s.readStoryNotebooksOverlaid(reader, userID, notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read story notebook %q: %w", notebookID, err)
 	}

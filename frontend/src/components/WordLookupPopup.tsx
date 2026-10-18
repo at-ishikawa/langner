@@ -18,6 +18,7 @@ import {
 import {
   notebookClient,
   type GetNotebookDetailResponse,
+  type MeaningSuggestion,
   type NotebookWord,
   type WordDefinition,
 } from "@/lib/client";
@@ -31,6 +32,10 @@ export interface LookupState {
   storyIndex: number;
   sceneIndex: number;
   definitions: WordDefinition[];
+  // suggestions are meanings OTHER readers privately saved for this word in
+  // this book — shown as prefill the user can adopt; accepting one still stores
+  // the user's OWN copy (shared-as-suggestion, saved-privately).
+  suggestions: MeaningSuggestion[];
   source: string;
   loading: boolean;
   error: string | null;
@@ -87,6 +92,7 @@ export function useWordLookup(
         storyIndex,
         sceneIndex,
         definitions: [],
+        suggestions: [],
         source: "",
         loading: true,
         error: null,
@@ -106,6 +112,7 @@ export function useWordLookup(
             return {
               ...prev,
               definitions: res.definitions,
+              suggestions: res.suggestions,
               source: res.source,
               loading: false,
             };
@@ -161,6 +168,43 @@ export function useWordLookup(
     [lookup, data, notebookId],
   );
 
+  // handleSaveMeaning saves a plain meaning string (a shared suggestion the user
+  // adopted) as the user's OWN private registration — same registerDefinition
+  // call as saving a looked-up definition, just without pos/examples.
+  const handleSaveMeaning = useCallback(
+    (meaning: string) => {
+      if (!lookup || !data) return;
+      const story = data.stories[lookup.storyIndex];
+      if (!story) return;
+
+      setLookup((prev) => (prev ? { ...prev, saving: true } : null));
+
+      notebookClient
+        .registerDefinition({
+          notebookId,
+          notebookFile: story.event || "",
+          sceneIndex: lookup.sceneIndex,
+          expression: lookup.word,
+          meaning,
+          partOfSpeech: "",
+          examples: [],
+        })
+        .then(() => {
+          setLookup((prev) =>
+            prev ? { ...prev, saving: false, saved: true } : null,
+          );
+        })
+        .catch(() => {
+          setLookup((prev) =>
+            prev
+              ? { ...prev, saving: false, error: "Failed to save definition" }
+              : null,
+          );
+        });
+    },
+    [lookup, data, notebookId],
+  );
+
   const handleDelete = useCallback(() => {
     if (!lookup || !data) return;
     const story = data.stories[lookup.storyIndex];
@@ -197,6 +241,7 @@ export function useWordLookup(
     popupRef,
     onTextSelect: handleTextSelect,
     onSaveDefinition: handleSaveDefinition,
+    onSaveMeaning: handleSaveMeaning,
     onDelete: handleDelete,
     onClose: close,
   };
@@ -206,6 +251,7 @@ export interface WordLookupPopupProps {
   lookup: LookupState;
   popupRef: RefObject<HTMLDivElement | null>;
   onSaveDefinition: (defIndex: number) => void;
+  onSaveMeaning: (meaning: string) => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -217,6 +263,7 @@ export function WordLookupPopup({
   lookup,
   popupRef,
   onSaveDefinition,
+  onSaveMeaning,
   onDelete,
   onClose,
 }: WordLookupPopupProps) {
@@ -257,6 +304,7 @@ export function WordLookupPopup({
         <NewDefinitionView
           lookup={lookup}
           onSaveDefinition={onSaveDefinition}
+          onSaveMeaning={onSaveMeaning}
           onClose={onClose}
         />
       )}
@@ -269,7 +317,7 @@ function SavedDefinitionView({
   onSaveDefinition,
   onDelete,
   onClose,
-}: Omit<WordLookupPopupProps, "popupRef">) {
+}: Omit<WordLookupPopupProps, "popupRef" | "onSaveMeaning">) {
   const saved = lookup.savedDefinition!;
   return (
     <Box>
@@ -390,6 +438,7 @@ function SavedDefinitionView({
 function NewDefinitionView({
   lookup,
   onSaveDefinition,
+  onSaveMeaning,
   onClose,
 }: Omit<WordLookupPopupProps, "popupRef" | "onDelete">) {
   return (
@@ -450,11 +499,51 @@ function NewDefinitionView({
 
       {!lookup.loading &&
         lookup.definitions.length === 0 &&
+        lookup.suggestions.length === 0 &&
         !lookup.error && (
           <Text color="fg.muted" fontSize="sm">
             No definitions found.
           </Text>
         )}
+
+      {!lookup.loading && !lookup.saved && lookup.suggestions.length > 0 && (
+        <Box mb={3}>
+          <Text fontSize="xs" fontWeight="bold" color="fg.muted" mb={2}>
+            Saved by other readers
+          </Text>
+          <VStack align="stretch" gap={2}>
+            {lookup.suggestions.map((s, i) => (
+              <Box
+                key={i}
+                p={3}
+                borderWidth="1px"
+                borderRadius="md"
+                fontSize="sm"
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+                gap={2}
+              >
+                <Box>
+                  <Text>{s.meaning}</Text>
+                  <Text fontSize="xs" color="fg.muted">
+                    {s.savedByCount} {s.savedByCount === 1 ? "reader" : "readers"}
+                  </Text>
+                </Box>
+                <Button
+                  size="xs"
+                  colorPalette="green"
+                  flexShrink={0}
+                  onClick={() => onSaveMeaning(s.meaning)}
+                  disabled={lookup.saving}
+                >
+                  {lookup.saving ? "Saving..." : "Use"}
+                </Button>
+              </Box>
+            ))}
+          </VStack>
+        </Box>
+      )}
 
       <VStack align="stretch" gap={3}>
         {lookup.definitions.map((def, i) => (

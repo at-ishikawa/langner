@@ -97,8 +97,15 @@ export default function LearnContentPage() {
     [],
   );
 
-  const { lookup, popupRef, onTextSelect, onSaveDefinition, onDelete, onClose } =
-    useWordLookup(id, data, handleDefinitionRemoved);
+  const {
+    lookup,
+    popupRef,
+    onTextSelect,
+    onSaveDefinition,
+    onSaveMeaning,
+    onDelete,
+    onClose,
+  } = useWordLookup(id, data, handleDefinitionRemoved);
 
   if (loading) {
     return (
@@ -177,6 +184,7 @@ export default function LearnContentPage() {
           lookup={lookup}
           popupRef={popupRef}
           onSaveDefinition={onSaveDefinition}
+          onSaveMeaning={onSaveMeaning}
           onDelete={onDelete}
           onClose={onClose}
         />
