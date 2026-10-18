@@ -3,6 +3,7 @@ package server
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,8 @@ The fox ran fast. The dog was lazy and slow.
 *** END OF THE PROJECT GUTENBERG EBOOK A TINY TALE ***`
 
 func TestBuildBookBundle_DeterministicIDAndBooksFamily(t *testing.T) {
-	notebookID, files, displayName, err := buildBookBundle("42", "A Tiny Tale", "Jane Doe", gutenbergFixture)
+	importedAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	notebookID, files, displayName, err := buildBookBundle("42", "A Tiny Tale", "Jane Doe", gutenbergFixture, importedAt)
 	require.NoError(t, err)
 
 	// Deterministic shared id (not the slugged title), so a re-import dedups.
@@ -56,5 +58,19 @@ func TestBuildBookBundle_DeterministicIDAndBooksFamily(t *testing.T) {
 	for _, f := range files {
 		assert.False(t, strings.Contains(string(f.Content), "PROJECT GUTENBERG EBOOK"),
 			"boilerplate leaked into %q", f.Path)
+	}
+
+	// Chapters carry the import date so the quiz hub can order the book by
+	// import recency (a zero date would sink it to the bottom of the list).
+	for _, f := range files {
+		if f.Path == "index.yml" {
+			continue
+		}
+		var entries []ebook.NotebookEntry
+		require.NoError(t, yaml.Unmarshal(f.Content, &entries), "chapter %q must parse", f.Path)
+		require.NotEmpty(t, entries)
+		for _, e := range entries {
+			assert.True(t, e.Date.Equal(importedAt), "chapter %q entry must be stamped with the import time", f.Path)
+		}
 	}
 }
