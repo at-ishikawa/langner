@@ -2028,6 +2028,31 @@ func TestBuildFromConversations(t *testing.T) {
 			definition:   notebook.Note{Expression: "preposterous", Meaning: "absurd"},
 			wantExamples: 2,
 		},
+		{
+			// Books carry prose as statements, not dialogue — the sentence with
+			// the word must still be pulled as the example/context.
+			name: "matches prose statements (book)",
+			scene: notebook.StoryScene{
+				Statements: []string{
+					"The clerk was scrupulous about every entry.",
+					"Nothing interesting happened here.",
+				},
+			},
+			definition:   notebook.Note{Expression: "scrupulous", Meaning: "attentive to detail"},
+			wantExamples: 1,
+		},
+		{
+			// A chapter-sized scene can't flood one card: statement examples cap.
+			name: "caps statement examples",
+			scene: notebook.StoryScene{
+				Statements: []string{
+					"scrupulous one", "scrupulous two", "scrupulous three",
+					"scrupulous four", "scrupulous five",
+				},
+			},
+			definition:   notebook.Note{Expression: "scrupulous", Meaning: "attentive to detail"},
+			wantExamples: 3,
+		},
 	}
 
 	for _, tt := range tests {

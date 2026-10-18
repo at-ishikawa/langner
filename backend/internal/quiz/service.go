@@ -1401,28 +1401,47 @@ func countFlashcardCards(notebooks []notebook.FlashcardNotebook) int {
 	return len(seen)
 }
 
+// maxStatementExamples caps how many prose sentences a single card pulls as
+// examples, so a chapter-sized book scene (many statements) can't flood one card.
+const maxStatementExamples = 3
+
 func buildFromConversations(scene *notebook.StoryScene, definition *notebook.Note) ([]Example, []inference.Context) {
 	var examples []Example
 	var contexts []inference.Context
+	add := func(text, speaker string) {
+		examples = append(examples, Example{Text: text, Speaker: speaker})
+		contexts = append(contexts, inference.Context{Context: text, ReferenceDefinition: definition.Meaning})
+	}
+
 	for _, conv := range scene.Conversations {
 		if conv.Quote == "" {
 			continue
 		}
-
-		quoteLower := strings.ToLower(conv.Quote)
-		if !containsExpression(quoteLower, definition.Expression, definition.Definition) {
+		if !containsExpression(strings.ToLower(conv.Quote), definition.Expression, definition.Definition) {
 			continue
 		}
+		add(notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, ""), conv.Speaker)
+	}
 
-		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
-		examples = append(examples, Example{
-			Text:    cleaned,
-			Speaker: conv.Speaker,
-		})
-		contexts = append(contexts, inference.Context{
-			Context:             cleaned,
-			ReferenceDefinition: definition.Meaning,
-		})
+	// Prose (books and statement-based stories) carries its text as statements,
+	// not dialogue, so pull the sentence(s) containing the word as the
+	// example/context too. Without this a word registered in a Gutenberg book has
+	// NO example from the book on its quiz card (and the reverse quiz has nothing
+	// to mask). Capped so a whole-chapter scene doesn't overwhelm the card.
+	statementExamples := 0
+	for _, stmt := range scene.Statements {
+		if statementExamples >= maxStatementExamples {
+			break
+		}
+		cleaned := notebook.ConvertMarkersInText(stmt, nil, notebook.ConversionStylePlain, "")
+		if strings.TrimSpace(cleaned) == "" {
+			continue
+		}
+		if !containsExpression(strings.ToLower(cleaned), definition.Expression, definition.Definition) {
+			continue
+		}
+		add(cleaned, "")
+		statementExamples++
 	}
 	return examples, contexts
 }
