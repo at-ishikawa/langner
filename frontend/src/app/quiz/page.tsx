@@ -360,10 +360,10 @@ export default function QuizHubPage() {
   return (
     <Box maxW="xl" mx="auto">
       {/* Header */}
-      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
+      <Box bg="bg" borderBottomWidth="1px" borderColor="border">
         <Box px={4} pt={2}>
           <Link href="/">
-            <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">&lt; Home</Text>
+            <Text color="brand.fg" fontSize="xs">&lt; Home</Text>
           </Link>
         </Box>
         <Box px={4} pb={3} textAlign="center">
@@ -399,7 +399,7 @@ export default function QuizHubPage() {
 
       {/* Tabs — Vocabulary switches mode cards in place; Relearn and Grammar are
           cross-quiz-type flows whose tabs navigate to their own start screens. */}
-      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200" display="flex">
+      <Box bg="bg" borderBottomWidth="1px" borderColor="border" display="flex">
         {(["vocabulary", "relearn", "grammar"] as Tab[]).map((t) => (
           <Box
             key={t}
@@ -413,8 +413,7 @@ export default function QuizHubPage() {
             <Text
               fontSize="sm"
               fontWeight={tab === t ? "semibold" : "normal"}
-              color={tab === t ? "blue.600" : "gray.500"}
-              _dark={{ color: tab === t ? "blue.300" : "gray.400" }}
+              color={tab === t ? "brand.fg" : "fg.muted"}
             >
               {t === "vocabulary" ? "Vocabulary" : t === "relearn" ? "Relearn" : "Grammar"}
             </Text>
@@ -427,8 +426,7 @@ export default function QuizHubPage() {
                 w="60%"
                 h="3px"
                 borderRadius="full"
-                bg="blue.600"
-                _dark={{ bg: "blue.300" }}
+                bg="brand.solid"
               />
             )}
           </Box>
@@ -449,10 +447,9 @@ export default function QuizHubPage() {
             <Box
               key={mode.key}
               p={4}
-              bg="white"
+              bg="panel"
               borderWidth={isSelected ? "2px" : "1px"}
-              borderColor={isSelected ? "blue.600" : "gray.200"}
-              _dark={{ bg: "gray.800", borderColor: isSelected ? "blue.400" : "gray.600" }}
+              borderColor={isSelected ? "brand.solid" : "border"}
               borderRadius="lg"
               cursor="pointer"
               onClick={() => handleModeSelect(mode.key)}
@@ -460,10 +457,10 @@ export default function QuizHubPage() {
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Text fontWeight="semibold" fontSize="md">{mode.title}</Text>
-                  <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>{mode.description}</Text>
+                  <Text fontSize="xs" color="fg.muted">{mode.description}</Text>
                 </Box>
                 {!isSelected && (
-                  <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} flexShrink={0}>&rsaquo;</Text>
+                  <Text fontSize="sm" color="fg.muted" flexShrink={0}>&rsaquo;</Text>
                 )}
               </Box>
             </Box>
@@ -507,7 +504,7 @@ export default function QuizHubPage() {
                   onChange={(e) => setFeedbackIntervalText(e.target.value)}
                   placeholder="10"
                 />
-                <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+                <Text fontSize="xs" color="fg.muted" mt={1}>
                   See feedback for multiple answers at once. Default: 10.
                 </Text>
               </Box>
@@ -523,7 +520,7 @@ export default function QuizHubPage() {
             </Text>
 
             {displayedNotebooks.length === 0 ? (
-              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={2}>
+              <Text fontSize="sm" color="fg.muted" mt={2}>
                 {isFreeformMode ? (
                   "No notebooks available for this mode."
                 ) : (
@@ -563,12 +560,12 @@ export default function QuizHubPage() {
                               <Text>
                                 {notebook.name}
                                 {partial && (
-                                  <Text as="span" color="gray.500" fontSize="xs" ml={1}>
+                                  <Text as="span" color="fg.muted" fontSize="xs" ml={1}>
                                     ({sel!.size}/{sections.length})
                                   </Text>
                                 )}
                               </Text>
-                              <Text color="gray.500" fontSize="sm">
+                              <Text color="fg.muted" fontSize="sm">
                                 {pickModeCount(notebook)}
                               </Text>
                             </Box>
@@ -579,8 +576,7 @@ export default function QuizHubPage() {
                             as="button"
                             onClick={() => toggleExpanded(notebook.notebookId)}
                             fontSize="xs"
-                            color="blue.600"
-                            _dark={{ color: "blue.300" }}
+                            color="brand.fg"
                             cursor="pointer"
                             px={2}
                             aria-label={expanded ? "Hide sections" : "Show sections"}
@@ -600,10 +596,10 @@ export default function QuizHubPage() {
                             >
                               <Checkbox.HiddenInput />
                               <Checkbox.Control />
-                              <Checkbox.Label fontSize="sm" color="gray.700" _dark={{ color: "gray.300" }} flex="1">
+                              <Checkbox.Label fontSize="sm" color="fg" flex="1">
                                 <Box display="flex" justifyContent="space-between" w="full">
                                   <Text as="span" truncate>{section.title}</Text>
-                                  <Text as="span" color="gray.500" fontSize="xs" ml={2}>
+                                  <Text as="span" color="fg.muted" fontSize="xs" ml={2}>
                                     {pickModeCount(section)}
                                   </Text>
                                 </Box>
@@ -628,7 +624,7 @@ export default function QuizHubPage() {
 
         {/* Freeform vocab -- no notebook selection needed */}
         {tab === "vocabulary" && selectedVocabMode === "freeform" && (
-          <Text color="gray.600" _dark={{ color: "gray.400" }} textAlign="center">
+          <Text color="fg.muted" textAlign="center">
             {notebooks.reduce((sum, n) => sum + n.reviewCount, 0)} words
             available across all notebooks
           </Text>
@@ -650,7 +646,7 @@ export default function QuizHubPage() {
         )}
 
         {error && (
-          <Text color="red.500" mt={2}>{error}</Text>
+          <Text color="red.fg" mt={2}>{error}</Text>
         )}
       </Box>
       )}

@@ -245,7 +245,7 @@ export default function GrammarQuizPage() {
     <Box maxW="xl" mx="auto" p={4} pb={selected ? 80 : 4}>
       <Box mb={2}>
         <Link href="/quiz?tab=grammar">
-          <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
+          <Text color="brand.fg" fontSize="xs">
             &lt; Quiz
           </Text>
         </Link>
@@ -281,10 +281,9 @@ export default function GrammarQuizPage() {
       {/* The full post, mistakes fixed in place. */}
       <Box
         p={4}
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.700" }}
+        bg="panel"
         borderWidth="1px"
-        borderColor="gray.200"
+        borderColor="border"
         borderRadius="lg"
         mb={4}
         fontSize="sm"
@@ -351,8 +350,7 @@ export default function GrammarQuizPage() {
                   <Text
                     as="span"
                     fontWeight="bold"
-                    color="blue.600"
-                    _dark={{ color: "blue.300" }}
+                    color="brand.fg"
                     textDecoration="line-through"
                   >
                     {seg.blank.incorrect}
@@ -368,8 +366,7 @@ export default function GrammarQuizPage() {
                 <Text
                   as="span"
                   fontWeight="bold"
-                  color="blue.600"
-                  _dark={{ color: "blue.300" }}
+                  color="brand.fg"
                   textDecoration="line-through"
                 >
                   {seg.blank.incorrect}
@@ -437,13 +434,13 @@ export default function GrammarQuizPage() {
       </VStack>
       <Box mt={1} textAlign="center" minH="1.25rem">
         {remainingCount === 0 && unreviewedWrong > 0 && (
-          <Text fontSize="xs" color="orange.600" _dark={{ color: "orange.300" }}>
+          <Text fontSize="xs" color="orange.fg">
             {unreviewedWrong} wrong {unreviewedWrong === 1 ? "correction" : "corrections"} not reviewed yet.
           </Text>
         )}
       </Box>
       {error && (
-        <Text fontSize="xs" color="red.500" mt={1} textAlign="center" aria-live="assertive">
+        <Text fontSize="xs" color="red.fg" mt={1} textAlign="center" aria-live="assertive">
           {error}
         </Text>
       )}
@@ -459,10 +456,9 @@ export default function GrammarQuizPage() {
           mx="auto"
           maxH="60vh"
           overflowY="auto"
-          bg="white"
-          _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+          bg="bg"
           borderTopWidth="1px"
-          borderTopColor="gray.200"
+          borderTopColor="border"
           borderTopRadius="xl"
           p={3}
           boxShadow="0 -4px 12px rgba(0,0,0,0.08)"

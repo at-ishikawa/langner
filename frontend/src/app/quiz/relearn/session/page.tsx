@@ -80,7 +80,7 @@ export default function RelearnSessionPage() {
   if (front.kind === "post") {
     return (
       <Box maxW="xl" mx="auto" p={4}>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
+        <Text fontSize="xs" color="fg.muted" mb={3} aria-live="polite">
           {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
         </Text>
         <RelearnGrammarPost
@@ -102,7 +102,7 @@ export default function RelearnSessionPage() {
   if (front.kind === "origin") {
     return (
       <Box maxW="xl" mx="auto" p={4}>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
+        <Text fontSize="xs" color="fg.muted" mb={3} aria-live="polite">
           {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
         </Text>
         <RelearnOriginPost
@@ -163,13 +163,13 @@ export default function RelearnSessionPage() {
 
   return (
     <Box maxW="xl" mx="auto" p={4}>
-      <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
+      <Text fontSize="xs" color="fg.muted" mb={3} aria-live="polite">
         {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
       </Text>
 
       {/* Prompt card — mirrors the source quiz's format. */}
-      <Box bg="white" _dark={{ bg: "gray.800" }} borderRadius="lg" borderWidth="1px" borderColor="gray.200" p={5} mb={4}>
-        <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium" mb={2}>
+      <Box bg="panel" borderRadius="lg" borderWidth="1px" borderColor="border" p={5} mb={4}>
+        <Text fontSize="xs" color="purple.fg" fontWeight="medium" mb={2}>
           {sourceLabel(current.sourceQuizType)}
         </Text>
 
@@ -187,7 +187,7 @@ export default function RelearnSessionPage() {
         {!isReverse && current.examples.length > 0 && (
           <Box mt={3} display="flex" flexDirection="column" gap={1}>
             {current.examples.map((ex, i) => (
-              <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
+              <Text key={i} fontSize="sm" color="fg.muted">
                 {ex.speaker ? `${ex.speaker}: ` : ""}
                 {ex.text}
               </Text>
@@ -197,7 +197,7 @@ export default function RelearnSessionPage() {
         {isReverse && current.contexts.length > 0 && (
           <Box mt={3} display="flex" flexDirection="column" gap={1}>
             {current.contexts.map((c, i) => (
-              <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
+              <Text key={i} fontSize="sm" color="fg.muted">
                 {c.maskedContext || c.context}
               </Text>
             ))}
@@ -219,7 +219,7 @@ export default function RelearnSessionPage() {
             placeholder={answerPlaceholder}
           />
           {error && (
-            <Text color="red.500" fontSize="sm" role="alert">
+            <Text color="red.fg" fontSize="sm" role="alert">
               {error}
             </Text>
           )}
@@ -259,7 +259,7 @@ export default function RelearnSessionPage() {
                   )}
                   <PronounceButton text={current.entry} />
                 </Box>
-                <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>
+                <Text fontSize="sm" color="fg">
                   <Text as="span" fontWeight="semibold">Meaning: </Text>
                   <Text as="span" data-testid={isReverse ? undefined : "relearn-answer"}>
                     {feedback.meaning || current.meaning}
@@ -268,8 +268,7 @@ export default function RelearnSessionPage() {
                 {answer.trim() && (
                   <Text
                     fontSize="sm"
-                    color={(override ?? feedback.correct) ? "gray.500" : "red.600"}
-                    _dark={{ color: (override ?? feedback.correct) ? "gray.400" : "red.300" }}
+                    color={(override ?? feedback.correct) ? "fg.muted" : "red.fg"}
                   >
                     <Text as="span" fontWeight="semibold">Your answer: </Text>
                     {answer}
@@ -277,7 +276,7 @@ export default function RelearnSessionPage() {
                 )}
               </Box>
               {feedback.reason && (
-                <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+                <Text fontSize="sm" fontStyle="italic" color="fg.muted">
                   {feedback.reason}
                 </Text>
               )}
