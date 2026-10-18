@@ -432,6 +432,8 @@ func (s *Service) GradeGrammarBlank(ctx context.Context, userID int64, content s
 	if result, ok := deterministicGrammarGrade(answer, blank.Correct, blank.Incorrect); ok {
 		return result, nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, interactiveGradeTimeout)
+	defer cancel()
 	client, err := s.clientResolver.ResolveClient(ctx, userID)
 	if err != nil {
 		return GradeResult{}, err

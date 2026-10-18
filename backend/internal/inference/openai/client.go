@@ -19,6 +19,14 @@ import (
 // "<baseURL>/chat/completions".
 const DefaultBaseURL = "https://api.openai.com/v1"
 
+// requestTimeout caps a SINGLE HTTP attempt (connect + send + read) so a
+// provider that hangs without erroring can never block a request indefinitely —
+// previously the resty client had no timeout, so a stuck grade call stalled the
+// quiz card forever. It is a generous backstop (a single chat completion is
+// seconds); the interactive grade path layers a tighter OVERALL deadline on top
+// via its own context, which bounds the total time across retries.
+const requestTimeout = 60 * time.Second
+
 type Client struct {
 	httpClient       *resty.Client
 	model            string
@@ -30,6 +38,7 @@ type Option func(*options)
 
 type options struct {
 	baseURL string
+	timeout time.Duration
 }
 
 // WithBaseURL overrides the Chat Completions base URL. This lets the same
@@ -44,14 +53,25 @@ func WithBaseURL(baseURL string) Option {
 	}
 }
 
+// WithTimeout overrides the per-attempt HTTP timeout (default requestTimeout).
+// Mainly for tests that need a short deadline to exercise the hang guard.
+func WithTimeout(d time.Duration) Option {
+	return func(o *options) {
+		if d > 0 {
+			o.timeout = d
+		}
+	}
+}
+
 func NewClient(apiKey, model string, retryAttempts uint, opts ...Option) *Client {
-	cfg := options{baseURL: DefaultBaseURL}
+	cfg := options{baseURL: DefaultBaseURL, timeout: requestTimeout}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
 	client := resty.New()
 	client.SetBaseURL(cfg.baseURL)
+	client.SetTimeout(cfg.timeout)
 	client.SetHeader("Authorization", "Bearer "+apiKey)
 	client.SetHeader("Content-Type", "application/json")
 
