@@ -79,7 +79,7 @@ export default function RelearnSessionPage() {
   // fresh even when its wrong blanks are the same set (mirrors the origin card).
   if (front.kind === "post") {
     return (
-      <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
+      <Box maxW="xl" mx="auto" p={4}>
         <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
           {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
         </Text>
@@ -101,7 +101,7 @@ export default function RelearnSessionPage() {
   // family remounts fresh even when its wrong words are the same set.
   if (front.kind === "origin") {
     return (
-      <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
+      <Box maxW="xl" mx="auto" p={4}>
         <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
           {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
         </Text>
@@ -162,7 +162,7 @@ export default function RelearnSessionPage() {
   };
 
   return (
-    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
+    <Box maxW="xl" mx="auto" p={4}>
       <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
         {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
       </Text>

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
+import { PageShell } from "@/components/PageShell";
 import { useRelearnStore } from "@/store/relearnStore";
 
 export default function RelearnCompletePage() {
@@ -20,18 +21,18 @@ export default function RelearnCompletePage() {
   };
 
   return (
-    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
+    <PageShell maxW="md">
       <Box textAlign="center" py={8}>
         <Text fontSize="3xl">✅</Text>
         <Heading size="md" mt={2}>Relearn complete</Heading>
         <Text fontSize="sm" mt={2}>
           You cleared {clearedCount} {clearedCount === 1 ? "word" : "words"}.
         </Text>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+        <Text fontSize="xs" color="fg.muted" mt={1}>
           Total answers: {totalAnswers}
           {totalAnswers > clearedCount ? " (some came around more than once)" : ""}
         </Text>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mt={3}>
+        <Text fontSize="xs" color="fg.muted" mt={3}>
           Nothing was saved to your history or schedule.
         </Text>
       </Box>
@@ -44,6 +45,6 @@ export default function RelearnCompletePage() {
           Quiz Hub
         </Button>
       </VStack>
-    </Box>
+    </PageShell>
   );
 }

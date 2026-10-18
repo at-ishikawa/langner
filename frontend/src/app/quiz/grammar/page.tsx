@@ -117,7 +117,7 @@ export default function GrammarQuizPage() {
 
   if (posts.length === 0 || !post) {
     return (
-      <Box maxW="sm" mx="auto" p={4} textAlign="center">
+      <Box maxW="xl" mx="auto" p={4} textAlign="center">
         <Spinner size="lg" />
       </Box>
     );
@@ -242,7 +242,7 @@ export default function GrammarQuizPage() {
   };
 
   return (
-    <Box maxW="sm" mx="auto" p={4} pb={selected ? 80 : 4} minH="100vh">
+    <Box maxW="xl" mx="auto" p={4} pb={selected ? 80 : 4}>
       <Box mb={2}>
         <Link href="/quiz?tab=grammar">
           <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
@@ -410,11 +410,11 @@ export default function GrammarQuizPage() {
         {remainingCount > 0 ? (
           // Blanks are still unanswered — reveal their answers before moving on,
           // rather than silently skipping them.
-          <Button colorPalette="blue" w="full" size="lg" onClick={revealAnswers}>
+          <Button colorPalette="brand" w="full" size="lg" onClick={revealAnswers}>
             See answers ({remainingCount} left)
           </Button>
         ) : (
-          <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
+          <Button colorPalette="brand" w="full" size="lg" onClick={handleNextPost}>
             {isLastPost ? "See results" : "Next post"}
           </Button>
         )}

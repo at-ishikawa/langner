@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   Box,
   Button,
-  Heading,
   Input,
   Spinner,
   Text,
@@ -14,6 +13,7 @@ import {
 } from "@chakra-ui/react";
 import { quizClient, messageForRpcError } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
+import { PageShell } from "@/components/PageShell";
 import { BatchFeedback } from "@/components/BatchFeedback";
 import { freeformResultToItem } from "@/lib/quizResultItems";
 import { useQuizResultActions } from "@/lib/useQuizResultActions";
@@ -132,12 +132,8 @@ export default function FreeformQuizPage() {
   };
 
   return (
-    <Box p={4} maxW="md" mx="auto" minH="100dvh">
-      <Heading size="lg" mb={4}>
-        Freeform Quiz
-      </Heading>
-
-      <Text mb={4} color="gray.600" _dark={{ color: "gray.400" }}>
+    <PageShell title="Freeform Quiz" maxW="xl">
+      <Text mb={4} color="fg.muted">
         Type any word you&apos;re learning and its meaning
       </Text>
 
@@ -151,7 +147,7 @@ export default function FreeformQuizPage() {
           <Text color="red.500">{error}</Text>
           <Button
             w="full"
-            colorPalette="blue"
+            colorPalette="brand"
             variant="outline"
             onClick={() => {
               setError(null);
@@ -199,17 +195,17 @@ export default function FreeformQuizPage() {
               size="lg"
             />
             {wordStatus === true && (
-              <Text fontSize="sm" color="green.500" mt={1}>
+              <Text fontSize="sm" color="green.fg" mt={1}>
                 Found in notebooks
               </Text>
             )}
             {wordStatus === false && (
-              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+              <Text fontSize="sm" color="fg.muted" mt={1}>
                 Word not found in notebooks
               </Text>
             )}
             {typeof wordStatus === "string" && (
-              <Text fontSize="sm" color="orange.500" _dark={{ color: "orange.300" }} mt={1}>
+              <Text fontSize="sm" color="orange.fg" mt={1}>
                 Not due until {wordStatus}
               </Text>
             )}
@@ -232,7 +228,7 @@ export default function FreeformQuizPage() {
           {error && <Text color="red.500">{error}</Text>}
 
           <Button
-            colorPalette="blue"
+            colorPalette="brand"
             onClick={handleSubmit}
             disabled={!word.trim() || !meaning.trim() || wordStatus === false || typeof wordStatus === "string"}
             size="lg"
@@ -250,11 +246,11 @@ export default function FreeformQuizPage() {
             </Button>
           )}
 
-          <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center">
+          <Text fontSize="sm" color="fg.muted" textAlign="center">
             {wordCount} words available in your notebooks
           </Text>
         </VStack>
       )}
-    </Box>
+    </PageShell>
   );
 }

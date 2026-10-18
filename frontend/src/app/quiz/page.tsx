@@ -351,14 +351,14 @@ export default function QuizHubPage() {
 
   if (loading) {
     return (
-      <Box maxW="sm" mx="auto" p={4} textAlign="center">
+      <Box maxW="xl" mx="auto" p={4} textAlign="center">
         <Spinner size="lg" />
       </Box>
     );
   }
 
   return (
-    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh">
+    <Box maxW="xl" mx="auto">
       {/* Header */}
       <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
         <Box px={4} pt={2}>
@@ -639,7 +639,7 @@ export default function QuizHubPage() {
           <Button
             mt={2}
             w="full"
-            colorPalette="blue"
+            colorPalette="brand"
             disabled={
               (showNotebookSelection && selectedIds.size === 0) || starting
             }
