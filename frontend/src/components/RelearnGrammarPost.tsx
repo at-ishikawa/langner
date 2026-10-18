@@ -173,10 +173,10 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
   return (
     <Box pb={selected ? 80 : 0} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
-        <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium">
+        <Text fontSize="xs" color="purple.fg" fontWeight="medium">
           Grammar — fix the mistakes
         </Text>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} aria-live="polite">
+        <Text fontSize="xs" color="fg.muted" aria-live="polite">
           {correctCount} / {orderedKeys.length} correct
           {grading.length > 0 ? " · grading…" : ""}
         </Text>
@@ -187,10 +187,9 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           the viewport, so the post never scrolls horizontally. */}
       <Box
         p={4}
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.700" }}
+        bg="panel"
         borderWidth="1px"
-        borderColor="gray.200"
+        borderColor="border"
         borderRadius="lg"
         mb={4}
         fontSize="sm"
@@ -240,7 +239,6 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
                 overflowWrap="anywhere"
                 bg={c.bg}
                 color={c.color}
-                _dark={{ bg: c.darkBg, color: c.darkColor }}
                 boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
               >
                 <Text as="span" aria-hidden="true">
@@ -258,8 +256,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
                 <Text
                   as="span"
                   fontWeight="bold"
-                  color="blue.600"
-                  _dark={{ color: "blue.300" }}
+                  color="brand.fg"
                   textDecoration="line-through"
                   overflowWrap="anywhere"
                 >
@@ -288,8 +285,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
               <Text
                 as="span"
                 fontWeight="bold"
-                color="blue.600"
-                _dark={{ color: "blue.300" }}
+                color="brand.fg"
                 textDecoration="line-through"
                 overflowWrap="anywhere"
               >
@@ -326,7 +322,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
 
       {remainingCount > 0 ? (
         <Button
-          colorPalette="blue"
+          colorPalette="brand"
           w="full"
           size="lg"
           // Disable while any blank is grading so a blank committed just before
@@ -361,14 +357,14 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
         </Button>
       )}
       {error && (
-        <Text fontSize="xs" color="red.500" mt={1} textAlign="center" role="alert">
+        <Text fontSize="xs" color="red.fg" mt={1} textAlign="center" role="alert">
           {error}
         </Text>
       )}
 
       <Box mt={2} minH="1rem" textAlign="center">
         {remainingCount === 0 && gradedCount > 0 && (
-          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
+          <Text fontSize="xs" color="fg.muted">
             Tap any correction above to review it.
           </Text>
         )}
@@ -391,10 +387,9 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           maxH="60vh"
           overflowY="auto"
           overflowX="hidden"
-          bg="white"
-          _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+          bg="bg"
           borderTopWidth="1px"
-          borderTopColor="gray.200"
+          borderTopColor="border"
           borderTopRadius="xl"
           p={3}
           boxShadow="0 -4px 12px rgba(0,0,0,0.08)"
@@ -404,8 +399,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
             <Text
               fontSize="xs"
               fontWeight="bold"
-              color={selected.res.correct ? "green.600" : "red.600"}
-              _dark={{ color: selected.res.correct ? "green.300" : "red.300" }}
+              color={selected.res.correct ? "green.fg" : "red.fg"}
             >
               {selected.res.correct ? "✓ Correct" : "✗ Incorrect"}
               {selected.res.category ? ` · ${selected.res.category}` : ""}

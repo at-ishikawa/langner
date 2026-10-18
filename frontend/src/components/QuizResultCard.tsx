@@ -45,36 +45,14 @@ interface StatusChipProps {
 
 function StatusChip({ kind }: StatusChipProps) {
   const styles = {
-    correct: {
-      bg: "green.100",
-      darkBg: "green.900",
-      color: "green.700",
-      darkColor: "green.200",
-      glyph: "✓",
-      label: "Correct",
-    },
-    incorrect: {
-      bg: "red.100",
-      darkBg: "red.900",
-      color: "red.700",
-      darkColor: "red.200",
-      glyph: "✗",
-      label: "Incorrect",
-    },
-    skipped: {
-      bg: "gray.100",
-      darkBg: "gray.700",
-      color: "gray.600",
-      darkColor: "gray.300",
-      glyph: "—",
-      label: "Excluded",
-    },
+    correct: { bg: "green.subtle", color: "green.fg", glyph: "✓", label: "Correct" },
+    incorrect: { bg: "red.subtle", color: "red.fg", glyph: "✗", label: "Incorrect" },
+    skipped: { bg: "gray.subtle", color: "gray.fg", glyph: "—", label: "Excluded" },
   }[kind];
 
   return (
     <Box
       bg={styles.bg}
-      _dark={{ bg: styles.darkBg }}
       color={styles.color}
       px={2}
       py={0.5}
@@ -84,10 +62,10 @@ function StatusChip({ kind }: StatusChipProps) {
       gap={1}
       flexShrink={0}
     >
-      <Text as="span" fontSize="xs" fontWeight="bold" _dark={{ color: styles.darkColor }}>
+      <Text as="span" fontSize="xs" fontWeight="bold">
         {styles.glyph}
       </Text>
-      <Text as="span" fontSize="xs" fontWeight="medium" _dark={{ color: styles.darkColor }}>
+      <Text as="span" fontSize="xs" fontWeight="medium">
         {styles.label}
       </Text>
     </Box>
@@ -116,19 +94,16 @@ export function QuizResultCard({
       : "incorrect";
 
   const borderColor = item.isSkipped
-    ? "gray.200"
+    ? "border"
     : item.correct
-      ? "green.200"
-      : "red.200";
+      ? "green.emphasized"
+      : "red.emphasized";
 
   // "Your answer" chip styling
-  const answerChipBg = item.correct ? "green.50" : "red.50";
-  const answerChipDarkBg = item.correct ? "green.950" : "red.950";
-  const answerChipBorder = item.correct ? "green.300" : "red.300";
-  const answerChipDarkBorder = item.correct ? "green.700" : "red.700";
+  const answerChipBg = item.correct ? "green.subtle" : "red.subtle";
+  const answerChipBorder = item.correct ? "green.emphasized" : "red.emphasized";
   const answerIcon = item.correct ? "✓" : "✗";
-  const answerIconColor = item.correct ? "green.600" : "red.600";
-  const answerIconDarkColor = item.correct ? "green.300" : "red.300";
+  const answerIconColor = item.correct ? "green.fg" : "red.fg";
 
   return (
     <Box
@@ -137,7 +112,6 @@ export function QuizResultCard({
       borderRadius="md"
       p={3}
       opacity={item.isSkipped ? 0.7 : 1}
-      _dark={{ borderColor }}
     >
       {/* Header: status chip (left), entry, pron/POS (right) */}
       <Box display="flex" alignItems="center" gap={2} mb={2}>
@@ -188,10 +162,9 @@ export function QuizResultCard({
           borderColor={answerChipBorder}
           borderRadius="md"
           bg={answerChipBg}
-          _dark={{ bg: answerChipDarkBg, borderColor: answerChipDarkBorder }}
           maxW="full"
         >
-          <Text as="span" fontSize="xs" fontWeight="bold" color={answerIconColor} _dark={{ color: answerIconDarkColor }}>
+          <Text as="span" fontSize="xs" fontWeight="bold" color={answerIconColor}>
             {answerIcon}
           </Text>
           <Text fontSize="sm" color="fg.muted">
@@ -205,8 +178,7 @@ export function QuizResultCard({
       {item.contexts && item.contexts.length > 0 && (
         <Box
           borderLeftWidth="3px"
-          borderLeftColor="gray.300"
-          _dark={{ borderLeftColor: "gray.600" }}
+          borderLeftColor="border"
           pl={2}
           mb={2}
         >
@@ -262,7 +234,7 @@ export function QuizResultCard({
           <Button
             size="sm"
             variant="ghost"
-            colorPalette="blue"
+            colorPalette="brand"
             onClick={() => onUndo(item)}
           >
             Undo override
@@ -274,7 +246,7 @@ export function QuizResultCard({
               <Button
                 size="sm"
                 variant="outline"
-                colorPalette="blue"
+                colorPalette="brand"
                 onClick={() => onResume(item)}
               >
                 Resume

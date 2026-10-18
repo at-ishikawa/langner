@@ -52,7 +52,7 @@ export function segmentPost<T extends { incorrect: string }>(
 // used by the live grammar quiz's post view and the Relearn Quiz's grammar
 // card so a graded mistake reads identically in both places.
 export const PILL_STYLES = {
-  correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓", label: "correct" },
-  incorrect: { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗", label: "incorrect" },
-  skipped: { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300", glyph: "–", label: "excluded" },
+  correct: { bg: "green.subtle", color: "green.fg", glyph: "✓", label: "correct" },
+  incorrect: { bg: "red.subtle", color: "red.fg", glyph: "✗", label: "incorrect" },
+  skipped: { bg: "gray.subtle", color: "gray.fg", glyph: "–", label: "excluded" },
 } as const;

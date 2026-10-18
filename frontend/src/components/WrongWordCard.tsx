@@ -135,8 +135,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
       borderRadius="lg"
       p={4}
       mb={3}
-      bg="white"
-      _dark={{ bg: "gray.800" }}
+      bg="panel"
       data-testid={`wrong-word-${word.expression}-${word.quizType}`}
     >
       <Box as="button" onClick={toggle} width="100%" textAlign="left" aria-expanded={expanded}>
@@ -146,7 +145,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
           </Text>
         )}
         <HStack mb={1}>
-          <Text fontSize="lg" color="red.500" aria-hidden="true">
+          <Text fontSize="lg" color="red.fg" aria-hidden="true">
             ✗
           </Text>
           <Text fontWeight="bold" fontSize="lg">
@@ -230,7 +229,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
           )}
           {loading && <Spinner size="sm" data-testid="word-history-loading" />}
           {error && (
-            <Text color="red.500" fontSize="sm">
+            <Text color="red.fg" fontSize="sm">
               Failed to load history: {error}
             </Text>
           )}
@@ -240,7 +239,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
                 <HStack key={i} fontSize="sm" justifyContent="space-between" data-testid="attempt-row">
                   <Text>{formatAttemptDate(a.date)}</Text>
                   <QuizTypeChip quizType={a.quizType} />
-                  <Text color={a.result === "wrong" ? "red.500" : "green.600"}>
+                  <Text color={a.result === "wrong" ? "red.fg" : "green.fg"}>
                     {a.result === "wrong" ? "✗ wrong" : "✓ correct"}
                   </Text>
                   <Text>Q{a.quality}</Text>

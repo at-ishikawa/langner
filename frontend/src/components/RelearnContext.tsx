@@ -25,7 +25,7 @@ export function highlightEntry(text: string, entry: string): ReactNode[] {
   const parts = text.split(new RegExp(`(${escaped})`, "ig"));
   return parts.map((part, i) =>
     part.toLowerCase() === trimmed.toLowerCase() ? (
-      <Text as="span" key={i} fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
+      <Text as="span" key={i} fontWeight="bold" color="brand.fg">
         {part}
       </Text>
     ) : (
@@ -51,14 +51,14 @@ export default function RelearnContext({ entry, scenes, exampleWords, graphConte
     <Box mt={4} display="flex" flexDirection="column" gap={4}>
       {hasScenes && (
         <Box>
-          <Text fontSize="xs" fontWeight="semibold" color="gray.500" _dark={{ color: "gray.400" }} mb={1}>
+          <Text fontSize="xs" fontWeight="semibold" color="fg.muted" mb={1}>
             Where it appears
           </Text>
           <Box display="flex" flexDirection="column" gap={2}>
             {scenes.map((scene, si) => (
-              <Box key={si} bg="gray.50" _dark={{ bg: "gray.800" }} borderRadius="md" p={3}>
+              <Box key={si} bg="bg.subtle" borderRadius="md" p={3}>
                 {scene.sceneTitle && (
-                  <Text fontSize="xs" color="gray.400" mb={1}>
+                  <Text fontSize="xs" color="fg.muted" mb={1}>
                     {scene.sceneTitle}
                   </Text>
                 )}
@@ -85,7 +85,7 @@ export default function RelearnContext({ entry, scenes, exampleWords, graphConte
 
       {hasExamples && (
         <Box>
-          <Text fontSize="xs" fontWeight="semibold" color="gray.500" _dark={{ color: "gray.400" }} mb={1}>
+          <Text fontSize="xs" fontWeight="semibold" color="fg.muted" mb={1}>
             Related words
           </Text>
           <Wrap>
@@ -94,9 +94,8 @@ export default function RelearnContext({ entry, scenes, exampleWords, graphConte
                 <Box
                   px={2}
                   py={0.5}
-                  bg="purple.50"
-                  color="purple.700"
-                  _dark={{ bg: "purple.900", color: "purple.200" }}
+                  bg="purple.subtle"
+                  color="purple.fg"
                   borderRadius="full"
                   fontSize="sm"
                 >
@@ -110,7 +109,7 @@ export default function RelearnContext({ entry, scenes, exampleWords, graphConte
 
       {graphContext && (
         <Box>
-          <Text fontSize="xs" fontWeight="semibold" color="gray.500" _dark={{ color: "gray.400" }} mb={1}>
+          <Text fontSize="xs" fontWeight="semibold" color="fg.muted" mb={1}>
             Origin
           </Text>
           <RelationGraph prompt={graphContext} value="" onValueChange={() => {}} disabled compact />

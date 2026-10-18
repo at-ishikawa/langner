@@ -197,10 +197,10 @@ export function RelearnOriginPost({
   return (
     <Box pb={selected ? 80 : 0} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
-        <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium">
+        <Text fontSize="xs" color="purple.fg" fontWeight="medium">
           Etymology — recall each word
         </Text>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} aria-live="polite">
+        <Text fontSize="xs" color="fg.muted" aria-live="polite">
           {correctCount} / {orderedKeys.length} correct
           {grading.length > 0 ? " · grading…" : ""}
         </Text>
@@ -209,10 +209,9 @@ export function RelearnOriginPost({
       {/* Origin header — the shared root, its meaning, and the family below it. */}
       <Box
         p={4}
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.700" }}
+        bg="panel"
         borderWidth="1px"
-        borderColor="gray.200"
+        borderColor="border"
         borderRadius="lg"
         mb={4}
         maxW="100%"
@@ -231,8 +230,8 @@ export function RelearnOriginPost({
               // Reflect the learner's in-session override on the chip too.
               const chipCorrect = effectiveCorrect(key) === true;
               const c = chipCorrect
-                ? { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓" }
-                : { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗" };
+                ? { bg: "green.subtle", color: "green.fg", glyph: "✓" }
+                : { bg: "red.subtle", color: "red.fg", glyph: "✗" };
               return (
                 <Box
                   key={key}
@@ -260,7 +259,6 @@ export function RelearnOriginPost({
                   borderRadius="md"
                   bg={c.bg}
                   color={c.color}
-                  _dark={{ bg: c.darkBg, color: c.darkColor }}
                   boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
                   maxW="100%"
                   overflowWrap="anywhere"
@@ -274,7 +272,7 @@ export function RelearnOriginPost({
             if (isGrading) {
               return (
                 <Box key={key} display="inline-flex" alignItems="baseline" gap={2}>
-                  <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
+                  <Text as="span" fontWeight="bold" color="brand.fg">
                     {word.entry}
                   </Text>
                   <Spinner size="xs" />
@@ -314,11 +312,11 @@ export function RelearnOriginPost({
             if (reverse) {
               return (
                 <Box key={key} display="flex" flexDirection="column" gap={1} maxW="100%">
-                  <Text fontWeight="semibold" color="gray.700" _dark={{ color: "gray.200" }} overflowWrap="anywhere">
+                  <Text fontWeight="semibold" color="fg" overflowWrap="anywhere">
                     {word.meaning}
                   </Text>
                   {word.contexts.map((c, i) => (
-                    <Text key={i} fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} overflowWrap="anywhere">
+                    <Text key={i} fontSize="sm" color="fg.muted" overflowWrap="anywhere">
                       {c.maskedContext || c.context}
                     </Text>
                   ))}
@@ -330,7 +328,7 @@ export function RelearnOriginPost({
             return (
               <Box key={key} display="flex" flexDirection="column" gap={1} maxW="100%">
                 <Box display="inline-flex" flexWrap="wrap" alignItems="center" gap={2} maxW="100%">
-                  <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }} overflowWrap="anywhere">
+                  <Text as="span" fontWeight="bold" color="brand.fg" overflowWrap="anywhere">
                     {word.entry}
                   </Text>
                   {/* Recognition shows the word as the prompt, so hearing it is
@@ -343,7 +341,7 @@ export function RelearnOriginPost({
                     word instead (the contexts branch above); recognition shows it
                     in full because the WORD, not the answer, is on screen. */}
                 {word.examples.map((ex, i) => (
-                  <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }} overflowWrap="anywhere">
+                  <Text key={i} fontSize="sm" color="fg.muted" overflowWrap="anywhere">
                     {ex.speaker ? `${ex.speaker}: ` : ""}
                     {ex.text}
                   </Text>
@@ -364,15 +362,14 @@ export function RelearnOriginPost({
         <Box
           mb={3}
           p={3}
-          bg="gray.50"
-          _dark={{ bg: "gray.800", borderColor: "gray.700" }}
+          bg="bg.subtle"
           borderWidth="1px"
-          borderColor="gray.200"
+          borderColor="border"
           borderRadius="lg"
           maxW="100%"
           data-testid="relearn-origin-related"
         >
-          <Text fontSize="xs" fontWeight="medium" color="gray.500" _dark={{ color: "gray.400" }} mb={2}>
+          <Text fontSize="xs" fontWeight="medium" color="fg.muted" mb={2}>
             Related words from this origin
           </Text>
           <Box display="flex" flexDirection="column" gap={1}>
@@ -381,7 +378,7 @@ export function RelearnOriginPost({
                 <Text fontSize="sm" overflowWrap="anywhere">
                   <Text as="span" fontWeight="semibold">{m.word}</Text>
                   {m.meaning ? (
-                    <Text as="span" color="gray.600" _dark={{ color: "gray.300" }}> — {m.meaning}</Text>
+                    <Text as="span" color="fg.muted"> — {m.meaning}</Text>
                   ) : null}
                 </Text>
                 {/* Reference words are revealed (shown only after the card is
@@ -395,7 +392,7 @@ export function RelearnOriginPost({
 
       {remainingCount > 0 ? (
         <Button
-          colorPalette="blue"
+          colorPalette="brand"
           w="full"
           size="lg"
           // Both action buttons must be unclickable while any word is grading: a
@@ -432,14 +429,14 @@ export function RelearnOriginPost({
         </Button>
       )}
       {error && (
-        <Text fontSize="xs" color="red.500" mt={1} textAlign="center" role="alert">
+        <Text fontSize="xs" color="red.fg" mt={1} textAlign="center" role="alert">
           {error}
         </Text>
       )}
 
       <Box mt={2} minH="1rem" textAlign="center">
         {remainingCount === 0 && gradedCount > 0 && (
-          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
+          <Text fontSize="xs" color="fg.muted">
             Tap any word above to review it.
           </Text>
         )}
@@ -460,10 +457,9 @@ export function RelearnOriginPost({
           maxH="60vh"
           overflowY="auto"
           overflowX="hidden"
-          bg="white"
-          _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+          bg="bg"
           borderTopWidth="1px"
-          borderTopColor="gray.200"
+          borderTopColor="border"
           borderTopRadius="xl"
           p={3}
           boxShadow="0 -4px 12px rgba(0,0,0,0.08)"
@@ -473,8 +469,7 @@ export function RelearnOriginPost({
             <Text
               fontSize="xs"
               fontWeight="bold"
-              color={selectedCorrect ? "green.600" : "red.600"}
-              _dark={{ color: selectedCorrect ? "green.300" : "red.300" }}
+              color={selectedCorrect ? "green.fg" : "red.fg"}
             >
               {selectedCorrect ? "✓ Correct" : "✗ Incorrect"}
               {selectedOverridden && (
@@ -532,13 +527,13 @@ export function RelearnOriginPost({
             </Text>
           </Text>
           {selected.answer.trim() && (
-            <Text fontSize="sm" color={selectedCorrect ? "gray.500" : "red.600"} _dark={{ color: selectedCorrect ? "gray.400" : "red.300" }}>
+            <Text fontSize="sm" color={selectedCorrect ? "fg.muted" : "red.fg"}>
               <Text as="span" fontWeight="semibold">Your answer: </Text>
               {selected.answer}
             </Text>
           )}
           {selected.res.reason && (
-            <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+            <Text fontSize="sm" fontStyle="italic" color="fg.muted" mt={1}>
               {selected.res.reason}
             </Text>
           )}
@@ -556,7 +551,7 @@ export function RelearnOriginPost({
             </Box>
           )}
           {selected.res.literal && (
-            <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic" mt={1}>
+            <Text fontSize="xs" color="fg.muted" fontStyle="italic" mt={1}>
               {selected.res.literal}
             </Text>
           )}
@@ -593,10 +588,10 @@ function OriginHeader({
     <Box>
       <Text fontSize="lg" fontWeight="bold" overflowWrap="anywhere">{originText}</Text>
       {originBadge && (
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>{originBadge}</Text>
+        <Text fontSize="xs" color="fg.muted">{originBadge}</Text>
       )}
       {originMeaning && (
-        <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>{originMeaning}</Text>
+        <Text fontSize="sm" color="fg">{originMeaning}</Text>
       )}
       {englishForms.length > 0 && (
         <Box display="flex" flexWrap="wrap" gap={1} mt={2} data-testid="relearn-origin-english-forms">
@@ -609,9 +604,8 @@ function OriginHeader({
               px={2}
               py={0.5}
               borderRadius="md"
-              bg="purple.100"
-              color="purple.700"
-              _dark={{ bg: "purple.900", color: "purple.200" }}
+              bg="purple.subtle"
+              color="purple.fg"
               overflowWrap="anywhere"
             >
               {form}

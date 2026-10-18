@@ -336,7 +336,6 @@ export default function GrammarQuizPage() {
                   fontWeight="bold"
                   bg={c.bg}
                   color={c.color}
-                  _dark={{ bg: c.darkBg, color: c.darkColor }}
                   boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
                 >
                   <Text as="span" aria-hidden="true">{c.glyph} </Text>

@@ -35,10 +35,10 @@ export function BatchFeedback({
       </Heading>
       <Box mb={4}>
         <Text fontWeight="bold">Batch: {items.length} words</Text>
-        <Text color="green.600" _dark={{ color: "green.300" }} fontWeight="bold">
+        <Text color="green.fg" fontWeight="bold">
           Correct: {correctCount}
         </Text>
-        <Text color="red.600" _dark={{ color: "red.300" }} fontWeight="bold">
+        <Text color="red.fg" fontWeight="bold">
           Incorrect: {incorrectCount}
         </Text>
       </Box>
@@ -56,17 +56,16 @@ export function BatchFeedback({
       <Box
         position="sticky"
         bottom={0}
-        bg="white"
-        _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+        bg="bg"
         borderTopWidth="1px"
-        borderTopColor="gray.200"
+        borderTopColor="border"
         mx={-4}
         px={4}
         py={3}
         display="flex"
         gap={2}
       >
-        <Button flex="1" colorPalette="blue" onClick={isFinal ? onSeeResults : onContinue}>
+        <Button flex="1" colorPalette="brand" onClick={isFinal ? onSeeResults : onContinue}>
           {isFinal ? "See Results" : "Continue"}
         </Button>
         {!isFinal && (

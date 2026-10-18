@@ -102,13 +102,13 @@ export default function GrammarStart() {
 
   return (
     <Box p={4}>
-      <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }} mb={4}>
+      <Text fontSize="sm" color="fg.muted" mb={4}>
         Fix the grammar mistakes from your journal. Pick whole journals or just
         the entries you want to drill.
       </Text>
 
       {notebooks.length === 0 ? (
-        <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+        <Text fontSize="sm" color="fg.muted">
           No journal entries are due for review right now.
         </Text>
       ) : (
@@ -128,7 +128,7 @@ export default function GrammarStart() {
                   <Checkbox.Label flex="1">
                     <Box display="flex" justifyContent="space-between" w="full">
                       <Text fontWeight="semibold">{n.name}</Text>
-                      <Text color="gray.500" fontSize="sm">{n.grammarReviewCount}</Text>
+                      <Text color="fg.muted" fontSize="sm">{n.grammarReviewCount}</Text>
                     </Box>
                   </Checkbox.Label>
                 </Checkbox.Root>
@@ -146,7 +146,7 @@ export default function GrammarStart() {
                       <Checkbox.Label flex="1">
                         <Box display="flex" justifyContent="space-between" w="full">
                           <Text fontSize="sm">{sec.title}</Text>
-                          <Text color="gray.500" fontSize="sm">{sec.grammarReviewCount}</Text>
+                          <Text color="fg.muted" fontSize="sm">{sec.grammarReviewCount}</Text>
                         </Box>
                       </Checkbox.Label>
                     </Checkbox.Root>
@@ -160,13 +160,13 @@ export default function GrammarStart() {
             {totalDue} mistakes due for review
           </Text>
 
-          <Button colorPalette="blue" w="full" disabled={!anySelected || starting} onClick={handleStart}>
+          <Button colorPalette="brand" w="full" disabled={!anySelected || starting} onClick={handleStart}>
             {starting ? <Spinner size="sm" /> : "Start"}
           </Button>
         </VStack>
       )}
 
-      {error && <Text color="red.500" mt={2}>{error}</Text>}
+      {error && <Text color="red.fg" mt={2}>{error}</Text>}
     </Box>
   );
 }

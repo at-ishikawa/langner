@@ -22,10 +22,8 @@ function DiffLine({
   tone: "user" | "correct";
   testId?: string;
 }) {
-  const changedBg = tone === "user" ? "red.100" : "green.100";
-  const changedDarkBg = tone === "user" ? "red.900" : "green.900";
-  const changedColor = tone === "user" ? "red.700" : "green.700";
-  const changedDarkColor = tone === "user" ? "red.200" : "green.200";
+  const changedBg = tone === "user" ? "red.subtle" : "green.subtle";
+  const changedColor = tone === "user" ? "red.fg" : "green.fg";
   return (
     <Text fontSize="sm" wordBreak="break-word" data-testid={testId}>
       {tokens.map((t, i) => (
@@ -39,7 +37,6 @@ function DiffLine({
               fontWeight="bold"
               bg={changedBg}
               color={changedColor}
-              _dark={{ bg: changedDarkBg, color: changedDarkColor }}
             >
               {t.text}
             </Text>
@@ -121,7 +118,7 @@ export function GrammarCorrectionBody({
       {/* Why you missed it — the grader's critique of THIS answer (wrong only). */}
       {!correct && assessment && (
         <Box mb={grammarNote ? 1 : 3}>
-          <Text fontSize="xs" color="red.600" _dark={{ color: "red.300" }} fontWeight="medium">
+          <Text fontSize="xs" color="red.fg" fontWeight="medium">
             Why you missed it
           </Text>
           <Text fontSize="sm">{assessment}</Text>

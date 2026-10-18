@@ -26,7 +26,7 @@ export function QuizResultsGroupedList({
     <>
       {incorrectResults.length > 0 && (
         <Box mb={6}>
-          <Heading size="md" color="red.600" _dark={{ color: "red.300" }} mb={2}>
+          <Heading size="md" color="red.fg" mb={2}>
             Incorrect
           </Heading>
           <VStack align="stretch" gap={2}>
@@ -46,7 +46,7 @@ export function QuizResultsGroupedList({
 
       {correctResults.length > 0 && (
         <Box mb={6}>
-          <Heading size="md" color="green.600" _dark={{ color: "green.300" }} mb={2}>
+          <Heading size="md" color="green.fg" mb={2}>
             Correct
           </Heading>
           <VStack align="stretch" gap={2}>
@@ -66,7 +66,7 @@ export function QuizResultsGroupedList({
 
       {skippedResults.length > 0 && (
         <Box mb={6}>
-          <Text fontWeight="bold" mb={2} color="gray.500">
+          <Text fontWeight="bold" mb={2} color="fg.muted">
             Excluded from Quizzes ({skippedResults.length})
           </Text>
           <VStack align="stretch" gap={2}>

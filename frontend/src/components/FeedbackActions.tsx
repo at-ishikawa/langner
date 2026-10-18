@@ -56,12 +56,8 @@ export function FeedbackActions({
       <Box
         p={3}
         borderRadius="md"
-        bg={isCorrect ? "green.100" : "red.100"}
-        color={isCorrect ? "green.800" : "red.800"}
-        _dark={{
-          bg: isCorrect ? "green.900" : "red.900",
-          color: isCorrect ? "green.200" : "red.200",
-        }}
+        bg={isCorrect ? "green.subtle" : "red.subtle"}
+        color={isCorrect ? "green.fg" : "red.fg"}
         display="flex"
         justifyContent="space-between"
         alignItems="center"
@@ -89,7 +85,7 @@ export function FeedbackActions({
       {children}
 
       {/* Primary navigation button */}
-      <Button w="full" colorPalette="blue" onClick={onNext}>
+      <Button w="full" colorPalette="brand" onClick={onNext}>
         {nextLabel}
       </Button>
 
