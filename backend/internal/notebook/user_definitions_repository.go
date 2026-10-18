@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -24,6 +25,10 @@ type UserDefinition struct {
 	Meaning      string
 	PartOfSpeech string
 	Examples     []string
+	// CreatedAt is when THIS user registered the word — the per-user recency
+	// signal the quiz-hub list uses to order a shared book (a shared book has no
+	// per-user date of its own, so it would otherwise have none).
+	CreatedAt time.Time
 }
 
 // MeaningSuggestion is a DISTINCT meaning other users privately saved for the
@@ -98,21 +103,22 @@ func (r *UserDefinitionsRepository) DeleteForUserByExpression(ctx context.Contex
 // sense id. Ordered for deterministic overlay output.
 func (r *UserDefinitionsRepository) ListForUser(ctx context.Context, userID int64, notebookID string) ([]UserDefinition, error) {
 	type row struct {
-		NoteID       int64  `db:"note_id"`
-		Event        string `db:"event"`
-		SceneIndex   int    `db:"scene_index"`
-		Usage        string `db:"usage"`
-		Entry        string `db:"entry"`
-		SenseID      string `db:"sense_id"`
-		Meaning      string `db:"meaning"`
-		PartOfSpeech string `db:"part_of_speech"`
-		Examples     string `db:"examples"`
+		NoteID       int64     `db:"note_id"`
+		Event        string    `db:"event"`
+		SceneIndex   int       `db:"scene_index"`
+		Usage        string    `db:"usage"`
+		Entry        string    `db:"entry"`
+		SenseID      string    `db:"sense_id"`
+		Meaning      string    `db:"meaning"`
+		PartOfSpeech string    `db:"part_of_speech"`
+		Examples     string    `db:"examples"`
+		CreatedAt    time.Time `db:"created_at"`
 	}
 	var rows []row
 	if err := r.db.SelectContext(ctx, &rows,
 		`SELECT d.note_id, d.event, d.scene_index,
 		        n."usage" AS "usage", n.entry AS entry, COALESCE(n.sense_id, '') AS sense_id,
-		        d.meaning, d.part_of_speech, d.examples
+		        d.meaning, d.part_of_speech, d.examples, d.created_at
 		 FROM user_notebook_definitions d
 		 JOIN notes n ON n.id = d.note_id
 		 WHERE d.user_id = $1 AND d.notebook_id = $2
@@ -143,6 +149,7 @@ func (r *UserDefinitionsRepository) ListForUser(ctx context.Context, userID int6
 			Meaning:      rr.Meaning,
 			PartOfSpeech: rr.PartOfSpeech,
 			Examples:     examples,
+			CreatedAt:    rr.CreatedAt,
 		})
 	}
 	return out, nil
@@ -225,5 +232,26 @@ func ApplyUserDefinitionsOverlay(notebookID string, notebooks []StoryNotebook, n
 	if overlay == nil {
 		return notebooks
 	}
-	return MergeDefinitionsIntoNotebooks(notebookID, notebooks, notebookPaths, overlay)
+	merged := MergeDefinitionsIntoNotebooks(notebookID, notebooks, notebookPaths, overlay)
+
+	// A shared book has no per-user date of its own, so it would sort to the
+	// bottom of the quiz-hub list (which orders by latest content date). Give
+	// such date-less notebooks THIS user's latest registration time, so a book
+	// is ordered by when the user themselves last engaged with it — a per-user
+	// signal, not a shared import timestamp. Notebooks that carry an authored
+	// date (shipped stories/journals) keep it untouched.
+	var latest time.Time
+	for _, row := range rows {
+		if row.CreatedAt.After(latest) {
+			latest = row.CreatedAt
+		}
+	}
+	if !latest.IsZero() {
+		for i := range merged {
+			if merged[i].Date.IsZero() {
+				merged[i].Date = latest
+			}
+		}
+	}
+	return merged
 }

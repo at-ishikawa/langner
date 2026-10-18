@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"connectrpc.com/connect"
 	"gopkg.in/yaml.v3"
@@ -75,10 +74,7 @@ func (h *NotebookHandler) ImportBook(
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("fetch book %s: %w", sourceID, err))
 	}
 
-	// Stamp the chapters with the import time so the book sorts by import
-	// recency in the quiz-hub list (which orders by latest content date); a
-	// freshly imported book otherwise has a zero date and sinks to the bottom.
-	notebookID, files, displayName, err := buildBookBundle(sourceID, title, author, raw, time.Now())
+	notebookID, files, displayName, err := buildBookBundle(sourceID, title, author, raw)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parse book %s: %w", sourceID, err))
 	}
@@ -100,7 +96,7 @@ func (h *NotebookHandler) ImportBook(
 // with the "books" family. Pure (no network, no DB) so the classification +
 // id-minting wiring is unit testable offline. Returns the id, the files, and
 // the display name from the parsed index.
-func buildBookBundle(sourceID, title, author, raw string, importedAt time.Time) (notebookID string, files []notebook.NotebookFile, displayName string, err error) {
+func buildBookBundle(sourceID, title, author, raw string) (notebookID string, files []notebook.NotebookFile, displayName string, err error) {
 	bundle, err := gutenberg.Parse(raw, title, author)
 	if err != nil {
 		return "", nil, "", err
@@ -117,14 +113,6 @@ func buildBookBundle(sourceID, title, author, raw string, importedAt time.Time) 
 			}
 			content = rewritten
 			displayName = name
-		} else {
-			// Chapter file: stamp the import time as the entry date so the book
-			// sorts by import recency in the quiz-hub list.
-			stamped, serr := stampBookDate(f.Content, importedAt)
-			if serr != nil {
-				return "", nil, "", fmt.Errorf("stamp date for %s: %w", f.Path, serr)
-			}
-			content = stamped
 		}
 		files = append(files, notebook.NotebookFile{
 			NotebookID: notebookID,
@@ -134,22 +122,6 @@ func buildBookBundle(sourceID, title, author, raw string, importedAt time.Time) 
 		})
 	}
 	return notebookID, files, displayName, nil
-}
-
-// stampBookDate sets the entry date on every chapter in a book file (the parser
-// emits a single-element []NotebookEntry per chapter with a zero date). The date
-// is read by the quiz-hub summary to order notebooks by recency; keeping it off
-// the pure parser means Parse stays deterministic and this import-time concern
-// lives with the importer.
-func stampBookDate(content []byte, when time.Time) ([]byte, error) {
-	var entries []ebook.NotebookEntry
-	if err := yaml.Unmarshal(content, &entries); err != nil {
-		return nil, err
-	}
-	for i := range entries {
-		entries[i].Date = when
-	}
-	return yaml.Marshal(entries)
 }
 
 // rewriteBookIndex sets the index.yml `id:` to the deterministic shared id,
