@@ -361,12 +361,7 @@ export default function QuizHubPage() {
     <Box maxW="xl" mx="auto">
       {/* Header */}
       <Box bg="bg" borderBottomWidth="1px" borderColor="border">
-        <Box px={4} pt={2}>
-          <Link href="/">
-            <Text color="brand.fg" fontSize="xs">&lt; Home</Text>
-          </Link>
-        </Box>
-        <Box px={4} pb={3} textAlign="center">
+        <Box px={4} py={3} textAlign="center">
           <Heading size="md">Quiz</Heading>
         </Box>
       </Box>

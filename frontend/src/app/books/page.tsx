@@ -105,13 +105,6 @@ export default function BooksPage() {
 
   return (
     <Box maxW="3xl" mx="auto" minH="100vh" p={{ base: 4, md: 6 }}>
-      <Box mb={2}>
-        <Link href="/">
-          <Text color="brand.fg" fontSize="xs">
-            &lt; Home
-          </Text>
-        </Link>
-      </Box>
       <Heading size="lg" mb={1}>
         Read a book
       </Heading>

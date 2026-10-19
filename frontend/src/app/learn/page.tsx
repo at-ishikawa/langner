@@ -74,14 +74,7 @@ export default function LearnHubPage() {
     <Box maxW="sm" mx="auto" bg="bg" minH="100vh">
       {/* Header */}
       <Box bg="panel" borderBottomWidth="1px" borderColor="border">
-        <Box px={4} pt={2}>
-          <Link href="/">
-            <Text color="brand.fg" fontSize="xs">
-              &lt; Home
-            </Text>
-          </Link>
-        </Box>
-        <Box px={4} pb={3} textAlign="center">
+        <Box px={4} py={3} textAlign="center">
           <Heading size="md">Learn</Heading>
         </Box>
       </Box>

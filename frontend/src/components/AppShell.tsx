@@ -43,9 +43,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     <>
       <Box as="header" borderBottomWidth="1px" borderColor="border" bg="bg" position="sticky" top={0} zIndex={20}>
         <Flex maxW="6xl" mx="auto" px={4} py={2} align="center" gap={3}>
-          <Button asChild variant="ghost" px={2} fontFamily="heading" fontWeight="600" fontSize="lg" colorPalette="brand">
-            <NextLink href="/">Langner</NextLink>
-          </Button>
+          {/* Brand wordmark — identity only, not a nav target (Home is the
+              Today tab). The old wordmark-as-Home link duplicated the tab bar. */}
+          <Text fontFamily="heading" fontWeight="600" fontSize="lg" color="fg" userSelect="none">
+            Langner
+          </Text>
 
           {user && (
             <HStack gap={1} ml={2} display={{ base: "none", md: "flex" }}>

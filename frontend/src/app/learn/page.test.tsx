@@ -54,9 +54,8 @@ describe("LearnHubPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Learn")).toBeInTheDocument();
     });
-
-    const backLink = screen.getByText("< Home").closest("a");
-    expect(backLink).toHaveAttribute("href", "/");
+    // Home is the Today tab in the bottom nav now — no redundant in-page back link.
+    expect(screen.queryByText("< Home")).not.toBeInTheDocument();
   });
 
   it("renders vocabulary notebooks in Vocabulary tab", async () => {

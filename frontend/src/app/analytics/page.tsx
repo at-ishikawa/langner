@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -233,9 +232,6 @@ export default function AnalyticsOverviewPage() {
 
   return (
     <Box maxW="4xl" mx="auto" p={4} pb={20}>
-      <Link href="/" aria-label="Back to home">
-        <Text fontSize="sm" color="brand.fg" mb={2}>◀ Home</Text>
-      </Link>
       <Heading size="lg" mb={3}>Analytics</Heading>
 
       {/* Controls sit directly under the title so the totals below update

@@ -46,13 +46,13 @@ describe("QuizHubPage", () => {
     document.documentElement.removeAttribute("data-theme");
   });
 
-  it("renders Quiz title and back link to Home", async () => {
+  it("renders Quiz title without a redundant in-page Home link", async () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText("Quiz")).toBeInTheDocument();
     });
-    const backLink = screen.getByText("< Home").closest("a");
-    expect(backLink).toHaveAttribute("href", "/");
+    // Home lives in the bottom tab bar (Today); the in-page back link was removed.
+    expect(screen.queryByText("< Home")).not.toBeInTheDocument();
   });
 
   it("shows Vocabulary tab with 3 quiz mode cards by default", async () => {

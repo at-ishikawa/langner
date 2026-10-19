@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Box, Button, Heading, Input, Text, VStack } from "@chakra-ui/react";
 import { Card } from "@/components/Card";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -78,13 +77,6 @@ export default function SettingsPage() {
 
   return (
     <Box p={4} maxW="2xl" mx="auto">
-      <Box mb={4}>
-        <Link href="/">
-          <Text color="brand.fg" fontSize="xs">
-            &lt; Home
-          </Text>
-        </Link>
-      </Box>
       <Heading size="lg" mb={5}>
         Settings
       </Heading>
