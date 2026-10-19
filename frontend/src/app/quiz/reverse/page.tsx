@@ -6,14 +6,13 @@ import {
   Box,
   Button,
   Heading,
-  Progress,
   Spinner,
   Text,
   VStack,
 } from "@chakra-ui/react";
 import { quizClient, messageForRpcError, type SubmitReverseAnswerResponse } from "@/lib/client";
 import { useQuizStore, type ReverseFlashcard } from "@/store/quizStore";
-import { PageShell } from "@/components/PageShell";
+import { QuizScaffold } from "@/components/QuizScaffold";
 import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
 import { reverseResultToItem } from "@/lib/quizResultItems";
@@ -307,23 +306,7 @@ export default function ReverseQuizPage() {
   const retryCard = currentRetrySlot ? bufferRef.current[currentRetrySlot.index]?.card : null;
 
   return (
-    <PageShell maxW="xl">
-      <Box mb={4}>
-        <Text
-          fontSize="sm"
-          mb={1}
-          fontFamily="mono"
-          css={{ fontVariantNumeric: "tabular-nums" }}
-        >
-          {currentIndex + 1} / {total}
-        </Text>
-        <Progress.Root value={progress} size="sm">
-          <Progress.Track>
-            <Progress.Range />
-          </Progress.Track>
-        </Progress.Root>
-      </Box>
-
+    <QuizScaffold label={`${currentIndex + 1} / ${total}`} progress={progress}>
       {phase === "batch-feedback" ? (
         <BatchFeedback
           items={batchItems}
@@ -425,6 +408,6 @@ export default function ReverseQuizPage() {
           )}
         </VStack>
       )}
-    </PageShell>
+    </QuizScaffold>
   );
 }

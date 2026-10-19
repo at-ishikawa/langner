@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Box, Heading, Spinner, Text } from "@chakra-ui/react";
 import { quizClient, QuizType, messageForRpcError, type SubmitRelearnAnswerResponse } from "@/lib/client";
 import { AnswerInput } from "@/components/AnswerInput";
+import { QuizScaffold } from "@/components/QuizScaffold";
 import { FeedbackActions } from "@/components/FeedbackActions";
 import { PronounceButton } from "@/components/PronounceButton";
 import { RelearnGrammarPost } from "@/components/RelearnGrammarPost";
@@ -54,6 +55,12 @@ export default function RelearnSessionPage() {
     return n + item.group.words.length;
   }, 0);
 
+  // Shared header values so every relearn screen (single card, grammar post,
+  // origin family) shows the identical progress chrome the other quiz modes do.
+  const relearnLabel = `${wordsLeft} ${wordsLeft === 1 ? "word" : "words"} left`;
+  const relearnProgress =
+    totalAnswers + wordsLeft > 0 ? (totalAnswers / (totalAnswers + wordsLeft)) * 100 : 0;
+
   // Leaving the queue empty ends the session. A direct visit with no answers
   // yet bounces back to the start screen instead of a hollow complete page.
   useEffect(() => {
@@ -79,17 +86,14 @@ export default function RelearnSessionPage() {
   // fresh even when its wrong blanks are the same set (mirrors the origin card).
   if (front.kind === "post") {
     return (
-      <Box maxW="xl" mx="auto" p={4}>
-        <Text fontSize="xs" color="fg.muted" mb={3} aria-live="polite">
-          {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
-        </Text>
+      <QuizScaffold label={relearnLabel} progress={relearnProgress}>
         <RelearnGrammarPost
           key={`${front.post.content} #${front.post.attempt}`}
           content={front.post.content}
           blanks={front.post.blanks}
           onComplete={(wrongBlanks, correctCount) => completeGrammarPost(wrongBlanks, correctCount)}
         />
-      </Box>
+      </QuizScaffold>
     );
   }
 
@@ -101,10 +105,7 @@ export default function RelearnSessionPage() {
   // family remounts fresh even when its wrong words are the same set.
   if (front.kind === "origin") {
     return (
-      <Box maxW="xl" mx="auto" p={4}>
-        <Text fontSize="xs" color="fg.muted" mb={3} aria-live="polite">
-          {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
-        </Text>
+      <QuizScaffold label={relearnLabel} progress={relearnProgress}>
         <RelearnOriginPost
           key={`${front.group.originText} ${front.group.originMeaning} #${front.group.attempt}`}
           originText={front.group.originText}
@@ -116,7 +117,7 @@ export default function RelearnSessionPage() {
           words={front.group.words}
           onComplete={(wrongWords, correctCount) => completeOrigin(wrongWords, correctCount)}
         />
-      </Box>
+      </QuizScaffold>
     );
   }
 
@@ -162,11 +163,7 @@ export default function RelearnSessionPage() {
   };
 
   return (
-    <Box maxW="xl" mx="auto" p={4}>
-      <Text fontSize="xs" color="fg.muted" mb={3} aria-live="polite">
-        {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
-      </Text>
-
+    <QuizScaffold label={relearnLabel} progress={relearnProgress}>
       {/* Prompt card — mirrors the source quiz's format. */}
       <Box bg="panel" borderRadius="lg" borderWidth="1px" borderColor="border" p={5} mb={4}>
         <Text fontSize="xs" color="brand.fg" fontWeight="medium" mb={2}>
@@ -289,6 +286,6 @@ export default function RelearnSessionPage() {
           )}
         </Box>
       )}
-    </Box>
+    </QuizScaffold>
   );
 }

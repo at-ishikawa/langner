@@ -2,13 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   Box,
   Button,
   Heading,
   Input,
-  Progress,
   Spinner,
   Text,
   VStack,
@@ -16,6 +14,7 @@ import {
 import { quizClient, messageForRpcError, type GrammarPostCard, type GrammarBlank } from "@/lib/client";
 import { useGrammarStore, type GrammarResultState } from "@/store/grammarStore";
 import { GrammarFeedbackCard } from "@/components/GrammarFeedbackCard";
+import { QuizProgress } from "@/components/QuizProgress";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
 import { segmentPost, PILL_STYLES, type PostSegment } from "@/lib/grammarSegments";
@@ -243,30 +242,11 @@ export default function GrammarQuizPage() {
 
   return (
     <Box maxW="xl" mx="auto" p={4} pb={selected ? 80 : 4}>
-      <Box mb={2}>
-        <Link href="/quiz?tab=grammar">
-          <Text color="brand.fg" fontSize="xs">
-            &lt; Quiz
-          </Text>
-        </Link>
-      </Box>
-
-      <Box mb={4}>
-        <Box display="flex" justifyContent="space-between" mb={1}>
-          <Text fontSize="sm">
-            Post {currentPostIndex + 1} / {posts.length}
-          </Text>
-          <Text fontSize="sm" aria-live="polite">
-            {correctCount} / {totalBlanks} correct
-            {gradingCount > 0 ? " · grading…" : ""}
-          </Text>
-        </Box>
-        <Progress.Root value={progress} size="sm">
-          <Progress.Track>
-            <Progress.Range />
-          </Progress.Track>
-        </Progress.Root>
-      </Box>
+      <QuizProgress
+        label={`Post ${currentPostIndex + 1} / ${posts.length}`}
+        secondary={`${correctCount} / ${totalBlanks} correct${gradingCount > 0 ? " · grading…" : ""}`}
+        progress={progress}
+      />
 
       {post.title && (
         <Heading size="sm" mb={3}>
