@@ -359,11 +359,10 @@ export default function QuizHubPage() {
 
   return (
     <Box maxW="xl" mx="auto">
-      {/* Header */}
-      <Box bg="bg" borderBottomWidth="1px" borderColor="border">
-        <Box px={4} py={3} textAlign="center">
-          <Heading size="md">Quiz</Heading>
-        </Box>
+      {/* Header — left-aligned editorial title, consistent with every other
+          content page (Today / Analytics / Books / History / Settings). */}
+      <Box px={4} pt={6} pb={3}>
+        <Heading size="lg">Quiz</Heading>
       </Box>
 
       {/* No API key yet: grading will fail until the user registers one, so

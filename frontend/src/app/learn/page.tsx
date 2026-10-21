@@ -72,11 +72,10 @@ export default function LearnHubPage() {
 
   return (
     <Box maxW="sm" mx="auto" bg="bg" minH="100vh">
-      {/* Header */}
-      <Box bg="panel" borderBottomWidth="1px" borderColor="border">
-        <Box px={4} py={3} textAlign="center">
-          <Heading size="md">Learn</Heading>
-        </Box>
+      {/* Header — left-aligned editorial title, consistent with every other
+          content page (Today / Analytics / Books / History / Settings). */}
+      <Box px={4} pt={6} pb={3}>
+        <Heading size="lg">Learn</Heading>
       </Box>
 
       {/* Tabs */}
