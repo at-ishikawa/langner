@@ -19,7 +19,7 @@ export default function TodayPage() {
   useEffect(() => {
     quizClient
       .getQuizOptions({ includeUnstudied: false })
-      .then((r) => setNotebooks(r.notebooks ?? []))
+      .then((r) => setNotebooks(mergeByNotebook(r.notebooks ?? [])))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -148,6 +148,41 @@ export default function TodayPage() {
       )}
     </PageShell>
   );
+}
+
+// getQuizOptions returns the SAME notebookId as more than one row on purpose —
+// a journal surfaces once as its vocabulary/Journal row and again as a separate
+// "Grammar" row so the Quiz hub can split them across tabs (it collapses them
+// with a kind filter). This dashboard doesn't split by kind: it wants one row
+// and one count per notebook, so it folds the rows together, taking the MAX of
+// each count field (never the sum — a count duplicated across rows must stay
+// itself, while a vocab row's reviewCount and a grammar row's grammarReviewCount
+// each survive). Without this, keys collide and "words due" double-counts.
+function mergeByNotebook(list: NotebookSummary[]): NotebookSummary[] {
+  const byId = new Map<string, NotebookSummary>();
+  for (const n of list) {
+    const prev = byId.get(n.notebookId);
+    if (!prev) {
+      byId.set(n.notebookId, n);
+      continue;
+    }
+    byId.set(n.notebookId, {
+      ...prev,
+      name: prev.name || n.name,
+      kind: prev.kind || n.kind,
+      hasContent: prev.hasContent || n.hasContent,
+      reviewCount: Math.max(prev.reviewCount, n.reviewCount),
+      reverseReviewCount: Math.max(prev.reverseReviewCount, n.reverseReviewCount),
+      etymologyReviewCount: Math.max(prev.etymologyReviewCount, n.etymologyReviewCount),
+      etymologyReverseReviewCount: Math.max(
+        prev.etymologyReverseReviewCount,
+        n.etymologyReverseReviewCount,
+      ),
+      grammarReviewCount: Math.max(prev.grammarReviewCount, n.grammarReviewCount),
+      vocabularyCount: Math.max(prev.vocabularyCount, n.vocabularyCount),
+    });
+  }
+  return Array.from(byId.values());
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {

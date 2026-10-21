@@ -94,6 +94,28 @@ describe("TodayPage", () => {
     expect(find).toHaveAttribute("href", "/books");
   });
 
+  it("folds duplicate notebook rows so a notebook is counted once", async () => {
+    // getQuizOptions returns the same notebookId as more than one row by design
+    // (a journal surfaces as a vocabulary row AND a separate grammar row). The
+    // Today dashboard, which doesn't split by kind, must count each notebook
+    // once — not sum the duplicated rows — and render one list entry per id.
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [
+        nb({ notebookId: "a", name: "Reading Journal", reviewCount: 7, vocabularyCount: 100 }),
+        nb({ notebookId: "a", name: "Reading Journal", grammarReviewCount: 4, kind: "Grammar" }),
+      ],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
+    renderPage();
+
+    // 7 words due, counted once (not 14 from summing the duplicate rows)…
+    expect(await screen.findByText(/Review 7 due/)).toBeInTheDocument();
+    // …and the grammar facet survives the merge (4 grammar notes).
+    expect(screen.getByText("4")).toBeInTheDocument();
+    // Exactly one "Reading Journal" row in the due-by-notebook list.
+    expect(screen.getAllByText("Reading Journal")).toHaveLength(1);
+  });
+
   it("renders in dark mode without errors", async () => {
     document.documentElement.classList.add("dark");
     document.documentElement.setAttribute("data-theme", "dark");

@@ -41,7 +41,11 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${display.variable} ${sans.variable} ${mono.variable}`}
     >
-      <body>
+      {/* suppressHydrationWarning: browser extensions (Grammarly, password
+          managers) inject attributes like data-new-gr-c-s-check-loaded onto
+          <body> before React hydrates, which otherwise logs a spurious
+          hydration-mismatch warning that isn't from our render. */}
+      <body suppressHydrationWarning>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

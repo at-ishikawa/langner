@@ -84,7 +84,7 @@ function MindmapPage() {
         <Text color="red.fg">{error ?? "No origin specified"}</Text>
         <Link href={`/notebooks/etymology/${id}`}>
           <Text color="brand.fg" mt={2}>
-            Back to etymology notebook
+            &larr; Back to etymology notebook
           </Text>
         </Link>
       </Box>
@@ -113,7 +113,7 @@ function MindmapPage() {
             color="brand.fg"
             _hover={{ textDecoration: "underline" }}
           >
-            &lt; Origin Detail
+            &larr; Origin Detail
           </Text>
         </Link>
         <Text fontSize="sm" fontWeight="semibold">
