@@ -137,7 +137,7 @@ When("I retry grading", async ({ page }) => {
 // Incorrect" right after submitting valid answers.
 When("I override the first answer", async ({ page }) => {
   await page
-    .getByRole("button", { name: /^Mark as (Correct|Incorrect)$/ })
+    .getByRole("button", { name: /^Mark as (correct|incorrect)$/ })
     .first()
     .click();
 });
