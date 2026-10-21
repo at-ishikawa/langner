@@ -104,7 +104,7 @@ export function GrammarFeedbackCard({
             colorPalette={item.correct ? "red" : "brand"}
             onClick={() => onOverride(item)}
           >
-            {item.correct ? "Mark as Incorrect" : "Mark as Correct"}
+            {item.correct ? "Mark as incorrect" : "Mark as correct"}
           </Button>
         )}
         {item.isOverridden && item.noteId && item.learnedAt && (

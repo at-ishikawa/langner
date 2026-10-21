@@ -20,7 +20,7 @@ interface FeedbackActionsProps {
   showExclude?: boolean;
   /** Label for the primary navigation button. */
   nextLabel: string;
-  /** Called when the user clicks Next / See Results. */
+  /** Called when the user clicks the primary Continue button. */
   onNext: () => void;
   /** Called when the user overrides the result. */
   onOverride?: () => void;
@@ -97,7 +97,7 @@ export function FeedbackActions({
           colorPalette={isCorrect ? "red" : "brand"}
           onClick={onOverride}
         >
-          {isCorrect ? "Mark as Incorrect" : "Mark as Correct"}
+          {isCorrect ? "Mark as incorrect" : "Mark as correct"}
         </Button>
       ) : null}
 
@@ -114,19 +114,21 @@ export function FeedbackActions({
           colorPalette="gray"
           onClick={onSkip}
         >
-          Exclude from Quizzes
+          Exclude from quizzes
         </Button>
       ) : null}
 
-      {/* Early exit to results */}
+      {/* Stop the session early — quiet secondary so it never competes with the
+          primary Continue button. */}
       {onSeeResults && (
         <Button
           w="full"
-          colorPalette="green"
-          variant="outline"
+          variant="ghost"
+          size="sm"
+          color="fg.muted"
           onClick={onSeeResults}
         >
-          See Results
+          Finish
         </Button>
       )}
     </VStack>

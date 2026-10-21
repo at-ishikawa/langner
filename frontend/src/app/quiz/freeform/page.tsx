@@ -177,7 +177,7 @@ export default function FreeformQuizPage() {
               router.push("/");
             }}
           >
-            Back to Start
+            Done
           </Button>
         </VStack>
       ) : (
@@ -233,16 +233,17 @@ export default function FreeformQuizPage() {
             disabled={!word.trim() || !meaning.trim() || wordStatus === false || typeof wordStatus === "string"}
             size="lg"
           >
-            Check Answer
+            Check answer
           </Button>
 
           {freeformResults.length > 0 && (
             <Button
-              colorPalette="green"
-              variant="outline"
+              variant="ghost"
+              size="sm"
+              color="fg.muted"
               onClick={() => router.push("/quiz/complete")}
             >
-              See Results
+              See summary
             </Button>
           )}
 

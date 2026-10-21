@@ -74,7 +74,7 @@ Feature: Standard vocabulary quiz
     And the summary shows 2 incorrect answers
 
   # On the BatchFeedback view (rendered after the final card), each result
-  # exposes a "Mark as Correct/Incorrect" toggle. Overriding the first card
+  # exposes a "Mark as correct/Incorrect" toggle. Overriding the first card
   # flips one correct answer to incorrect before reaching the summary.
   Scenario: Override the first answer on BatchFeedback flips one correct to incorrect
     Given I am on the Quiz page
@@ -99,7 +99,7 @@ Feature: Standard vocabulary quiz
     And the summary shows 1 incorrect answers
 
   # The Quiz Complete summary exposes the same override toggle plus an
-  # "Exclude" outline button, and a "Back to Start" button to begin a new
+  # "Exclude" outline button, and a "Done" button to begin a new
   # quiz. Excluded answers are dropped from both counts.
   Scenario: Override, exclude, then restart from the summary
     Given I am on the Quiz page
@@ -123,12 +123,12 @@ Feature: Standard vocabulary quiz
     And I exclude the first answer
     # Resume the excluded card so later scenarios still see it.
     And I resume the first answer
-    And I follow the "Back to Start" button
+    And I follow the "Done" button
     Then I should be on the Quiz page
 
   # Exercise every per-card action available on the BatchFeedback view:
-  # Mark as Correct, Mark as Incorrect, Undo override, and Exclude. Starts
-  # with one wrong and one correct so both "Mark as Correct" and "Mark as
+  # Mark as correct, Mark as incorrect, Undo override, and Exclude. Starts
+  # with one wrong and one correct so both "Mark as correct" and "Mark as
   # Incorrect" buttons are visible at the same time.
   Scenario: All per-card actions on the Standard BatchFeedback view
     Given I am on the Quiz page

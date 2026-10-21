@@ -353,7 +353,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           }
           data-testid="relearn-grammar-next"
         >
-          {grading.length > 0 ? "Grading…" : "Next"}
+          {grading.length > 0 ? "Grading…" : "Continue"}
         </Button>
       )}
       {error && (

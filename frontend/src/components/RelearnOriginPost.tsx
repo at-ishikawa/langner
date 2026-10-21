@@ -425,7 +425,7 @@ export function RelearnOriginPost({
           }
           data-testid="relearn-origin-next"
         >
-          {grading.length > 0 ? "Grading…" : "Next"}
+          {grading.length > 0 ? "Grading…" : "Continue"}
         </Button>
       )}
       {error && (
@@ -506,7 +506,7 @@ export function RelearnOriginPost({
                 onClick={() => toggleOverride(selectedKey)}
                 data-testid="relearn-origin-override"
               >
-                {selectedCorrect ? "Mark as Incorrect" : "Mark as Correct"}
+                {selectedCorrect ? "Mark as incorrect" : "Mark as correct"}
               </Button>
             )
           )}

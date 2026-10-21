@@ -93,11 +93,11 @@ describe("RelearnSessionPage", () => {
     expect(await screen.findByText("✗ Incorrect")).toBeInTheDocument();
 
     // Override to correct: banner flips, and Next clears the word.
-    fireEvent.click(screen.getByRole("button", { name: "Mark as Correct" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark as correct" }));
     expect(screen.getByText("✓ Correct")).toBeInTheDocument();
     expect(screen.getByText("(overridden)")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     // The override reshapes only the working queue — relearn persists nothing,
     // so no RPC is involved. alpha clears despite the wrong grade; beta is next.
     await waitFor(() =>
@@ -108,7 +108,7 @@ describe("RelearnSessionPage", () => {
 
   // Relearn persists nothing, so the single-card feedback offers no Exclude:
   // FeedbackActions is rendered with showExclude={false}, so neither the
-  // "Exclude from Quizzes" button nor an "Excluded" label appears, and skipWord
+  // "Exclude from quizzes" button nor an "Excluded" label appears, and skipWord
   // is never called.
   it("shows no Exclude control in the single-card feedback", async () => {
     useRelearnStore.getState().seedQueue([card("alpha")]);
@@ -119,7 +119,7 @@ describe("RelearnSessionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
     expect(await screen.findByText("✗ Incorrect")).toBeInTheDocument();
     // The override control stays; the exclude control does not.
-    expect(screen.getByRole("button", { name: "Mark as Correct" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark as correct" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /exclude/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/excluded from quizzes/i)).not.toBeInTheDocument();
     expect(skipWord).not.toHaveBeenCalled();
@@ -157,7 +157,7 @@ describe("RelearnSessionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
     expect(await screen.findByText("✓ Correct")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     // alpha cleared, beta now current.
     expect(entries()).toEqual(["beta"]);
@@ -178,7 +178,7 @@ describe("RelearnSessionPage", () => {
     expect(screen.getByText("the first")).toBeInTheDocument();
     expect(screen.getByText("Your answer:")).toBeInTheDocument();
     expect(screen.getByText("bad guess")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(entries()).toEqual(["beta", "alpha"]);
     expect(useRelearnStore.getState().clearedCount).toBe(0);
@@ -234,7 +234,7 @@ describe("RelearnSessionPage", () => {
     fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "the first" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
     await screen.findByText("✓ Correct");
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/quiz/relearn/complete"));
   });

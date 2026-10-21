@@ -33,9 +33,9 @@ export default function GrammarCompletePage() {
   };
 
   return (
-    <PageShell title="Grammar Session Complete" maxW="xl" stickyFooter>
+    <PageShell title="Session summary" maxW="xl" stickyFooter>
       <VStack align="stretch" gap={3} mb={6}>
-        <Text fontWeight="bold">Total: {results.length} corrections</Text>
+        <Text fontWeight="bold">Answered: {results.length} corrections</Text>
         <Text color="green.fg" fontWeight="bold">
           Correct: {correctCount}
         </Text>
@@ -64,7 +64,7 @@ export default function GrammarCompletePage() {
         mt={6}
       >
         <Button w="full" colorPalette="brand" onClick={handleBackToStart}>
-          Back to Start
+          Done
         </Button>
       </Box>
     </PageShell>

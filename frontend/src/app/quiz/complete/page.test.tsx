@@ -82,7 +82,7 @@ describe("SessionCompletePage", () => {
   it.each([
     {
       name: "displays summary counts",
-      expectedTexts: ["Total: 3 words", "Correct: 2", "Incorrect: 1"],
+      expectedTexts: ["Answered: 3 words", "Correct: 2", "Incorrect: 1"],
     },
     {
       name: "displays correct words with meanings",
@@ -100,12 +100,12 @@ describe("SessionCompletePage", () => {
     }
   });
 
-  it("resets store and navigates to /quiz on Back to Start click", () => {
+  it("resets store and navigates to /quiz on Done click", () => {
     useQuizStore.setState({ results: mockResults });
 
     renderPage();
 
-    fireEvent.click(screen.getByText("Back to Start"));
+    fireEvent.click(screen.getByText("Done"));
 
     const state = useQuizStore.getState();
     expect(state.results).toHaveLength(0);
@@ -114,15 +114,15 @@ describe("SessionCompletePage", () => {
     expect(pushMock).toHaveBeenCalledWith("/quiz");
   });
 
-  it("Back to Start goes to /quiz without bouncing to home (race regression)", () => {
+  it("Done goes to /quiz without bouncing to home (race regression)", () => {
     // reset() empties the results, which fires the "no results → go home"
-    // effect. That effect must NOT race the push to /quiz: Back to Start must
+    // effect. That effect must NOT race the push to /quiz: Done must
     // land on /quiz, never on "/".
     useQuizStore.setState({ results: mockResults });
 
     renderPage();
 
-    fireEvent.click(screen.getByText("Back to Start"));
+    fireEvent.click(screen.getByText("Done"));
 
     expect(pushMock).toHaveBeenCalledWith("/quiz");
     expect(pushMock).not.toHaveBeenCalledWith("/");
@@ -191,8 +191,8 @@ describe("SessionCompletePage", () => {
       expect(screen.getByText("Correct: 1")).toBeInTheDocument();
       expect(screen.getByText("Incorrect: 1")).toBeInTheDocument();
 
-      // Click "Mark as Correct" on incorrect card
-      fireEvent.click(screen.getByText("Mark as Correct"));
+      // Click "Mark as correct" on incorrect card
+      fireEvent.click(screen.getByText("Mark as correct"));
 
       await waitFor(() => {
         expect(client.quizClient.overrideAnswer).toHaveBeenCalledWith(
@@ -244,7 +244,7 @@ describe("SessionCompletePage", () => {
       renderPage();
 
       // Override the incorrect card first
-      fireEvent.click(screen.getByText("Mark as Correct"));
+      fireEvent.click(screen.getByText("Mark as correct"));
 
       await waitFor(() => {
         expect(screen.getByText("Undo override")).toBeInTheDocument();
@@ -303,8 +303,8 @@ describe("SessionCompletePage", () => {
   it("renders in dark mode without errors", () => {
     useQuizStore.setState({ results: mockResults });
     renderPageDark();
-    expect(screen.getByText("Session Complete")).toBeInTheDocument();
-    expect(screen.getByText("Total: 3 words")).toBeInTheDocument();
+    expect(screen.getByText("Session summary")).toBeInTheDocument();
+    expect(screen.getByText("Answered: 3 words")).toBeInTheDocument();
     expect(screen.getByText("break the ice")).toBeInTheDocument();
   });
 
@@ -332,7 +332,7 @@ describe("SessionCompletePage", () => {
       useQuizStore.setState({ freeformResults: mockFreeformResults });
       renderPage();
 
-      expect(screen.getByText("Total: 2 words")).toBeInTheDocument();
+      expect(screen.getByText("Answered: 2 words")).toBeInTheDocument();
       expect(screen.getByText("Correct: 1")).toBeInTheDocument();
       expect(screen.getByText("Incorrect: 1")).toBeInTheDocument();
     });

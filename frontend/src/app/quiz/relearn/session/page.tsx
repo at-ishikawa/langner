@@ -237,7 +237,7 @@ export default function RelearnSessionPage() {
               isOverridden={override !== null}
               isSkipped={false}
               showExclude={false}
-              nextLabel="Next"
+              nextLabel="Continue"
               onNext={() => void handleNext()}
               onOverride={() => setOverride(!feedback.correct)}
               onUndo={() => setOverride(null)}

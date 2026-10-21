@@ -71,16 +71,16 @@ describe("BatchFeedback", () => {
     expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
   });
 
-  it("shows See Results button when final (primary)", () => {
+  it("shows a single See summary button when final (primary)", () => {
     renderComponent({ isFinal: true });
-    const buttons = screen.getAllByRole("button", { name: "See Results" });
+    const buttons = screen.getAllByRole("button", { name: "See summary" });
     expect(buttons).toHaveLength(1);
   });
 
-  it("shows both Continue and See Results when not final", () => {
+  it("shows Continue plus a quiet Finish when not final", () => {
     renderComponent({ isFinal: false });
     expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "See Results" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Finish" })).toBeInTheDocument();
   });
 
   it("calls onContinue when Continue clicked", () => {
@@ -90,10 +90,17 @@ describe("BatchFeedback", () => {
     expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
-  it("calls onSeeResults when See Results clicked (final)", () => {
+  it("calls onSeeResults when See summary clicked (final)", () => {
     const onSeeResults = vi.fn();
     renderComponent({ isFinal: true, onSeeResults });
-    fireEvent.click(screen.getByRole("button", { name: "See Results" }));
+    fireEvent.click(screen.getByRole("button", { name: "See summary" }));
+    expect(onSeeResults).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onSeeResults when the quiet Finish is clicked (not final)", () => {
+    const onSeeResults = vi.fn();
+    renderComponent({ isFinal: false, onSeeResults });
+    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
     expect(onSeeResults).toHaveBeenCalledTimes(1);
   });
 
@@ -105,9 +112,9 @@ describe("BatchFeedback", () => {
 });
 
 describe("BatchFeedback feedback screen", () => {
-  it("renders the root-level Mark as Correct and Exclude buttons", () => {
+  it("renders the root-level Mark as correct and Exclude buttons", () => {
     renderComponent({ items: mockItems });
-    expect(screen.getAllByRole("button", { name: /^Mark as (Correct|Incorrect)$/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /^Mark as (correct|incorrect)$/ }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Exclude" }).length).toBeGreaterThan(0);
   });
 });

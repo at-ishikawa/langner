@@ -217,7 +217,7 @@ export function QuizResultCard({
         </Box>
       )}
 
-      {/* Footer: Mark as Correct/Incorrect, Undo when overridden, Exclude/Resume. */}
+      {/* Footer: Mark as correct/Incorrect, Undo when overridden, Exclude/Resume. */}
       <Box display="flex" flexWrap="wrap" gap={2} alignItems="center">
         {!item.isOverridden && !item.isSkipped && item.noteId && item.learnedAt && (
           <Button
@@ -226,7 +226,7 @@ export function QuizResultCard({
             colorPalette={item.correct ? "red" : "brand"}
             onClick={() => onOverride(item)}
           >
-            {item.correct ? "Mark as Incorrect" : "Mark as Correct"}
+            {item.correct ? "Mark as incorrect" : "Mark as correct"}
           </Button>
         )}
 

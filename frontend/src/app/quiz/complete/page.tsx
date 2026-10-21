@@ -42,7 +42,7 @@ export default function SessionCompletePage() {
   }, [results, reverseResults, freeformResults]);
 
   // When the page loads with no results (e.g. navigated here directly), bounce
-  // home. But NOT when the user clicks "Back to Start": that handler calls
+  // home. But NOT when the user clicks "Done": that handler calls
   // reset() — which empties allResults — and then pushes to /quiz. Without this
   // guard the empty-results effect races that push and can win, landing the user
   // on "/" instead of /quiz (flaky on slow deploys; a real wrong-destination bug).
@@ -70,9 +70,9 @@ export default function SessionCompletePage() {
   };
 
   return (
-    <PageShell title="Session Complete" maxW="xl" stickyFooter>
+    <PageShell title="Session summary" maxW="xl" stickyFooter>
       <VStack align="stretch" gap={3} mb={6}>
-        <Text fontWeight="bold">Total: {allResults.length} words</Text>
+        <Text fontWeight="bold">Answered: {allResults.length} words</Text>
         <Text color="green.fg" fontWeight="bold">
           Correct: {correctCount}
         </Text>
@@ -101,7 +101,7 @@ export default function SessionCompletePage() {
         mt={6}
       >
         <Button w="full" colorPalette="brand" onClick={handleBackToStart}>
-          Back to Start
+          Done
         </Button>
         {incorrectCount > 0 && (
           <Box mt={2} textAlign="center">

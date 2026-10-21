@@ -34,7 +34,7 @@ export function BatchFeedback({
         Feedback
       </Heading>
       <Box mb={4}>
-        <Text fontWeight="bold">Batch: {items.length} words</Text>
+        <Text fontWeight="bold">Answered: {items.length}</Text>
         <Text color="green.fg" fontWeight="bold">
           Correct: {correctCount}
         </Text>
@@ -63,14 +63,18 @@ export function BatchFeedback({
         px={4}
         py={3}
         display="flex"
+        flexDirection="column"
         gap={2}
       >
-        <Button flex="1" colorPalette="brand" onClick={isFinal ? onSeeResults : onContinue}>
-          {isFinal ? "See Results" : "Continue"}
+        {/* One clear primary action: keep going, or (on the last batch) go to the
+            summary. Stopping early is a quiet, de-emphasized secondary so it
+            never competes with "Continue". */}
+        <Button w="full" colorPalette="brand" onClick={isFinal ? onSeeResults : onContinue}>
+          {isFinal ? "See summary" : "Continue"}
         </Button>
         {!isFinal && (
-          <Button flex="1" variant="outline" colorPalette="green" onClick={onSeeResults}>
-            See Results
+          <Button w="full" variant="ghost" size="sm" color="fg.muted" onClick={onSeeResults}>
+            Finish
           </Button>
         )}
       </Box>

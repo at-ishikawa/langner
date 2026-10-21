@@ -140,8 +140,8 @@ export default function GrammarQuizPage() {
   const remainingCount = totalBlanks - gradedCount - gradingCount;
   // Let the learner stop the session at any time, mirroring the vocab/etymology
   // BatchFeedback footer. Available in every state except when the primary button is
-  // already the terminal "See results" (last post, none remaining) — then it would
-  // duplicate. If anything's been graded it reads "See results"; otherwise "Stop quiz".
+  // already the terminal "See summary" (last post, none remaining) — then it would
+  // duplicate. The exit always reads "Finish".
   const showExit = !(isLastPost && remainingCount === 0);
   const correctCount = orderedKeys.filter((k) => postResults.get(k)?.result.correct).length;
   const unreviewedWrong = orderedKeys.filter((k) => {
@@ -218,7 +218,7 @@ export default function GrammarQuizPage() {
     }
   };
 
-  // "Next post" is always available: grade any still-empty blanks as skipped
+  // "Continue" is always available: grade any still-empty blanks as skipped
   // (instant, no model call) so their spaced-repetition schedule advances, then
   // move on.
   const handleNextPost = async () => {
@@ -391,24 +391,24 @@ export default function GrammarQuizPage() {
           </Button>
         ) : (
           <Button colorPalette="brand" w="full" size="lg" onClick={handleNextPost}>
-            {isLastPost ? "See results" : "Next post"}
+            {isLastPost ? "See summary" : "Continue"}
           </Button>
         )}
         {showExit && (
-          // Early exit: stop the session at any point. If anything's been graded,
-          // review it ("See results"); otherwise leave cleanly to the grammar hub
-          // ("Stop quiz"). The current post's untouched blanks stay due (not graded),
-          // matching the vocab pages' early "See Results".
+          // Stop the session at any point — a quiet, de-emphasized secondary so it
+          // never competes with the primary Continue / See summary action. If
+          // anything's been graded it goes to the summary; otherwise straight back
+          // to the grammar hub. The current post's untouched blanks stay due.
           <Button
-            variant="outline"
-            colorPalette="green"
+            variant="ghost"
+            size="sm"
+            color="fg.muted"
             w="full"
-            size="lg"
             onClick={() =>
               router.push(results.length > 0 ? "/quiz/grammar/complete" : "/quiz?tab=grammar")
             }
           >
-            {results.length > 0 ? "See results" : "Stop quiz"}
+            Finish
           </Button>
         )}
       </VStack>

@@ -42,7 +42,7 @@ export default function RelearnCompletePage() {
           Relearn again
         </Button>
         <Button variant="outline" w="full" onClick={goHub}>
-          Quiz Hub
+          Done
         </Button>
       </VStack>
     </PageShell>

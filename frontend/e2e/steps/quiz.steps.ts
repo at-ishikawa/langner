@@ -84,7 +84,7 @@ When("I type the meaning {string}", async ({ page }, meaning: string) => {
 });
 
 When("I submit my answer", async ({ page }) => {
-  // The submit button is rendered as "Submit" (AnswerInput) or "Check Answer"
+  // The submit button is rendered as "Submit" (AnswerInput) or "Check answer"
   // (vocabulary freeform). Match either one.
   await page
     .getByRole("button", { name: /^(submit|check answer)$/i })
@@ -131,7 +131,7 @@ When("I retry grading", async ({ page }) => {
   await page.getByRole("button", { name: /^retry grading$/i }).first().click();
 });
 
-// QuizResultCard renders "Mark as Correct"/"Mark as Incorrect" depending on
+// QuizResultCard renders "Mark as correct"/"Mark as incorrect" depending on
 // the card's current state. The standard quiz's mock grader marks every
 // non-empty answer correct, so the first such button is always "Mark as
 // Incorrect" right after submitting valid answers.
@@ -165,7 +165,7 @@ function cardSection(page: Page, entry: string): Locator {
       "xpath=ancestor::div[" +
         ".//*[" +
         "  normalize-space(.) = 'Exclude'" +
-        "  or normalize-space(.) = 'Exclude from Quizzes'" +
+        "  or normalize-space(.) = 'Exclude from quizzes'" +
         "  or normalize-space(.) = 'Resume'" +
         "  or starts-with(normalize-space(.), 'Mark as')" +
         "  or starts-with(normalize-space(.), 'Undo')" +
@@ -178,7 +178,7 @@ When(
   "I mark {string} as correct",
   async ({ page }, entry: string) => {
     await cardSection(page, entry)
-      .getByRole("button", { name: /^Mark as Correct$/ })
+      .getByRole("button", { name: /^Mark as correct$/ })
       .click();
   },
 );
@@ -187,7 +187,7 @@ When(
   "I mark {string} as incorrect",
   async ({ page }, entry: string) => {
     await cardSection(page, entry)
-      .getByRole("button", { name: /^Mark as Incorrect$/ })
+      .getByRole("button", { name: /^Mark as incorrect$/ })
       .click();
   },
 );
@@ -204,7 +204,7 @@ When(
   },
 );
 
-// QuizResultCard uses "Exclude"; FeedbackActions uses "Exclude from Quizzes".
+// QuizResultCard uses "Exclude"; FeedbackActions uses "Exclude from quizzes".
 When(
   "I exclude {string}",
   async ({ page }, entry: string) => {
@@ -232,11 +232,11 @@ When("I resume the first answer", async ({ page }) => {
 
 // Between non-final cards the quiz pages auto-advance — there's no button to
 // click. At a batch boundary or the final card, BatchFeedback shows a
-// "Continue" or "See Results" button after async grading finishes. Wait for
+// "Continue" or "See summary" button after async grading finishes. Wait for
 // either to appear (up to 5s) before deciding it's a non-final card.
 When("I continue to the next card", async ({ page }) => {
   const button = page
-    .getByRole("button", { name: /^(continue|see results)$/i })
+    .getByRole("button", { name: /^(continue|see summary)$/i })
     .first();
   try {
     await button.waitFor({ state: "visible", timeout: 5000 });
@@ -246,12 +246,11 @@ When("I continue to the next card", async ({ page }) => {
   }
 });
 
-// "Finish the quiz" should navigate to /quiz/complete. After the final
-// freeform submission, FeedbackActions renders both a "Next Origin"/"Next
-// Word" button (primary) and a "See Results" button (outline). We always
-// want the latter.
+// "Finish the quiz" should navigate to /quiz/complete. The end-of-session
+// control reads "See summary" on the final batch and a quiet "Finish" when
+// stopping early; either one routes to the summary. Match both.
 When("I finish the quiz", async ({ page }) => {
-  await page.getByRole("button", { name: /^see results$/i }).first().click();
+  await page.getByRole("button", { name: /^(see summary|finish)$/i }).first().click();
 });
 
 Then("I see the quiz mode {string}", async ({ page }, mode: string) => {
@@ -278,7 +277,7 @@ Then(
   "the summary shows {int} total words",
   async ({ page }, count: number) => {
     await expect(
-      page.getByText(new RegExp(`Total:\\s*${count}\\s*words?`)),
+      page.getByText(new RegExp(`Answered:\\s*${count}\\s*words?`)),
     ).toBeVisible();
   },
 );
