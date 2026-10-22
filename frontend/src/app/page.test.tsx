@@ -44,7 +44,7 @@ describe("TodayPage", () => {
     vi.clearAllMocks();
   });
 
-  it("shows total due and a one-tap review button to the quiz hub", async () => {
+  it("plans a bounded session: each due notebook deep-links into the scoped hub", async () => {
     vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
       notebooks: [
         nb({ notebookId: "a", name: "Word Power", reviewCount: 14, vocabularyCount: 412 }),
@@ -56,13 +56,16 @@ describe("TodayPage", () => {
     renderPage();
 
     expect(await screen.findByText("Today")).toBeInTheDocument();
-    // 14 + 9 words due across notebooks.
+    // 14 + 9 words due shown as an informational stat, not a "review everything" CTA.
     expect(await screen.findByText("23")).toBeInTheDocument();
-    const review = screen.getByText(/Review 23 due/).closest("a");
-    expect(review).toHaveAttribute("href", "/quiz");
-    // Per-notebook due breakdown.
-    expect(screen.getByText("Word Power")).toBeInTheDocument();
-    expect(screen.getByText("Latin Roots")).toBeInTheDocument();
+    // No single giant "review all" action.
+    expect(screen.queryByText(/Review 23 due/)).not.toBeInTheDocument();
+    // Each due notebook is a bounded entry point: tapping it opens the hub
+    // scoped to that notebook (where chapters can be narrowed further).
+    const wordPower = screen.getByRole("link", { name: /Word Power/ });
+    expect(wordPower).toHaveAttribute("href", "/quiz?notebook=a");
+    const latin = screen.getByRole("link", { name: /Latin Roots/ });
+    expect(latin).toHaveAttribute("href", "/quiz?notebook=b");
   });
 
   it("lists imported books under Continue reading", async () => {
@@ -109,11 +112,11 @@ describe("TodayPage", () => {
     renderPage();
 
     // 7 words due, counted once (not 14 from summing the duplicate rows)…
-    expect(await screen.findByText(/Review 7 due/)).toBeInTheDocument();
+    expect(await screen.findByText("7 due ›")).toBeInTheDocument();
     // …and the grammar facet survives the merge (4 grammar notes).
     expect(screen.getByText("4")).toBeInTheDocument();
-    // Exactly one "Reading Journal" row in the due-by-notebook list.
-    expect(screen.getAllByText("Reading Journal")).toHaveLength(1);
+    // Exactly one "Reading Journal" plan row (one link), not a duplicate.
+    expect(screen.getAllByRole("link", { name: /Reading Journal/ })).toHaveLength(1);
   });
 
   it("renders in dark mode without errors", async () => {

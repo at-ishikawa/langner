@@ -51,6 +51,21 @@ export default function QuizHubPage() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Daily session target: a soft goal for how many words to review in one
+  // sitting, so a large backlog becomes a bounded, finishable session instead
+  // of an impossible "review everything". Whatever isn't picked simply stays
+  // due for a later day. Remembered across visits in localStorage; read in an
+  // effect (not during render) to avoid an SSR hydration mismatch.
+  const [sessionTarget, setSessionTarget] = useState(40);
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem("langner.sessionTarget"));
+    if (Number.isFinite(saved) && saved > 0) setSessionTarget(saved);
+  }, []);
+  const chooseTarget = (n: number) => {
+    setSessionTarget(n);
+    window.localStorage.setItem("langner.sessionTarget", String(n));
+  };
+
   const setFlashcards = useQuizStore((s) => s.setFlashcards);
   const setReverseFlashcards = useQuizStore((s) => s.setReverseFlashcards);
   const setWordCount = useQuizStore((s) => s.setWordCount);
@@ -92,6 +107,25 @@ export default function QuizHubPage() {
         initialLoadRef.current = false;
       });
   }, [includeUnstudied]);
+
+  // Deep link from the Today dashboard: ?notebook=<id> opens the vocabulary
+  // planner focused on that one notebook — standard mode, the notebook
+  // pre-picked and expanded to its chapters — so starting a bounded session is
+  // one more tap. Applied ONCE, and only after the notebook list has loaded:
+  // selecting before the fetch resolves would be wiped by the effect that
+  // prunes selections not present in displayedNotebooks (empty pre-fetch).
+  const appliedNotebookDeepLink = useRef(false);
+  useEffect(() => {
+    if (appliedNotebookDeepLink.current || notebooks.length === 0) return;
+    appliedNotebookDeepLink.current = true;
+    const nb = new URLSearchParams(window.location.search).get("notebook");
+    if (nb && notebooks.some((n) => n.notebookId === nb)) {
+      setTab("vocabulary");
+      setSelectedVocabMode("standard");
+      setSelectedIds(new Set([nb]));
+      setExpandedIds(new Set([nb]));
+    }
+  }, [notebooks]);
 
   const selectedMode = selectedVocabMode;
 
@@ -513,6 +547,39 @@ export default function QuizHubPage() {
               Select notebooks
             </Text>
 
+            {/* Daily session target — a soft, bounded goal so a big backlog
+                becomes a finishable session. Drives the guidance below the
+                picker; the rest always stays due for a later day. */}
+            <Box display="flex" alignItems="center" gap={2} mb={3} flexWrap="wrap">
+              <Text fontSize="xs" color="fg.muted">
+                Session target
+              </Text>
+              {[20, 40, 60].map((n) => {
+                const active = sessionTarget === n;
+                return (
+                  <Box
+                    as="button"
+                    key={n}
+                    onClick={() => chooseTarget(n)}
+                    px={3}
+                    py={1}
+                    borderRadius="full"
+                    borderWidth="1px"
+                    fontSize="xs"
+                    fontFamily="mono"
+                    cursor="pointer"
+                    bg={active ? "brand.solid" : "transparent"}
+                    color={active ? "brand.contrast" : "fg.muted"}
+                    borderColor={active ? "brand.solid" : "border"}
+                    css={{ fontVariantNumeric: "tabular-nums" }}
+                    aria-pressed={active}
+                  >
+                    {n}
+                  </Box>
+                );
+              })}
+            </Box>
+
             {displayedNotebooks.length === 0 ? (
               <Text fontSize="sm" color="fg.muted" mt={2}>
                 {isFreeformMode ? (
@@ -621,9 +688,16 @@ export default function QuizHubPage() {
             )}
 
             {displayedNotebooks.length > 0 && (
-              <Text mt={4} fontWeight="bold" textAlign="center">
-                {totalDue} words due for review
-              </Text>
+              <Box mt={4} textAlign="center">
+                <Text fontWeight="bold">{totalDue} words selected</Text>
+                <Text fontSize="xs" color="fg.muted" mt={1}>
+                  {totalDue === 0
+                    ? `Pick a notebook or a few chapters — aim for about ${sessionTarget}.`
+                    : totalDue <= sessionTarget
+                      ? "A good session — whatever you don't pick stays due for a later day."
+                      : `More than today's target of ${sessionTarget}. Fewer chapters is fine; the rest stays due for later.`}
+                </Text>
+              </Box>
             )}
           </Box>
         )}

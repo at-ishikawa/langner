@@ -44,54 +44,49 @@ export default function TodayPage() {
 
   return (
     <PageShell title="Today" maxW="xl">
-      <SimpleGrid columns={2} gap={3} mb={5}>
+      <SimpleGrid columns={2} gap={3} mb={6}>
         <StatTile accent value={wordsDue} label="words due" />
         <StatTile value={grammarDue} label="grammar notes" />
       </SimpleGrid>
 
-      <Button asChild colorPalette="brand" size="lg" w="full" mb={3}>
-        <NextLink href="/quiz">
-          {wordsDue > 0 ? `Review ${wordsDue} due →` : "Start a quiz →"}
-        </NextLink>
-      </Button>
-
-      <Box textAlign="center" mb={6}>
-        <Button asChild variant="plain" size="sm" color="fg.muted" h="auto" py={1}>
-          <NextLink href="/history">History — review past days</NextLink>
-        </Button>
-      </Box>
-
+      {/* Plan a bounded session instead of facing the whole backlog at once:
+          pick one notebook (and, in the hub, a few chapters). Whatever you
+          don't pick simply stays due for a later day — no giant "review
+          everything" button, no scary total. */}
       {dueNotebooks.length > 0 && (
         <Box mb={6}>
-          <SectionLabel>Due by notebook</SectionLabel>
-          <Card overflow="hidden">
-            <VStack align="stretch" gap={0}>
-              {dueNotebooks.map((n, i) => (
-                <Box
-                  key={n.notebookId}
-                  display="flex"
-                  alignItems="center"
-                  gap={3}
-                  px={4}
-                  py={3}
-                  borderTopWidth={i === 0 ? "0" : "1px"}
-                  borderColor="border"
-                >
-                  <Text fontWeight="500" fontSize="sm" flex="1" truncate>
+          <SectionLabel>Plan today&apos;s session</SectionLabel>
+          <Text fontSize="sm" color="fg.muted" mb={3}>
+            Pick a notebook — a few chapters is a good session. The rest stays due for later.
+          </Text>
+          <VStack align="stretch" gap={2}>
+            {dueNotebooks.map((n) => (
+              <Button
+                key={n.notebookId}
+                asChild
+                variant="outline"
+                justifyContent="space-between"
+                h="auto"
+                py={3}
+                px={4}
+              >
+                <NextLink href={`/quiz?notebook=${encodeURIComponent(n.notebookId)}`}>
+                  <Text fontWeight="500" fontSize="sm" truncate>
                     {n.name}
                   </Text>
                   <Text
                     fontFamily="mono"
                     fontSize="sm"
                     color="brand.fg"
+                    flexShrink={0}
                     css={{ fontVariantNumeric: "tabular-nums" }}
                   >
-                    {n.reviewCount}
+                    {n.reviewCount} due ›
                   </Text>
-                </Box>
-              ))}
-            </VStack>
-          </Card>
+                </NextLink>
+              </Button>
+            ))}
+          </VStack>
         </Box>
       )}
 
@@ -146,6 +141,12 @@ export default function TodayPage() {
           </VStack>
         </Card>
       )}
+
+      <Box textAlign="center" mt={2}>
+        <Button asChild variant="plain" size="sm" color="fg.muted" h="auto" py={1}>
+          <NextLink href="/history">History — review past days</NextLink>
+        </Button>
+      </Box>
     </PageShell>
   );
 }

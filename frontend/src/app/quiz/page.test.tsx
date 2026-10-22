@@ -44,6 +44,40 @@ describe("QuizHubPage", () => {
   afterEach(() => {
     document.documentElement.classList.remove("dark");
     document.documentElement.removeAttribute("data-theme");
+    // Reset the URL so a ?notebook deep link in one test doesn't leak.
+    window.history.pushState({}, "", "/quiz");
+    vi.mocked(quizClient.getQuizOptions).mockResolvedValue({ notebooks: [] });
+  });
+
+  it("deep-links from Today: ?notebook=<id> opens the planner scoped to that notebook", async () => {
+    vi.mocked(quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [
+        {
+          notebookId: "word-power",
+          name: "Word Power",
+          reviewCount: 14,
+          reverseReviewCount: 0,
+          etymologyReviewCount: 0,
+          etymologyReverseReviewCount: 0,
+          grammarReviewCount: 0,
+          vocabularyCount: 412,
+          kind: "",
+          hasContent: true,
+          sections: [],
+        },
+      ],
+    } as Awaited<ReturnType<typeof quizClient.getQuizOptions>>);
+    window.history.pushState({}, "", "/quiz?notebook=word-power");
+
+    renderPage();
+
+    // Standard mode auto-selected (Start visible) and the notebook pre-picked,
+    // so the bounded session is one tap away — framed as "selected", not a wall.
+    await waitFor(() => {
+      expect(screen.getByText("14 words selected")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Word Power")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
   });
 
   it("renders Quiz title without a redundant in-page Home link", async () => {
