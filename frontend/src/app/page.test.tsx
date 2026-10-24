@@ -1,11 +1,17 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
-import TodayPage from "./page";
+import RootPage from "./page";
 import * as client from "@/lib/client";
+import { useSession } from "@/components/SessionProvider";
+import type { AuthUser } from "@/lib/auth";
 
 vi.mock("@/lib/client", () => ({
   quizClient: { getQuizOptions: vi.fn() },
+}));
+
+vi.mock("@/components/SessionProvider", () => ({
+  useSession: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -13,6 +19,22 @@ vi.mock("next/link", () => ({
     <a {...props}>{children}</a>
   ),
 }));
+
+const signedIn: AuthUser = {
+  username: "reader-1",
+  hasApiKey: true,
+  credentials: [],
+  availableProviders: [],
+};
+
+function mockSession(state: Partial<ReturnType<typeof useSession>>) {
+  vi.mocked(useSession).mockReturnValue({
+    user: null,
+    loading: false,
+    refresh: async () => {},
+    ...state,
+  });
+}
 
 function nb(partial: Partial<client.NotebookSummary> & { notebookId: string; name: string }) {
   return {
@@ -32,12 +54,46 @@ function nb(partial: Partial<client.NotebookSummary> & { notebookId: string; nam
 function renderPage() {
   return render(
     <ChakraProvider value={defaultSystem}>
-      <TodayPage />
+      <RootPage />
     </ChakraProvider>,
   );
 }
 
-describe("TodayPage", () => {
+describe("RootPage — public vs. signed-in branching", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows the public landing page to a logged-out visitor and does NOT load the dashboard", () => {
+    mockSession({ user: null, loading: false });
+    renderPage();
+
+    // Marketing hero + both entry points, no Today dashboard chrome.
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    const getStarted = screen.getByRole("link", { name: "Get started" });
+    expect(getStarted).toHaveAttribute("href", "/signup");
+    expect(screen.getAllByRole("link", { name: "Sign in" })[0]).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    expect(screen.queryByText("Today")).not.toBeInTheDocument();
+    // The dashboard data is never fetched for a logged-out visitor.
+    expect(client.quizClient.getQuizOptions).not.toHaveBeenCalled();
+  });
+
+  it("shows a spinner while the session probe is in flight", () => {
+    mockSession({ user: null, loading: true });
+    renderPage();
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+    expect(client.quizClient.getQuizOptions).not.toHaveBeenCalled();
+  });
+});
+
+describe("TodayDashboard (signed in)", () => {
+  beforeEach(() => {
+    mockSession({ user: signedIn, loading: false });
+  });
+
   afterEach(() => {
     document.documentElement.classList.remove("dark");
     document.documentElement.removeAttribute("data-theme");

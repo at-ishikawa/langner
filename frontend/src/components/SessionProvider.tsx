@@ -26,9 +26,12 @@ const SessionContext = createContext<SessionState>({
   refresh: async () => {},
 });
 
-// Routes that must render WITHOUT an authenticated session: the sign-in page
-// and the OAuth callback landing (which is mid-way through acquiring a token).
-const PUBLIC_PATHS = new Set(["/login", "/auth/callback"]);
+// Routes that must render WITHOUT an authenticated session: the public landing
+// page ("/", which itself renders the logged-out marketing view vs. the Today
+// dashboard), the sign-up page, the sign-in page, and the OAuth callback landing
+// (which is mid-way through acquiring a token). On these the guard never bounces
+// a logged-out visitor through Google — they get a real page to act on.
+const PUBLIC_PATHS = new Set(["/", "/signup", "/login", "/auth/callback"]);
 
 // useSession exposes the current authenticated user (or null), whether the
 // initial /auth/me probe is still in flight, and a refresh() to re-probe (e.g.
