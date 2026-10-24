@@ -239,7 +239,9 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
                 overflowWrap="anywhere"
                 bg={c.bg}
                 color={c.color}
-                boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-brand-500)" : undefined}
+                outlineWidth={isSel ? "2px" : undefined}
+                outlineStyle={isSel ? "solid" : undefined}
+                outlineColor="brand.solid"
               >
                 <Text as="span" aria-hidden="true">
                   {c.glyph}{" "}
@@ -382,7 +384,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           bottom={0}
           left={0}
           right={0}
-          maxW="sm"
+          maxW="xl"
           mx="auto"
           maxH="60vh"
           overflowY="auto"

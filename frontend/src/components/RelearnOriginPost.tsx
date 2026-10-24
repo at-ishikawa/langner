@@ -259,7 +259,9 @@ export function RelearnOriginPost({
                   borderRadius="md"
                   bg={c.bg}
                   color={c.color}
-                  boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-brand-500)" : undefined}
+                  outlineWidth={isSel ? "2px" : undefined}
+                  outlineStyle={isSel ? "solid" : undefined}
+                  outlineColor="brand.solid"
                   maxW="100%"
                   overflowWrap="anywhere"
                 >
@@ -452,7 +454,7 @@ export function RelearnOriginPost({
           bottom={0}
           left={0}
           right={0}
-          maxW="sm"
+          maxW="xl"
           mx="auto"
           maxH="60vh"
           overflowY="auto"
