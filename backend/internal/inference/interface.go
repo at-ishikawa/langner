@@ -79,8 +79,19 @@ type LookupWordResponse struct {
 
 // Expression represents a single expression with its contexts
 type Expression struct {
-	Expression        string    `json:"expression"`
-	Meaning           string    `json:"meaning"`
+	Expression string `json:"expression"`
+	// Meaning is the USER'S ANSWER being graded (the learner's stated meaning),
+	// NOT the notebook's stored meaning. The authoritative stored meaning the
+	// answer is graded against is ReferenceMeaning.
+	Meaning string `json:"meaning"`
+	// ReferenceMeaning is the notebook's stored meaning for the expression — the
+	// SINGLE authoritative ground truth the grader compares the user's answer
+	// against. Unlike Context.ReferenceDefinition (per example sentence), it is
+	// attached to the expression itself, so the stored meaning reaches the grader
+	// even for a card that has no example contexts (e.g. a bare flashcard). The
+	// grader must treat it as correct and authoritative and must never substitute
+	// its own definition. Empty only for callers with no stored meaning.
+	ReferenceMeaning  string    `json:"reference_meaning,omitempty"`
 	Contexts          []Context `json:"contexts,omitempty"`
 	IsExpressionInput bool      `json:"is_expression_input"`
 	ResponseTimeMs    int64     `json:"response_time_ms,omitempty"` // For quality assessment
