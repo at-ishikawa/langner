@@ -1,6 +1,7 @@
 package quiz
 
 import (
+	"strings"
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -50,6 +51,19 @@ type Card struct {
 	ConceptHead    string
 	ConceptMembers []string
 	ConceptMeaning string
+}
+
+// referenceMeaning returns the notebook's stored meaning that is the single
+// authoritative ground truth for grading this card: the card's own meaning, or
+// the concept umbrella meaning when the card represents a concept and carries no
+// per-member meaning. This is the value passed to the grader as the ONLY thing a
+// user's answer is judged against, and surfaced verbatim as the expected answer
+// in feedback — so the grader can never substitute its own definition.
+func (c Card) referenceMeaning() string {
+	if strings.TrimSpace(c.Meaning) != "" {
+		return c.Meaning
+	}
+	return c.ConceptMeaning
 }
 
 // Example is a usage sentence for a card.
