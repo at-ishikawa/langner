@@ -992,6 +992,7 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, userID int64, card Ca
 			{
 				Expression:        card.Entry,
 				Meaning:           answer,
+				ReferenceMeaning:  card.referenceMeaning(),
 				Contexts:          card.Contexts,
 				IsExpressionInput: false,
 				ResponseTimeMs:    responseTimeMs,
@@ -1007,7 +1008,7 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, userID int64, card Ca
 
 	result := results.Answers[0]
 	isCorrect, reason, quality := extractAnswerResult(result)
-	reason = ensureActionableReason(isCorrect, reason, card.Meaning)
+	reason = ensureActionableReason(isCorrect, reason, card.referenceMeaning())
 
 	return GradeResult{
 		Correct: isCorrect,
@@ -2237,6 +2238,7 @@ func (s *Service) GradeNotebookAnswerBatch(ctx context.Context, userID int64, ca
 		exprs = append(exprs, inference.Expression{
 			Expression:        cards[i].Entry,
 			Meaning:           answers[i],
+			ReferenceMeaning:  cards[i].referenceMeaning(),
 			Contexts:          cards[i].Contexts,
 			IsExpressionInput: false,
 			ResponseTimeMs:    responseTimes[i],
@@ -2282,7 +2284,7 @@ func (s *Service) GradeNotebookAnswerBatch(ctx context.Context, userID int64, ca
 		i := queue[0]
 		byExpr[key] = queue[1:]
 		correct, reason, quality := extractAnswerResult(ans)
-		reason = ensureActionableReason(correct, reason, cards[i].Meaning)
+		reason = ensureActionableReason(correct, reason, cards[i].referenceMeaning())
 		results[i] = GradeResult{Correct: correct, Reason: reason, Quality: quality}
 		filled++
 	}
@@ -2690,6 +2692,7 @@ func (s *Service) GradeFreeformAnswer(ctx context.Context, userID int64, word, m
 			{
 				Expression:        word,
 				Meaning:           meaning,
+				ReferenceMeaning:  matchingCards[0].Meaning,
 				Contexts:          matchingCards[0].Contexts,
 				IsExpressionInput: true,
 				ResponseTimeMs:    responseTimeMs,

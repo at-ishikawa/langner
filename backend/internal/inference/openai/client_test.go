@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1105,4 +1106,49 @@ func TestClient_Close(t *testing.T) {
 	client := NewClient("test-key", "gpt-4", 3)
 	err := client.Close()
 	assert.NoError(t, err)
+}
+
+// TestGetRequestBody_GradesAgainstStoredMeaning pins the grader-prompt contract
+// that fixes the two standard-quiz grading failures:
+//
+//	(A) the grader substituting its own dictionary definition for the word, and
+//	(B) the grader rejecting correct paraphrases of the stored meaning.
+//
+// It verifies the prompt names the notebook's stored meaning (reference_meaning)
+// as the sole authoritative ground truth, tells the model to accept paraphrases,
+// and does NOT invite it to supply its own definition or grade from outside
+// knowledge. It also confirms reference_meaning is serialized into the request.
+func TestGetRequestBody_GradesAgainstStoredMeaning(t *testing.T) {
+	client := &Client{model: "gpt-4"}
+	got, err := client.getRequestBody(inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{
+			{
+				Expression:       "bank",
+				Meaning:          "the ground next to a river", // the learner's answer
+				ReferenceMeaning: "the land alongside a river", // the notebook's stored meaning
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	system := strings.ToLower(got.Messages[0].Content)
+
+	// Positive: the stored meaning is the sole authoritative ground truth, and
+	// paraphrases/synonyms must be accepted (fixes B).
+	assert.Contains(t, system, "reference_meaning")
+	assert.Contains(t, system, "authoritative")
+	assert.Contains(t, system, "paraphrase")
+
+	// Negative (fixes A): the model must NOT introduce its own definition or grade
+	// from outside knowledge, and the old instruction that told it to author the
+	// "canonical meaning that best fits" is gone.
+	assert.Contains(t, system, "must not introduce")
+	assert.Contains(t, system, "your own knowledge")
+	assert.NotContains(t, system, "canonical meaning that best fits",
+		"the prompt must not ask the model to author its own definition")
+
+	// The stored meaning is actually serialized into the request sent to the model.
+	last := got.Messages[len(got.Messages)-1].Content
+	assert.Contains(t, last, "reference_meaning")
+	assert.Contains(t, last, "the land alongside a river")
 }
