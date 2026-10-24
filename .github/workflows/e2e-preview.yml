@@ -53,7 +53,7 @@ jobs:
     # local e2e in frontend.yml instead.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     concurrency:
       # Serialize: all runs reset the one shared preview database.
       group: e2e-preview
@@ -291,4 +291,9 @@ jobs:
             echo "  frontend not ready (HTTP $code); retrying in 15s"; sleep 15
           done
           npx playwright install chromium --with-deps
-          pnpm test:e2e
+          # Diagnostic: run WITHOUT retries so the suite completes within the job
+          # budget and the reporter prints every failure's error detail inline
+          # (retries=2 otherwise tripled the slow-test time and the 25-min cap cut
+          # the run off before it could report). Reverted to config retries once
+          # the real failures are understood.
+          pnpm test:e2e -- --retries=0
