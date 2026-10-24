@@ -171,7 +171,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
     setInputs((prev) => ({ ...prev, [key]: value }));
 
   return (
-    <Box pb={selected ? 80 : 0} maxW="100%">
+    <Box pb={{ base: selected ? 80 : 0, md: 0 }} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
         <Text fontSize="xs" color="brand.fg" fontWeight="medium">
           Grammar — fix the mistakes
@@ -322,6 +322,56 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
         })}
       </Box>
 
+      {/* Per-word feedback. Inline (static) on desktop so it sits directly
+          under the post above the controls; a viewport-fixed bottom sheet on
+          phones (short card) so it never buries them. Single node, SSR-safe. */}
+      {selected && selectedBlank && (
+        <Box
+          // Phone (base): viewport-fixed bottom sheet. Desktop (md+): static/
+          // inline, flowing under the post above the controls — no fixed sheet,
+          // no pb reserve, no gap. Single node (CSS-only), SSR-safe.
+          position={{ base: "fixed", md: "static" }}
+          bottom={{ base: 0, md: "auto" }}
+          left={{ base: 0, md: "auto" }}
+          right={{ base: 0, md: "auto" }}
+          mx="auto"
+          mt={{ base: 0, md: 2 }}
+          maxH={{ base: "60vh", md: "none" }}
+          overflowY={{ base: "auto", md: "visible" }}
+          overflowX="hidden"
+          bg="bg.subtle"
+          borderWidth="1px"
+          borderColor="border"
+          borderRadius="lg"
+          p={3}
+          boxShadow={{ base: "0 -4px 12px rgba(0,0,0,0.12)", md: "none" }}
+          data-testid="relearn-grammar-feedback"
+        >
+          <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+            <Text
+              fontSize="xs"
+              fontWeight="bold"
+              color={selected.res.correct ? "green.fg" : "red.fg"}
+            >
+              {selected.res.correct ? "✓ Correct" : "✗ Incorrect"}
+              {selected.res.category ? ` · ${selected.res.category}` : ""}
+            </Text>
+            <Button size="xs" variant="ghost" onClick={() => setSelectedKey(null)} aria-label="Close details">
+              ✕
+            </Button>
+          </Box>
+          <GrammarCorrectionBody
+            incorrect={selectedBlank.incorrect}
+            answer={selected.answer}
+            correctAnswer={selected.res.correctAnswer}
+            correct={selected.res.correct}
+            assessment={selected.res.reason}
+            grammarNote={selected.res.grammarNote}
+            correctAnswerTestId="relearn-answer"
+          />
+        </Box>
+      )}
+
       {remainingCount > 0 ? (
         <Button
           colorPalette="brand"
@@ -371,56 +421,6 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           </Text>
         )}
       </Box>
-
-      {/* Feedback for the blank just graded (wrong answers) opens here
-          automatically, and stays PINNED to the bottom of the viewport so it is
-          visible without scrolling past the Next button on a long post — the
-          live grammar quiz's own labelled body (Mistake / You wrote / Suggested
-          / Why you missed it / Grammar note). Session-only: relearn persists
-          nothing, so there is no override-to-history footer. */}
-      {selected && selectedBlank && (
-        <Box
-          position="fixed"
-          bottom={0}
-          left={0}
-          right={0}
-          maxW="xl"
-          mx="auto"
-          maxH="60vh"
-          overflowY="auto"
-          overflowX="hidden"
-          bg="bg"
-          borderTopWidth="1px"
-          borderTopColor="border"
-          borderTopRadius="xl"
-          p={3}
-          boxShadow="0 -4px 12px rgba(0,0,0,0.08)"
-          data-testid="relearn-grammar-feedback"
-        >
-          <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-            <Text
-              fontSize="xs"
-              fontWeight="bold"
-              color={selected.res.correct ? "green.fg" : "red.fg"}
-            >
-              {selected.res.correct ? "✓ Correct" : "✗ Incorrect"}
-              {selected.res.category ? ` · ${selected.res.category}` : ""}
-            </Text>
-            <Button size="xs" variant="ghost" onClick={() => setSelectedKey(null)} aria-label="Close details">
-              ✕
-            </Button>
-          </Box>
-          <GrammarCorrectionBody
-            incorrect={selectedBlank.incorrect}
-            answer={selected.answer}
-            correctAnswer={selected.res.correctAnswer}
-            correct={selected.res.correct}
-            assessment={selected.res.reason}
-            grammarNote={selected.res.grammarNote}
-            correctAnswerTestId="relearn-answer"
-          />
-        </Box>
-      )}
     </Box>
   );
 }

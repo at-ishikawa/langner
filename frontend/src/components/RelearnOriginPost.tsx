@@ -195,7 +195,7 @@ export function RelearnOriginPost({
     setInputs((prev) => ({ ...prev, [key]: value }));
 
   return (
-    <Box pb={selected ? 80 : 0} maxW="100%">
+    <Box pb={{ base: selected ? 80 : 0, md: 0 }} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
         <Text fontSize="xs" color="brand.fg" fontWeight="medium">
           Etymology — recall each word
@@ -354,117 +354,30 @@ export function RelearnOriginPost({
         </Box>
       </Box>
 
-      {/* Related words from this origin — display-only reference (word + short
-          meaning), shown ONLY after every word on the card is answered
-          (remainingCount === 0), never during the question state (so it can't
-          hint a reverse answer). The backend already excludes the drilled words
-          and any excluded sibling. Sits above the Next button so it stays
-          visible without covering the controls (U3). */}
-      {remainingCount === 0 && relatedWords.length > 0 && (
+      {/* Per-word feedback. Inline (static) on desktop so it sits directly
+          under the card it explains; a viewport-fixed bottom sheet on phones
+          (where the card is short) so it never buries the controls. */}
+      {selected && selectedWord && (
         <Box
-          mb={3}
-          p={3}
+          // Phone (base): a viewport-fixed bottom sheet so a short card never
+          // buries it. Desktop (md+): static/inline, flowing right under the
+          // card above the Continue button — no fixed sheet, no pb reserve, no
+          // top-chip-to-bottom-sheet gap. Single node (CSS-only), SSR-safe.
+          position={{ base: "fixed", md: "static" }}
+          bottom={{ base: 0, md: "auto" }}
+          left={{ base: 0, md: "auto" }}
+          right={{ base: 0, md: "auto" }}
+          mx="auto"
+          mt={{ base: 0, md: 2 }}
+          maxH={{ base: "60vh", md: "none" }}
+          overflowY={{ base: "auto", md: "visible" }}
+          overflowX="hidden"
           bg="bg.subtle"
           borderWidth="1px"
           borderColor="border"
           borderRadius="lg"
-          maxW="100%"
-          data-testid="relearn-origin-related"
-        >
-          <Text fontSize="xs" fontWeight="medium" color="fg.muted" mb={2}>
-            Related words from this origin
-          </Text>
-          <Box display="flex" flexDirection="column" gap={1}>
-            {relatedWords.map((m) => (
-              <Box key={m.word} display="flex" alignItems="center" gap={1} maxW="100%">
-                <Text fontSize="sm" overflowWrap="anywhere">
-                  <Text as="span" fontWeight="semibold">{m.word}</Text>
-                  {m.meaning ? (
-                    <Text as="span" color="fg.muted"> — {m.meaning}</Text>
-                  ) : null}
-                </Text>
-                {/* Reference words are revealed (shown only after the card is
-                    answered), so pronouncing them leaks nothing. */}
-                <PronounceButton text={m.word} size="2xs" />
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {remainingCount > 0 ? (
-        <Button
-          colorPalette="brand"
-          w="full"
-          size="lg"
-          // Both action buttons must be unclickable while any word is grading: a
-          // word committed just before "See answers" is still in flight, and
-          // advancing would grade the rest empty and open feedback mid-grade,
-          // racing the committed answer. (revealAnswers already skips grading
-          // words via isDone, so even a stray tap can't re-grade one empty.)
-          disabled={grading.length > 0}
-          onClick={() => void revealAnswers()}
-        >
-          {grading.length > 0 ? "Grading…" : `See answers (${remainingCount} left)`}
-        </Button>
-      ) : (
-        <Button
-          colorPalette="brand"
-          w="full"
-          size="lg"
-          // A word committed just before Next is still grading; leaving Next
-          // enabled lets the learner advance past it and discard the in-flight
-          // grade (the reported bug). Disable Next until every grade has landed.
-          disabled={grading.length > 0}
-          onClick={() =>
-            onComplete(
-              // Words the learner ends this pass on as NOT correct re-drill this
-              // session — honouring an in-session override (a ✓ flipped to ✗
-              // re-queues; a ✗ flipped to ✓ drops).
-              words.filter((w) => effectiveCorrect(w.noteId.toString()) !== true),
-              correctCount,
-            )
-          }
-          data-testid="relearn-origin-next"
-        >
-          {grading.length > 0 ? "Grading…" : "Continue"}
-        </Button>
-      )}
-      {error && (
-        <Text fontSize="xs" color="red.fg" mt={1} textAlign="center" role="alert">
-          {error}
-        </Text>
-      )}
-
-      <Box mt={2} minH="1rem" textAlign="center">
-        {remainingCount === 0 && gradedCount > 0 && (
-          <Text fontSize="xs" color="fg.muted">
-            Tap any word above to review it.
-          </Text>
-        )}
-      </Box>
-
-      {/* Feedback for the word just graded (wrong answers) opens here
-          automatically, PINNED to the bottom so it stays visible without
-          scrolling past the Next button — the word, its meaning, the origin
-          breakdown, the literal gloss, and what the learner typed. */}
-      {selected && selectedWord && (
-        <Box
-          position="fixed"
-          bottom={0}
-          left={0}
-          right={0}
-          maxW="xl"
-          mx="auto"
-          maxH="60vh"
-          overflowY="auto"
-          overflowX="hidden"
-          bg="bg"
-          borderTopWidth="1px"
-          borderTopColor="border"
-          borderTopRadius="xl"
           p={3}
-          boxShadow="0 -4px 12px rgba(0,0,0,0.08)"
+          boxShadow={{ base: "0 -4px 12px rgba(0,0,0,0.12)", md: "none" }}
           data-testid="relearn-origin-feedback"
         >
           <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
@@ -567,6 +480,94 @@ export function RelearnOriginPost({
           />
         </Box>
       )}
+
+      {/* Related words from this origin — display-only reference (word + short
+          meaning), shown ONLY after every word is answered (remainingCount === 0),
+          never during the question state (so it can't hint a reverse answer). The
+          backend already excludes the drilled words and any excluded sibling. */}
+      {remainingCount === 0 && relatedWords.length > 0 && (
+        <Box
+          mb={3}
+          p={3}
+          bg="bg.subtle"
+          borderWidth="1px"
+          borderColor="border"
+          borderRadius="lg"
+          maxW="100%"
+          data-testid="relearn-origin-related"
+        >
+          <Text fontSize="xs" fontWeight="medium" color="fg.muted" mb={2}>
+            Related words from this origin
+          </Text>
+          <Box display="flex" flexDirection="column" gap={1}>
+            {relatedWords.map((m) => (
+              <Box key={m.word} display="flex" alignItems="center" gap={1} maxW="100%">
+                <Text fontSize="sm" overflowWrap="anywhere">
+                  <Text as="span" fontWeight="semibold">{m.word}</Text>
+                  {m.meaning ? (
+                    <Text as="span" color="fg.muted"> — {m.meaning}</Text>
+                  ) : null}
+                </Text>
+                {/* Reference words are revealed (shown only after the card is
+                    answered), so pronouncing them leaks nothing. */}
+                <PronounceButton text={m.word} size="2xs" />
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {remainingCount > 0 ? (
+        <Button
+          colorPalette="brand"
+          w="full"
+          size="lg"
+          // Both action buttons must be unclickable while any word is grading: a
+          // word committed just before "See answers" is still in flight, and
+          // advancing would grade the rest empty and open feedback mid-grade,
+          // racing the committed answer. (revealAnswers already skips grading
+          // words via isDone, so even a stray tap can't re-grade one empty.)
+          disabled={grading.length > 0}
+          onClick={() => void revealAnswers()}
+        >
+          {grading.length > 0 ? "Grading…" : `See answers (${remainingCount} left)`}
+        </Button>
+      ) : (
+        <Button
+          colorPalette="brand"
+          w="full"
+          size="lg"
+          // A word committed just before Next is still grading; leaving Next
+          // enabled lets the learner advance past it and discard the in-flight
+          // grade (the reported bug). Disable Next until every grade has landed.
+          disabled={grading.length > 0}
+          onClick={() =>
+            onComplete(
+              // Words the learner ends this pass on as NOT correct re-drill this
+              // session — honouring an in-session override (a ✓ flipped to ✗
+              // re-queues; a ✗ flipped to ✓ drops).
+              words.filter((w) => effectiveCorrect(w.noteId.toString()) !== true),
+              correctCount,
+            )
+          }
+          data-testid="relearn-origin-next"
+        >
+          {grading.length > 0 ? "Grading…" : "Continue"}
+        </Button>
+      )}
+      {error && (
+        <Text fontSize="xs" color="red.fg" mt={1} textAlign="center" role="alert">
+          {error}
+        </Text>
+      )}
+
+      <Box mt={2} minH="1rem" textAlign="center">
+        {remainingCount === 0 && gradedCount > 0 && (
+          <Text fontSize="xs" color="fg.muted">
+            Tap any word above to review it.
+          </Text>
+        )}
+      </Box>
     </Box>
   );
 }
