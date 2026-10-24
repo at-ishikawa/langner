@@ -6,7 +6,7 @@ Feature: Freeform vocabulary quiz
   # Exercise the FeedbackActions toolbar — the freeform variants don't use
   # BatchFeedback. FeedbackActions hides the Mark and Exclude buttons while
   # isOverridden is true, so the actionable order is Mark → Undo → Exclude.
-  # Mark as Correct and Mark as Incorrect are the same button with a flipped
+  # Mark as correct and Mark as incorrect are the same button with a flipped
   # label depending on the card's current state, so this single scenario
   # exercises both override directions implicitly via Undo.
   Scenario: All per-card actions on the Freeform feedback view

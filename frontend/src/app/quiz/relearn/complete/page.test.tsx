@@ -46,9 +46,9 @@ describe("RelearnCompletePage", () => {
     expect(useRelearnStore.getState().clearedCount).toBe(0);
   });
 
-  it("Quiz Hub resets and navigates to the hub", () => {
+  it("Done resets and navigates to the hub", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Quiz Hub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(pushMock).toHaveBeenCalledWith("/quiz");
   });
 });

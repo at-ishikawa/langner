@@ -6,7 +6,7 @@ Feature: Quiz Analytics
 
   Scenario: Open the Analytics overview from home
     Given I am on the home page
-    When I follow the "Analytics" link
+    When I follow the "Progress" link
     Then I should be on the Analytics page
     And the Analytics page is not in an error state
 

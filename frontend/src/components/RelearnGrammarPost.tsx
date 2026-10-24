@@ -171,12 +171,12 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
     setInputs((prev) => ({ ...prev, [key]: value }));
 
   return (
-    <Box pb={selected ? 80 : 0} maxW="100%">
+    <Box pb={{ base: selected ? 80 : 0, md: 0 }} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
-        <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium">
+        <Text fontSize="xs" color="brand.fg" fontWeight="medium">
           Grammar — fix the mistakes
         </Text>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} aria-live="polite">
+        <Text fontSize="xs" color="fg.muted" aria-live="polite">
           {correctCount} / {orderedKeys.length} correct
           {grading.length > 0 ? " · grading…" : ""}
         </Text>
@@ -187,10 +187,9 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           the viewport, so the post never scrolls horizontally. */}
       <Box
         p={4}
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.700" }}
+        bg="panel"
         borderWidth="1px"
-        borderColor="gray.200"
+        borderColor="border"
         borderRadius="lg"
         mb={4}
         fontSize="sm"
@@ -240,8 +239,9 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
                 overflowWrap="anywhere"
                 bg={c.bg}
                 color={c.color}
-                _dark={{ bg: c.darkBg, color: c.darkColor }}
-                boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
+                outlineWidth={isSel ? "2px" : undefined}
+                outlineStyle={isSel ? "solid" : undefined}
+                outlineColor="brand.solid"
               >
                 <Text as="span" aria-hidden="true">
                   {c.glyph}{" "}
@@ -258,8 +258,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
                 <Text
                   as="span"
                   fontWeight="bold"
-                  color="blue.600"
-                  _dark={{ color: "blue.300" }}
+                  color="brand.fg"
                   textDecoration="line-through"
                   overflowWrap="anywhere"
                 >
@@ -288,8 +287,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
               <Text
                 as="span"
                 fontWeight="bold"
-                color="blue.600"
-                _dark={{ color: "blue.300" }}
+                color="brand.fg"
                 textDecoration="line-through"
                 overflowWrap="anywhere"
               >
@@ -324,88 +322,36 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
         })}
       </Box>
 
-      {remainingCount > 0 ? (
-        <Button
-          colorPalette="blue"
-          w="full"
-          size="lg"
-          // Disable while any blank is grading so a blank committed just before
-          // "See answers" isn't raced (revealAnswers already skips grading blanks
-          // via isDone; this also prevents opening feedback mid-grade).
-          disabled={grading.length > 0}
-          onClick={() => void revealAnswers()}
-        >
-          {grading.length > 0 ? "Grading…" : `See answers (${remainingCount} left)`}
-        </Button>
-      ) : (
-        <Button
-          colorPalette="purple"
-          w="full"
-          size="lg"
-          // A blank committed just before Next is still grading; disable Next
-          // until every grade has landed so an in-flight grade is never
-          // discarded by advancing past it (mirrors the origin family card).
-          disabled={grading.length > 0}
-          onClick={() =>
-            // Next is shown only once every blank is graded (remainingCount ===
-            // 0), so results[key] is present for all — a blank re-drills this
-            // session when its graded result is not correct.
-            onComplete(
-              blanks.filter((b) => !results[b.noteId.toString()]?.res.correct),
-              correctCount,
-            )
-          }
-          data-testid="relearn-grammar-next"
-        >
-          {grading.length > 0 ? "Grading…" : "Next"}
-        </Button>
-      )}
-      {error && (
-        <Text fontSize="xs" color="red.500" mt={1} textAlign="center" role="alert">
-          {error}
-        </Text>
-      )}
-
-      <Box mt={2} minH="1rem" textAlign="center">
-        {remainingCount === 0 && gradedCount > 0 && (
-          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
-            Tap any correction above to review it.
-          </Text>
-        )}
-      </Box>
-
-      {/* Feedback for the blank just graded (wrong answers) opens here
-          automatically, and stays PINNED to the bottom of the viewport so it is
-          visible without scrolling past the Next button on a long post — the
-          live grammar quiz's own labelled body (Mistake / You wrote / Suggested
-          / Why you missed it / Grammar note). Session-only: relearn persists
-          nothing, so there is no override-to-history footer. */}
+      {/* Per-word feedback. Inline (static) on desktop so it sits directly
+          under the post above the controls; a viewport-fixed bottom sheet on
+          phones (short card) so it never buries them. Single node, SSR-safe. */}
       {selected && selectedBlank && (
         <Box
-          position="fixed"
-          bottom={0}
-          left={0}
-          right={0}
-          maxW="sm"
+          // Phone (base): viewport-fixed bottom sheet. Desktop (md+): static/
+          // inline, flowing under the post above the controls — no fixed sheet,
+          // no pb reserve, no gap. Single node (CSS-only), SSR-safe.
+          position={{ base: "fixed", md: "static" }}
+          bottom={{ base: 0, md: "auto" }}
+          left={{ base: 0, md: "auto" }}
+          right={{ base: 0, md: "auto" }}
           mx="auto"
-          maxH="60vh"
-          overflowY="auto"
+          mt={{ base: 0, md: 2 }}
+          maxH={{ base: "60vh", md: "none" }}
+          overflowY={{ base: "auto", md: "visible" }}
           overflowX="hidden"
-          bg="white"
-          _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
-          borderTopWidth="1px"
-          borderTopColor="gray.200"
-          borderTopRadius="xl"
+          bg="bg.subtle"
+          borderWidth="1px"
+          borderColor="border"
+          borderRadius="lg"
           p={3}
-          boxShadow="0 -4px 12px rgba(0,0,0,0.08)"
+          boxShadow={{ base: "0 -4px 12px rgba(0,0,0,0.12)", md: "none" }}
           data-testid="relearn-grammar-feedback"
         >
           <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
             <Text
               fontSize="xs"
               fontWeight="bold"
-              color={selected.res.correct ? "green.600" : "red.600"}
-              _dark={{ color: selected.res.correct ? "green.300" : "red.300" }}
+              color={selected.res.correct ? "green.fg" : "red.fg"}
             >
               {selected.res.correct ? "✓ Correct" : "✗ Incorrect"}
               {selected.res.category ? ` · ${selected.res.category}` : ""}
@@ -425,6 +371,56 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           />
         </Box>
       )}
+
+      {remainingCount > 0 ? (
+        <Button
+          colorPalette="brand"
+          w="full"
+          size="lg"
+          // Disable while any blank is grading so a blank committed just before
+          // "See answers" isn't raced (revealAnswers already skips grading blanks
+          // via isDone; this also prevents opening feedback mid-grade).
+          disabled={grading.length > 0}
+          onClick={() => void revealAnswers()}
+        >
+          {grading.length > 0 ? "Grading…" : `See answers (${remainingCount} left)`}
+        </Button>
+      ) : (
+        <Button
+          colorPalette="brand"
+          w="full"
+          size="lg"
+          // A blank committed just before Next is still grading; disable Next
+          // until every grade has landed so an in-flight grade is never
+          // discarded by advancing past it (mirrors the origin family card).
+          disabled={grading.length > 0}
+          onClick={() =>
+            // Next is shown only once every blank is graded (remainingCount ===
+            // 0), so results[key] is present for all — a blank re-drills this
+            // session when its graded result is not correct.
+            onComplete(
+              blanks.filter((b) => !results[b.noteId.toString()]?.res.correct),
+              correctCount,
+            )
+          }
+          data-testid="relearn-grammar-next"
+        >
+          {grading.length > 0 ? "Grading…" : "Continue"}
+        </Button>
+      )}
+      {error && (
+        <Text fontSize="xs" color="red.fg" mt={1} textAlign="center" role="alert">
+          {error}
+        </Text>
+      )}
+
+      <Box mt={2} minH="1rem" textAlign="center">
+        {remainingCount === 0 && gradedCount > 0 && (
+          <Text fontSize="xs" color="fg.muted">
+            Tap any correction above to review it.
+          </Text>
+        )}
+      </Box>
     </Box>
   );
 }

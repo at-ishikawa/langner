@@ -53,7 +53,7 @@ export const AnswerInput = forwardRef<HTMLInputElement, Props>(
         >
           <Button
             flex="1"
-            colorPalette="blue"
+            colorPalette="brand"
             onClick={onSubmit}
             disabled={!value.trim()}
             size="lg"

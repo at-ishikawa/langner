@@ -72,7 +72,7 @@ export function PdfPreviewModal({
             )}
             {error && (
               <Box display="flex" alignItems="center" justifyContent="center" flex="1">
-                <Text color="red.500">{error}</Text>
+                <Text color="red.fg">{error}</Text>
               </Box>
             )}
             {blobUrl && (
@@ -84,7 +84,7 @@ export function PdfPreviewModal({
               Close
             </Button>
             <Button
-              colorPalette="blue"
+              colorPalette="brand"
               onClick={handleDownload}
               disabled={!blobUrl}
             >

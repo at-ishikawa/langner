@@ -71,7 +71,7 @@ Feature: Relearn Quiz
 
   # There is NO skip / "Don't know" on a grammar relearn blank. An unanswered
   # blank revealed via "See answers" is marked INCORRECT (a normal miss): its
-  # feedback opens inline (never buried below Next on a long post) and the
+  # feedback opens inline (never buried below Continue on a long post) and the
   # correction stays DUE. It must NOT be labelled or recorded as skipped and
   # must NOT be excluded. This pins the final model in
   # .claude/rules/quiz-ui-invariants.md (see also
@@ -96,3 +96,4 @@ Feature: Relearn Quiz
     And I tap See answers on the grammar relearn post
     Then the grammar relearn feedback shows "the John" is incorrect and not excluded
     And the grammar relearn post has no Exclude control
+    And I capture a desktop screenshot "relearn-grammar-feedback"

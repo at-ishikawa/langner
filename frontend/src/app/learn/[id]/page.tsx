@@ -130,7 +130,7 @@ export default function LearnContentPage() {
     <Box p={4} maxW="3xl" mx="auto" position="relative">
       <Box mb={2}>
         <Link href="/learn">
-          <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="sm">
+          <Text color="brand.fg" fontSize="sm">
             &larr; Back to Learn
           </Text>
         </Link>
@@ -326,9 +326,9 @@ function ChapterSelector({
           left={0}
           right={0}
           mt={1}
-          bg="bg.panel"
+          bg="panel"
           borderWidth="1px"
-          borderColor="border.emphasized"
+          borderColor="border"
           borderRadius="md"
           boxShadow="lg"
           zIndex={50}
@@ -378,7 +378,7 @@ function ChapterSelector({
                     bg={isHighlighted ? "bg.muted" : undefined}
                     borderLeftWidth="3px"
                     borderLeftColor={
-                      isSelected ? "blue.500" : "transparent"
+                      isSelected ? "brand.solid" : "transparent"
                     }
                   >
                     <Text

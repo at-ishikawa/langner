@@ -6,13 +6,13 @@ import {
   Box,
   Button,
   Heading,
-  Progress,
   Spinner,
   Text,
   VStack,
 } from "@chakra-ui/react";
 import { quizClient, messageForRpcError } from "@/lib/client";
 import { useQuizStore, type Flashcard } from "@/store/quizStore";
+import { QuizScaffold } from "@/components/QuizScaffold";
 import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
 import { PronounceButton } from "@/components/PronounceButton";
@@ -185,18 +185,7 @@ export default function QuizCardPage() {
   };
 
   return (
-    <Box p={4} maxW="md" mx="auto">
-      <Box mb={4}>
-        <Text fontSize="sm" mb={1}>
-          {currentIndex + 1} / {total}
-        </Text>
-        <Progress.Root value={progress} size="sm">
-          <Progress.Track>
-            <Progress.Range />
-          </Progress.Track>
-        </Progress.Root>
-      </Box>
-
+    <QuizScaffold label={`${currentIndex + 1} / ${total}`} progress={progress}>
       {phase === "batch-feedback" ? (
         <BatchFeedback
           items={batchItems}
@@ -265,9 +254,9 @@ export default function QuizCardPage() {
 
           {error && (
             <VStack align="stretch" gap={2}>
-              <Text color="red.500">{error}</Text>
+              <Text color="red.fg">{error}</Text>
               {pendingRetry && (
-                <Button w="full" colorPalette="blue" variant="outline" onClick={handleRetry}>
+                <Button w="full" colorPalette="brand" variant="outline" onClick={handleRetry}>
                   Retry grading
                 </Button>
               )}
@@ -275,6 +264,6 @@ export default function QuizCardPage() {
           )}
         </VStack>
       )}
-    </Box>
+    </QuizScaffold>
   );
 }

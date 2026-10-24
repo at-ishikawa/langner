@@ -24,7 +24,10 @@ const originTypeColors: Record<string, string> = {
   suffix: "#38A169",
 };
 
-const defaultOriginColor = "#718096";
+// Warm ink-muted (matches the design's fg.muted token) for untyped origins,
+// so the neutral node reads warm on both the paper and charcoal grounds
+// instead of a cool stock gray.
+const defaultOriginColor = "#6b6456";
 
 function getOriginColor(type: string | undefined): string {
   return originTypeColors[type?.toLowerCase() ?? ""] ?? defaultOriginColor;
@@ -275,10 +278,9 @@ export default function EtymologyMindmap({
           bottom={4}
           left="50%"
           transform="translateX(-50%)"
-          bg="white"
-          _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+          bg="panel"
           borderWidth="1px"
-          borderColor="gray.300"
+          borderColor="border"
           borderRadius="lg"
           px={4}
           py={3}
@@ -292,7 +294,7 @@ export default function EtymologyMindmap({
           <Text fontWeight="bold" fontSize="sm">
             {selectedWord.expression}
           </Text>
-          <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
+          <Text fontSize="sm" color="fg.muted">
             {selectedWord.meaning}
           </Text>
         </Box>

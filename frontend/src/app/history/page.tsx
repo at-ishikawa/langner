@@ -2,7 +2,6 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Box, Heading, Spinner, Text, VStack } from "@chakra-ui/react";
 import {
   AnalyticsFilterBar,
@@ -83,9 +82,6 @@ function HistoryPage() {
 
   return (
     <Box maxW="md" mx="auto" p={4} pb={20}>
-      <Link href="/" aria-label="Back to home">
-        <Text fontSize="sm" mb={2}>◀ Home</Text>
-      </Link>
       <Heading size="lg" mb={3}>
         History
       </Heading>
@@ -97,7 +93,7 @@ function HistoryPage() {
       />
 
       {error && (
-        <Text color="red.500" data-testid="analytics-error">
+        <Text color="red.fg" data-testid="analytics-error">
           Failed to load analytics: {error}
         </Text>
       )}

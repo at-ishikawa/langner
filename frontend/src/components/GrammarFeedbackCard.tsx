@@ -15,9 +15,9 @@ import { GrammarCorrectionBody } from "@/components/GrammarCorrectionBody";
 // Quiz's grammar card).
 
 const STATUS = {
-  correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓", label: "Correct", border: "green.200", darkBorder: "green.700" },
-  incorrect: { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗", label: "Incorrect", border: "red.200", darkBorder: "red.700" },
-  skipped: { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300", glyph: "—", label: "Excluded", border: "gray.200", darkBorder: "gray.600" },
+  correct: { bg: "green.subtle", color: "green.fg", glyph: "✓", label: "Correct", border: "green.emphasized" },
+  incorrect: { bg: "red.subtle", color: "red.fg", glyph: "✗", label: "Incorrect", border: "red.emphasized" },
+  skipped: { bg: "gray.subtle", color: "gray.fg", glyph: "—", label: "Excluded", border: "border" },
 } as const;
 
 function statusOf(r: GrammarResultState): keyof typeof STATUS {
@@ -49,7 +49,6 @@ export function GrammarFeedbackCard({
     <Box
       borderWidth="1px"
       borderColor={s.border}
-      _dark={{ borderColor: s.darkBorder }}
       borderRadius="md"
       p={3}
       opacity={result.isSkipped ? 0.75 : 1}
@@ -58,7 +57,6 @@ export function GrammarFeedbackCard({
       <Box display="flex" alignItems="center" gap={2} mb={2}>
         <Box
           bg={s.bg}
-          _dark={{ bg: s.darkBg }}
           px={2}
           py={0.5}
           borderRadius="full"
@@ -67,10 +65,10 @@ export function GrammarFeedbackCard({
           gap={1}
           flexShrink={0}
         >
-          <Text as="span" fontSize="xs" fontWeight="bold" color={s.color} _dark={{ color: s.darkColor }}>
+          <Text as="span" fontSize="xs" fontWeight="bold" color={s.color}>
             {s.glyph}
           </Text>
-          <Text as="span" fontSize="xs" fontWeight="medium" color={s.color} _dark={{ color: s.darkColor }}>
+          <Text as="span" fontSize="xs" fontWeight="medium" color={s.color}>
             {s.label}
           </Text>
         </Box>
@@ -103,20 +101,20 @@ export function GrammarFeedbackCard({
           <Button
             size="sm"
             variant="outline"
-            colorPalette={item.correct ? "red" : "blue"}
+            colorPalette={item.correct ? "red" : "brand"}
             onClick={() => onOverride(item)}
           >
-            {item.correct ? "Mark as Incorrect" : "Mark as Correct"}
+            {item.correct ? "Mark as incorrect" : "Mark as correct"}
           </Button>
         )}
         {item.isOverridden && item.noteId && item.learnedAt && (
-          <Button size="sm" variant="ghost" colorPalette="blue" onClick={() => onUndo(item)}>
+          <Button size="sm" variant="ghost" colorPalette="brand" onClick={() => onUndo(item)}>
             Undo override
           </Button>
         )}
         {item.isSkipped
           ? item.noteId && (
-              <Button size="sm" variant="outline" colorPalette="blue" onClick={() => onResume(item)}>
+              <Button size="sm" variant="outline" colorPalette="brand" onClick={() => onResume(item)}>
                 Resume
               </Button>
             )

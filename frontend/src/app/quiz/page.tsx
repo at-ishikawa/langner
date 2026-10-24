@@ -51,6 +51,21 @@ export default function QuizHubPage() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Daily session target: a soft goal for how many words to review in one
+  // sitting, so a large backlog becomes a bounded, finishable session instead
+  // of an impossible "review everything". Whatever isn't picked simply stays
+  // due for a later day. Remembered across visits in localStorage; read in an
+  // effect (not during render) to avoid an SSR hydration mismatch.
+  const [sessionTarget, setSessionTarget] = useState(40);
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem("langner.sessionTarget"));
+    if (Number.isFinite(saved) && saved > 0) setSessionTarget(saved);
+  }, []);
+  const chooseTarget = (n: number) => {
+    setSessionTarget(n);
+    window.localStorage.setItem("langner.sessionTarget", String(n));
+  };
+
   const setFlashcards = useQuizStore((s) => s.setFlashcards);
   const setReverseFlashcards = useQuizStore((s) => s.setReverseFlashcards);
   const setWordCount = useQuizStore((s) => s.setWordCount);
@@ -92,6 +107,25 @@ export default function QuizHubPage() {
         initialLoadRef.current = false;
       });
   }, [includeUnstudied]);
+
+  // Deep link from the Today dashboard: ?notebook=<id> opens the vocabulary
+  // planner focused on that one notebook — standard mode, the notebook
+  // pre-picked and expanded to its chapters — so starting a bounded session is
+  // one more tap. Applied ONCE, and only after the notebook list has loaded:
+  // selecting before the fetch resolves would be wiped by the effect that
+  // prunes selections not present in displayedNotebooks (empty pre-fetch).
+  const appliedNotebookDeepLink = useRef(false);
+  useEffect(() => {
+    if (appliedNotebookDeepLink.current || notebooks.length === 0) return;
+    appliedNotebookDeepLink.current = true;
+    const nb = new URLSearchParams(window.location.search).get("notebook");
+    if (nb && notebooks.some((n) => n.notebookId === nb)) {
+      setTab("vocabulary");
+      setSelectedVocabMode("standard");
+      setSelectedIds(new Set([nb]));
+      setExpandedIds(new Set([nb]));
+    }
+  }, [notebooks]);
 
   const selectedMode = selectedVocabMode;
 
@@ -351,24 +385,18 @@ export default function QuizHubPage() {
 
   if (loading) {
     return (
-      <Box maxW="sm" mx="auto" p={4} textAlign="center">
+      <Box maxW="xl" mx="auto" p={4} textAlign="center">
         <Spinner size="lg" />
       </Box>
     );
   }
 
   return (
-    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh">
-      {/* Header */}
-      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
-        <Box px={4} pt={2}>
-          <Link href="/">
-            <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">&lt; Home</Text>
-          </Link>
-        </Box>
-        <Box px={4} pb={3} textAlign="center">
-          <Heading size="md">Quiz</Heading>
-        </Box>
+    <Box maxW="xl" mx="auto">
+      {/* Header — left-aligned editorial title, consistent with every other
+          content page (Today / Analytics / Books / History / Settings). */}
+      <Box px={4} pt={6} pb={3}>
+        <Heading size="lg">Quiz</Heading>
       </Box>
 
       {/* No API key yet: grading will fail until the user registers one, so
@@ -399,7 +427,7 @@ export default function QuizHubPage() {
 
       {/* Tabs — Vocabulary switches mode cards in place; Relearn and Grammar are
           cross-quiz-type flows whose tabs navigate to their own start screens. */}
-      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200" display="flex">
+      <Box bg="bg" borderBottomWidth="1px" borderColor="border" display="flex">
         {(["vocabulary", "relearn", "grammar"] as Tab[]).map((t) => (
           <Box
             key={t}
@@ -413,8 +441,7 @@ export default function QuizHubPage() {
             <Text
               fontSize="sm"
               fontWeight={tab === t ? "semibold" : "normal"}
-              color={tab === t ? "blue.600" : "gray.500"}
-              _dark={{ color: tab === t ? "blue.300" : "gray.400" }}
+              color={tab === t ? "brand.fg" : "fg.muted"}
             >
               {t === "vocabulary" ? "Vocabulary" : t === "relearn" ? "Relearn" : "Grammar"}
             </Text>
@@ -427,8 +454,7 @@ export default function QuizHubPage() {
                 w="60%"
                 h="3px"
                 borderRadius="full"
-                bg="blue.600"
-                _dark={{ bg: "blue.300" }}
+                bg="brand.solid"
               />
             )}
           </Box>
@@ -449,10 +475,9 @@ export default function QuizHubPage() {
             <Box
               key={mode.key}
               p={4}
-              bg="white"
+              bg="panel"
               borderWidth={isSelected ? "2px" : "1px"}
-              borderColor={isSelected ? "blue.600" : "gray.200"}
-              _dark={{ bg: "gray.800", borderColor: isSelected ? "blue.400" : "gray.600" }}
+              borderColor={isSelected ? "brand.solid" : "border"}
               borderRadius="lg"
               cursor="pointer"
               onClick={() => handleModeSelect(mode.key)}
@@ -460,10 +485,10 @@ export default function QuizHubPage() {
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Text fontWeight="semibold" fontSize="md">{mode.title}</Text>
-                  <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>{mode.description}</Text>
+                  <Text fontSize="xs" color="fg.muted">{mode.description}</Text>
                 </Box>
                 {!isSelected && (
-                  <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} flexShrink={0}>&rsaquo;</Text>
+                  <Text fontSize="sm" color="fg.muted" flexShrink={0}>&rsaquo;</Text>
                 )}
               </Box>
             </Box>
@@ -507,7 +532,7 @@ export default function QuizHubPage() {
                   onChange={(e) => setFeedbackIntervalText(e.target.value)}
                   placeholder="10"
                 />
-                <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+                <Text fontSize="xs" color="fg.muted" mt={1}>
                   See feedback for multiple answers at once. Default: 10.
                 </Text>
               </Box>
@@ -522,8 +547,41 @@ export default function QuizHubPage() {
               Select notebooks
             </Text>
 
+            {/* Daily session target — a soft, bounded goal so a big backlog
+                becomes a finishable session. Drives the guidance below the
+                picker; the rest always stays due for a later day. */}
+            <Box display="flex" alignItems="center" gap={2} mb={3} flexWrap="wrap">
+              <Text fontSize="xs" color="fg.muted">
+                Session target
+              </Text>
+              {[20, 40, 60].map((n) => {
+                const active = sessionTarget === n;
+                return (
+                  <Box
+                    as="button"
+                    key={n}
+                    onClick={() => chooseTarget(n)}
+                    px={3}
+                    py={1}
+                    borderRadius="full"
+                    borderWidth="1px"
+                    fontSize="xs"
+                    fontFamily="mono"
+                    cursor="pointer"
+                    bg={active ? "brand.solid" : "transparent"}
+                    color={active ? "brand.contrast" : "fg.muted"}
+                    borderColor={active ? "brand.solid" : "border"}
+                    css={{ fontVariantNumeric: "tabular-nums" }}
+                    aria-pressed={active}
+                  >
+                    {n}
+                  </Box>
+                );
+              })}
+            </Box>
+
             {displayedNotebooks.length === 0 ? (
-              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={2}>
+              <Text fontSize="sm" color="fg.muted" mt={2}>
                 {isFreeformMode ? (
                   "No notebooks available for this mode."
                 ) : (
@@ -563,12 +621,17 @@ export default function QuizHubPage() {
                               <Text>
                                 {notebook.name}
                                 {partial && (
-                                  <Text as="span" color="gray.500" fontSize="xs" ml={1}>
+                                  <Text as="span" color="fg.muted" fontSize="xs" ml={1}>
                                     ({sel!.size}/{sections.length})
                                   </Text>
                                 )}
                               </Text>
-                              <Text color="gray.500" fontSize="sm">
+                              <Text
+                                color="fg.muted"
+                                fontSize="sm"
+                                fontFamily="mono"
+                                css={{ fontVariantNumeric: "tabular-nums" }}
+                              >
                                 {pickModeCount(notebook)}
                               </Text>
                             </Box>
@@ -579,8 +642,7 @@ export default function QuizHubPage() {
                             as="button"
                             onClick={() => toggleExpanded(notebook.notebookId)}
                             fontSize="xs"
-                            color="blue.600"
-                            _dark={{ color: "blue.300" }}
+                            color="brand.fg"
                             cursor="pointer"
                             px={2}
                             aria-label={expanded ? "Hide sections" : "Show sections"}
@@ -600,10 +662,17 @@ export default function QuizHubPage() {
                             >
                               <Checkbox.HiddenInput />
                               <Checkbox.Control />
-                              <Checkbox.Label fontSize="sm" color="gray.700" _dark={{ color: "gray.300" }} flex="1">
+                              <Checkbox.Label fontSize="sm" color="fg" flex="1">
                                 <Box display="flex" justifyContent="space-between" w="full">
                                   <Text as="span" truncate>{section.title}</Text>
-                                  <Text as="span" color="gray.500" fontSize="xs" ml={2}>
+                                  <Text
+                                    as="span"
+                                    color="fg.muted"
+                                    fontSize="xs"
+                                    ml={2}
+                                    fontFamily="mono"
+                                    css={{ fontVariantNumeric: "tabular-nums" }}
+                                  >
                                     {pickModeCount(section)}
                                   </Text>
                                 </Box>
@@ -619,16 +688,23 @@ export default function QuizHubPage() {
             )}
 
             {displayedNotebooks.length > 0 && (
-              <Text mt={4} fontWeight="bold" textAlign="center">
-                {totalDue} words due for review
-              </Text>
+              <Box mt={4} textAlign="center">
+                <Text fontWeight="bold">{totalDue} words selected</Text>
+                <Text fontSize="xs" color="fg.muted" mt={1}>
+                  {totalDue === 0
+                    ? `Pick a notebook or a few chapters — aim for about ${sessionTarget}.`
+                    : totalDue <= sessionTarget
+                      ? "A good session — whatever you don't pick stays due for a later day."
+                      : `More than today's target of ${sessionTarget}. Fewer chapters is fine; the rest stays due for later.`}
+                </Text>
+              </Box>
             )}
           </Box>
         )}
 
         {/* Freeform vocab -- no notebook selection needed */}
         {tab === "vocabulary" && selectedVocabMode === "freeform" && (
-          <Text color="gray.600" _dark={{ color: "gray.400" }} textAlign="center">
+          <Text color="fg.muted" textAlign="center">
             {notebooks.reduce((sum, n) => sum + n.reviewCount, 0)} words
             available across all notebooks
           </Text>
@@ -639,7 +715,7 @@ export default function QuizHubPage() {
           <Button
             mt={2}
             w="full"
-            colorPalette="blue"
+            colorPalette="brand"
             disabled={
               (showNotebookSelection && selectedIds.size === 0) || starting
             }
@@ -650,7 +726,7 @@ export default function QuizHubPage() {
         )}
 
         {error && (
-          <Text color="red.500" mt={2}>{error}</Text>
+          <Text color="red.fg" mt={2}>{error}</Text>
         )}
       </Box>
       )}

@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Text, VStack } from "@chakra-ui/react";
+import { PageShell } from "@/components/PageShell";
 import { useGrammarStore } from "@/store/grammarStore";
 import { GrammarResultsGroupedList } from "@/components/GrammarResultsGroupedList";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
@@ -32,46 +33,40 @@ export default function GrammarCompletePage() {
   };
 
   return (
-    <Box p={4} maxW="sm" mx="auto">
-      <Heading size="lg" mb={4}>
-        Grammar Session Complete
-      </Heading>
-
+    <PageShell title="Session summary" maxW="xl" stickyFooter>
       <VStack align="stretch" gap={3} mb={6}>
-        <Text fontWeight="bold">Total: {results.length} corrections</Text>
-        <Text color="green.600" _dark={{ color: "green.300" }} fontWeight="bold">
+        <Text fontWeight="bold">Answered: {results.length} corrections</Text>
+        <Text color="green.fg" fontWeight="bold">
           Correct: {correctCount}
         </Text>
-        <Text color="red.600" _dark={{ color: "red.300" }} fontWeight="bold">
+        <Text color="red.fg" fontWeight="bold">
           Incorrect: {incorrectCount}
         </Text>
       </VStack>
 
-      <Box pb={20}>
-        <GrammarResultsGroupedList
-          results={results}
-          onOverride={handleOverride}
-          onUndo={handleUndo}
-          onSkip={handleSkip}
-          onResume={handleResume}
-        />
-      </Box>
+      <GrammarResultsGroupedList
+        results={results}
+        onOverride={handleOverride}
+        onUndo={handleUndo}
+        onSkip={handleSkip}
+        onResume={handleResume}
+      />
 
       <Box
         position="sticky"
         bottom={0}
-        bg="white"
-        _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+        bg="bg"
         borderTopWidth="1px"
-        borderTopColor="gray.200"
+        borderTopColor="border"
         mx={-4}
         px={4}
         py={3}
+        mt={6}
       >
-        <Button w="full" colorPalette="blue" onClick={handleBackToStart}>
-          Back to Start
+        <Button w="full" colorPalette="brand" onClick={handleBackToStart}>
+          Done
         </Button>
       </Box>
-    </Box>
+    </PageShell>
   );
 }

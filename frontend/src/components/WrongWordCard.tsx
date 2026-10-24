@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Badge, Box, Button, HStack, Spinner, Text, VStack } from "@chakra-ui/react";
+import { Card } from "./Card";
 import { PatternGlyphs } from "./PatternGlyphs";
 import { QuizTypeChip } from "./QuizTypeChip";
 import { analyticsClient, type WrongWord, type AttemptEntry, type RelatedGroup } from "@/lib/client";
@@ -130,13 +131,9 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
   }
 
   return (
-    <Box
-      borderWidth="1px"
-      borderRadius="lg"
+    <Card
       p={4}
       mb={3}
-      bg="white"
-      _dark={{ bg: "gray.800" }}
       data-testid={`wrong-word-${word.expression}-${word.quizType}`}
     >
       <Box as="button" onClick={toggle} width="100%" textAlign="left" aria-expanded={expanded}>
@@ -146,7 +143,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
           </Text>
         )}
         <HStack mb={1}>
-          <Text fontSize="lg" color="red.500" aria-hidden="true">
+          <Text fontSize="lg" color="red.fg" aria-hidden="true">
             ✗
           </Text>
           <Text fontWeight="bold" fontSize="lg">
@@ -215,7 +212,13 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
               </Text>
               {(word.relatedGroups ?? []).map((g, i) => (
                 <Box key={`${g.kind}-${i}`} data-testid={`related-group-${g.kind}`}>
-                  <Text fontSize="xs" color="fg.muted" textTransform="uppercase">
+                  <Text
+                    fontFamily="mono"
+                    fontSize="xs"
+                    color="fg.muted"
+                    textTransform="uppercase"
+                    letterSpacing="0.12em"
+                  >
                     {g.kind === "concept"
                       ? "Same sense"
                       : g.kind === "origin_family"
@@ -230,7 +233,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
           )}
           {loading && <Spinner size="sm" data-testid="word-history-loading" />}
           {error && (
-            <Text color="red.500" fontSize="sm">
+            <Text color="red.fg" fontSize="sm">
               Failed to load history: {error}
             </Text>
           )}
@@ -240,7 +243,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
                 <HStack key={i} fontSize="sm" justifyContent="space-between" data-testid="attempt-row">
                   <Text>{formatAttemptDate(a.date)}</Text>
                   <QuizTypeChip quizType={a.quizType} />
-                  <Text color={a.result === "wrong" ? "red.500" : "green.600"}>
+                  <Text color={a.result === "wrong" ? "red.fg" : "green.fg"}>
                     {a.result === "wrong" ? "✗ wrong" : "✓ correct"}
                   </Text>
                   <Text>Q{a.quality}</Text>
@@ -266,6 +269,6 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
           )}
         </Box>
       )}
-    </Box>
+    </Card>
   );
 }

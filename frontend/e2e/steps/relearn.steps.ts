@@ -40,13 +40,13 @@ Then("I see a relearn card", async ({ page }) => {
 // answered wrong once (recording the answer), then correct. Recognition cards
 // clear on the first non-"wrong" answer. Every card clears within two passes.
 //
-// exact:true is required on the button names: `next dev` injects a "Open
-// Next.js Dev Tools" button whose accessible name contains "Next", which a
-// loose name match collides with.
+// exact:true is kept on the button names defensively: `next dev` injects an
+// "Open Next.js Dev Tools" button, so pinning exact names avoids any loose
+// substring collision with injected dev-only controls.
 When("I clear every remaining relearn card", async ({ page }) => {
   const answers = new Map<string, string>();
   const submit = page.getByRole("button", { name: "Submit", exact: true });
-  const next = page.getByRole("button", { name: "Next", exact: true });
+  const next = page.getByRole("button", { name: "Continue", exact: true });
   const grammarPost = page.getByTestId("relearn-grammar-post");
   const grammarNext = page.getByTestId("relearn-grammar-next");
   const seeAnswers = page.getByRole("button", { name: /See answers/ });
@@ -55,7 +55,7 @@ When("I clear every remaining relearn card", async ({ page }) => {
     // Settle on the next screen — a single-item Submit card, a grammar post, or
     // the complete page — before acting. A grammar relearn post has NO Submit
     // and is not a single textbox (it's a fill-the-blanks post graded via "See
-    // answers" → "Next"), so blindly waiting for Submit hangs when a grammar
+    // answers" → "Continue"), so blindly waiting for Submit hangs when a grammar
     // post is the remaining card (or during the transition frame after the
     // previous post is dropped and the session navigates to complete).
     await page.waitForFunction(
@@ -119,13 +119,13 @@ When("I clear every remaining relearn card", async ({ page }) => {
 // entry is shown once and each blank is graded progressively the moment it is
 // committed (blur/Enter), with no per-card Submit; the reference correction hits
 // GradeGrammarBlank's deterministic fast path (correct without the mock LLM).
-// After the blank turns into a "correct" pill, one "Next" advances past the
+// After the blank turns into a "correct" pill, one "Continue" advances past the
 // whole post so "I clear every remaining relearn card" can drain the rest.
 When(
   "I find and fix the grammar relearn card for {string} with {string}",
   async ({ page }, incorrect: string, answer: string) => {
     const dontKnow = page.getByRole("button", { name: "Don't Know", exact: true });
-    const cardNext = page.getByRole("button", { name: "Next", exact: true });
+    const cardNext = page.getByRole("button", { name: "Continue", exact: true });
     const grammarInput = page.getByLabel(`Correction for "${incorrect}"`);
     const grammarNext = page.getByTestId("relearn-grammar-next");
 
@@ -186,7 +186,7 @@ When(
   "I open the grammar relearn post for {string}",
   async ({ page }, incorrect: string) => {
     const dontKnow = page.getByRole("button", { name: "Don't Know", exact: true });
-    const cardNext = page.getByRole("button", { name: "Next", exact: true });
+    const cardNext = page.getByRole("button", { name: "Continue", exact: true });
     const grammarInput = page.getByLabel(`Correction for "${incorrect}"`);
     const grammarPost = page.getByTestId("relearn-grammar-post");
     const seeAnswers = page.getByRole("button", { name: /See answers/ });
@@ -258,6 +258,16 @@ Then(
   "the grammar relearn post has no Exclude control",
   async ({ page }) => {
     await expect(page.getByRole("button", { name: /Exclude/i })).toHaveCount(0);
+  },
+);
+
+// Save a success-path screenshot at the Desktop Chrome viewport so the rendered
+// Relearn feedback layout (inline on desktop) can be reviewed as a CI artifact,
+// not only asserted — the workflow uploads frontend/test-results/*.png always.
+Then(
+  "I capture a desktop screenshot {string}",
+  async ({ page }, name: string) => {
+    await page.screenshot({ path: `test-results/${name}.png`, fullPage: true });
   },
 );
 

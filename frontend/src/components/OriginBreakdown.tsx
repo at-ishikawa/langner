@@ -38,11 +38,11 @@ export function OriginBreakdown({ parts }: { parts: OriginPartDisplay[] }) {
         return (
           <Box key={i} display="flex" alignItems="center" gap={1}>
             {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-            <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
+            <Text fontSize="xs" color="brand.fg" fontFamily="mono" fontWeight="medium">{p.origin}</Text>
             <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
             {p.language && (
-              <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
-                <Text fontSize="2xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
+              <Box px={1.5} py={0} borderRadius="full" bg="bg.muted">
+                <Text fontSize="2xs" color="fg.muted">{p.language}</Text>
               </Box>
             )}
             {typeBadge && p.type && (

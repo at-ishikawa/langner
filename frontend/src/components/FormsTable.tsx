@@ -47,8 +47,8 @@ export function FormsTable({ forms, highlightForm }: FormsTableProps) {
               px={2}
               py={1}
               borderRadius="md"
-              bg={isMatch ? "yellow.100" : "gray.50"}
-              _dark={{ bg: isMatch ? "yellow.900" : "gray.800" }}
+              bg={isMatch ? "yellow.100" : "bg.subtle"}
+              _dark={isMatch ? { bg: "yellow.900" } : undefined}
               borderLeftWidth={isMatch ? "3px" : "0"}
               borderLeftColor="yellow.500"
             >

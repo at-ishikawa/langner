@@ -6,13 +6,13 @@ import {
   Box,
   Button,
   Heading,
-  Progress,
   Spinner,
   Text,
   VStack,
 } from "@chakra-ui/react";
 import { quizClient, messageForRpcError, type SubmitReverseAnswerResponse } from "@/lib/client";
 import { useQuizStore, type ReverseFlashcard } from "@/store/quizStore";
+import { QuizScaffold } from "@/components/QuizScaffold";
 import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
 import { reverseResultToItem } from "@/lib/quizResultItems";
@@ -306,18 +306,7 @@ export default function ReverseQuizPage() {
   const retryCard = currentRetrySlot ? bufferRef.current[currentRetrySlot.index]?.card : null;
 
   return (
-    <Box p={4} maxW="md" mx="auto">
-      <Box mb={4}>
-        <Text fontSize="sm" mb={1}>
-          {currentIndex + 1} / {total}
-        </Text>
-        <Progress.Root value={progress} size="sm">
-          <Progress.Track>
-            <Progress.Range />
-          </Progress.Track>
-        </Progress.Root>
-      </Box>
-
+    <QuizScaffold label={`${currentIndex + 1} / ${total}`} progress={progress}>
       {phase === "batch-feedback" ? (
         <BatchFeedback
           items={batchItems}
@@ -339,17 +328,12 @@ export default function ReverseQuizPage() {
           <Text fontSize="sm" color="fg.muted">
             Retry {retryQueueIdx + 1} / {retrySlotsRef.current.length}
           </Text>
-          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
+          <Heading size="xl" textAlign="center" color="brand.fg">
             {retryCard.meaning}
           </Heading>
 
-          <Box
-            p={3}
-            borderRadius="md"
-            bg="orange.100"
-            color="orange.800"
-            _dark={{ bg: "orange.900", color: "orange.200" }}
-          >
+          <Box p={3} borderRadius="md" bg="orange.subtle" color="orange.fg">
+
             <Text fontWeight="bold">
               That&apos;s a valid synonym! But we&apos;re looking for a specific word.
             </Text>
@@ -361,7 +345,7 @@ export default function ReverseQuizPage() {
           {retryCard.contexts.length > 0 && (
             <VStack align="stretch" gap={2}>
               {retryCard.contexts.map((ctx, i) => (
-                <Text key={i} fontSize="md" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
+                <Text key={i} fontSize="md" color="fg.muted" fontStyle="italic">
                   {ctx.maskedContext}
                 </Text>
               ))}
@@ -380,8 +364,8 @@ export default function ReverseQuizPage() {
           />
           {error && (
             <VStack align="stretch" gap={2}>
-              <Text color="red.500">{error}</Text>
-              <Button w="full" colorPalette="blue" variant="outline" onClick={flushRetryBatch}>
+              <Text color="red.fg">{error}</Text>
+              <Button w="full" colorPalette="brand" variant="outline" onClick={flushRetryBatch}>
                 Retry grading
               </Button>
             </VStack>
@@ -389,14 +373,14 @@ export default function ReverseQuizPage() {
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
-          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
+          <Heading size="xl" textAlign="center" color="brand.fg">
             {card.meaning}
           </Heading>
 
           {card.contexts.length > 0 && (
             <VStack align="stretch" gap={2}>
               {card.contexts.map((ctx, i) => (
-                <Text key={i} fontSize="md" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
+                <Text key={i} fontSize="md" color="fg.muted" fontStyle="italic">
                   {ctx.maskedContext}
                 </Text>
               ))}
@@ -416,14 +400,14 @@ export default function ReverseQuizPage() {
 
           {error && (
             <VStack align="stretch" gap={2}>
-              <Text color="red.500">{error}</Text>
-              <Button w="full" colorPalette="blue" variant="outline" onClick={() => void flushBatch(bufferRef.current)}>
+              <Text color="red.fg">{error}</Text>
+              <Button w="full" colorPalette="brand" variant="outline" onClick={() => void flushBatch(bufferRef.current)}>
                 Retry grading
               </Button>
             </VStack>
           )}
         </VStack>
       )}
-    </Box>
+    </QuizScaffold>
   );
 }

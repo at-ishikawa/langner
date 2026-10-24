@@ -51,7 +51,7 @@ export default function RelearnStart() {
 
   return (
     <Box p={4}>
-      <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }} mb={4}>
+      <Text fontSize="sm" color="fg.muted" mb={4}>
         Re-drill the words you recently got wrong. Nothing here is saved to your history or schedule.
       </Text>
 
@@ -69,12 +69,8 @@ export default function RelearnStart() {
             py={2}
             borderWidth="1px"
             borderRadius="md"
-            borderColor={windowHours === opt.hours ? "purple.500" : "gray.200"}
-            bg={windowHours === opt.hours ? "purple.50" : "white"}
-            _dark={{
-              bg: windowHours === opt.hours ? "purple.900" : "gray.800",
-              borderColor: windowHours === opt.hours ? "purple.300" : "gray.600",
-            }}
+            borderColor={windowHours === opt.hours ? "brand.solid" : "border"}
+            bg={windowHours === opt.hours ? "brand.subtle" : "panel"}
           >
             <Text fontSize="sm">
               {opt.label}
@@ -89,7 +85,7 @@ export default function RelearnStart() {
           <Spinner size="sm" />
         </Box>
       ) : error ? (
-        <Text color="red.500" fontSize="sm" py={2} role="alert">
+        <Text color="red.fg" fontSize="sm" py={2} role="alert">
           {error}
         </Text>
       ) : cards.length === 0 ? (
@@ -98,7 +94,7 @@ export default function RelearnStart() {
           <Text fontSize="sm" fontWeight="medium" mt={1}>
             Nothing to relearn.
           </Text>
-          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
+          <Text fontSize="xs" color="fg.muted">
             You&apos;re all caught up for this window. Try widening it above.
           </Text>
         </Box>
@@ -109,7 +105,7 @@ export default function RelearnStart() {
       )}
 
       <Button
-        colorPalette="purple"
+        colorPalette="brand"
         w="full"
         mt={2}
         onClick={handleStart}

@@ -34,11 +34,11 @@ export function BatchFeedback({
         Feedback
       </Heading>
       <Box mb={4}>
-        <Text fontWeight="bold">Batch: {items.length} words</Text>
-        <Text color="green.600" _dark={{ color: "green.300" }} fontWeight="bold">
+        <Text fontWeight="bold">Answered: {items.length}</Text>
+        <Text color="green.fg" fontWeight="bold">
           Correct: {correctCount}
         </Text>
-        <Text color="red.600" _dark={{ color: "red.300" }} fontWeight="bold">
+        <Text color="red.fg" fontWeight="bold">
           Incorrect: {incorrectCount}
         </Text>
       </Box>
@@ -56,22 +56,25 @@ export function BatchFeedback({
       <Box
         position="sticky"
         bottom={0}
-        bg="white"
-        _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+        bg="bg"
         borderTopWidth="1px"
-        borderTopColor="gray.200"
+        borderTopColor="border"
         mx={-4}
         px={4}
         py={3}
         display="flex"
+        flexDirection="column"
         gap={2}
       >
-        <Button flex="1" colorPalette="blue" onClick={isFinal ? onSeeResults : onContinue}>
-          {isFinal ? "See Results" : "Continue"}
+        {/* One clear primary action: keep going, or (on the last batch) go to the
+            summary. Stopping early is a quiet, de-emphasized secondary so it
+            never competes with "Continue". */}
+        <Button w="full" colorPalette="brand" onClick={isFinal ? onSeeResults : onContinue}>
+          {isFinal ? "See summary" : "Continue"}
         </Button>
         {!isFinal && (
-          <Button flex="1" variant="outline" colorPalette="green" onClick={onSeeResults}>
-            See Results
+          <Button w="full" variant="ghost" size="sm" color="fg.muted" onClick={onSeeResults}>
+            Finish
           </Button>
         )}
       </Box>

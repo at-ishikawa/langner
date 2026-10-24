@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Text, VStack } from "@chakra-ui/react";
+import { PageShell } from "@/components/PageShell";
 
 // Today as YYYY-MM-DD in the browser's local zone. The backend buckets
 // learning records by the time's stored zone (server-local), so using
@@ -41,7 +42,7 @@ export default function SessionCompletePage() {
   }, [results, reverseResults, freeformResults]);
 
   // When the page loads with no results (e.g. navigated here directly), bounce
-  // home. But NOT when the user clicks "Back to Start": that handler calls
+  // home. But NOT when the user clicks "Done": that handler calls
   // reset() — which empties allResults — and then pushes to /quiz. Without this
   // guard the empty-results effect races that push and can win, landing the user
   // on "/" instead of /quiz (flaky on slow deploys; a real wrong-destination bug).
@@ -69,44 +70,38 @@ export default function SessionCompletePage() {
   };
 
   return (
-    <Box p={4} maxW="sm" mx="auto">
-      <Heading size="lg" mb={4}>
-        Session Complete
-      </Heading>
-
+    <PageShell title="Session summary" maxW="xl" stickyFooter>
       <VStack align="stretch" gap={3} mb={6}>
-        <Text fontWeight="bold">Total: {allResults.length} words</Text>
-        <Text color="green.600" _dark={{ color: "green.300" }} fontWeight="bold">
+        <Text fontWeight="bold">Answered: {allResults.length} words</Text>
+        <Text color="green.fg" fontWeight="bold">
           Correct: {correctCount}
         </Text>
-        <Text color="red.600" _dark={{ color: "red.300" }} fontWeight="bold">
+        <Text color="red.fg" fontWeight="bold">
           Incorrect: {incorrectCount}
         </Text>
       </VStack>
 
-      <Box pb={20}>
-        <QuizResultsGroupedList
-          items={allResults}
-          onOverride={handleOverride}
-          onUndo={handleUndo}
-          onSkip={handleSkip}
-          onResume={handleResume}
-        />
-      </Box>
+      <QuizResultsGroupedList
+        items={allResults}
+        onOverride={handleOverride}
+        onUndo={handleUndo}
+        onSkip={handleSkip}
+        onResume={handleResume}
+      />
 
       <Box
         position="sticky"
         bottom={0}
-        bg="white"
-        _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+        bg="bg"
         borderTopWidth="1px"
-        borderTopColor="gray.200"
+        borderTopColor="border"
         mx={-4}
         px={4}
         py={3}
+        mt={6}
       >
-        <Button w="full" colorPalette="blue" onClick={handleBackToStart}>
-          Back to Start
+        <Button w="full" colorPalette="brand" onClick={handleBackToStart}>
+          Done
         </Button>
         {incorrectCount > 0 && (
           <Box mt={2} textAlign="center">
@@ -114,13 +109,13 @@ export default function SessionCompletePage() {
               href={`/history/${localTodayYYYYMMDD()}`}
               data-testid="review-wrong-link"
             >
-              <Text fontSize="sm" color="blue.500">
+              <Text fontSize="sm" color="brand.fg">
                 Review what you got wrong today →
               </Text>
             </Link>
           </Box>
         )}
       </Box>
-    </Box>
+    </PageShell>
   );
 }

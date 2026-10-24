@@ -326,7 +326,7 @@ describe("RelearnOriginPost", () => {
     fireEvent.click(chip);
 
     const flip = await screen.findByTestId("relearn-origin-override");
-    expect(flip).toHaveTextContent("Mark as Incorrect");
+    expect(flip).toHaveTextContent("Mark as incorrect");
     fireEvent.click(flip);
 
     // Chip now reflects the override, and NO extra grading call fired.
@@ -365,7 +365,7 @@ describe("RelearnOriginPost", () => {
     // Wrong answers auto-open the sheet.
     await screen.findByTestId("relearn-origin-feedback");
     const flip = await screen.findByTestId("relearn-origin-override");
-    expect(flip).toHaveTextContent("Mark as Correct");
+    expect(flip).toHaveTextContent("Mark as correct");
     fireEvent.click(flip);
 
     await screen.findByRole("button", { name: "liberty — correct" });
@@ -403,7 +403,7 @@ describe("RelearnOriginPost", () => {
     fireEvent.click(await screen.findByTestId("relearn-origin-override-undo"));
     // Back to the grader's verdict, and the flip control returns.
     await screen.findByRole("button", { name: "liberty — correct" });
-    expect(screen.getByTestId("relearn-origin-override")).toHaveTextContent("Mark as Incorrect");
+    expect(screen.getByTestId("relearn-origin-override")).toHaveTextContent("Mark as incorrect");
   });
 
   it("disables 'See answers' while a word is grading, and never empty-submits the in-flight word", async () => {

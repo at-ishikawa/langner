@@ -2,13 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   Box,
   Button,
   Heading,
   Input,
-  Progress,
   Spinner,
   Text,
   VStack,
@@ -16,6 +14,7 @@ import {
 import { quizClient, messageForRpcError, type GrammarPostCard, type GrammarBlank } from "@/lib/client";
 import { useGrammarStore, type GrammarResultState } from "@/store/grammarStore";
 import { GrammarFeedbackCard } from "@/components/GrammarFeedbackCard";
+import { QuizProgress } from "@/components/QuizProgress";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
 import { segmentPost, PILL_STYLES, type PostSegment } from "@/lib/grammarSegments";
@@ -117,7 +116,7 @@ export default function GrammarQuizPage() {
 
   if (posts.length === 0 || !post) {
     return (
-      <Box maxW="sm" mx="auto" p={4} textAlign="center">
+      <Box maxW="xl" mx="auto" p={4} textAlign="center">
         <Spinner size="lg" />
       </Box>
     );
@@ -141,8 +140,8 @@ export default function GrammarQuizPage() {
   const remainingCount = totalBlanks - gradedCount - gradingCount;
   // Let the learner stop the session at any time, mirroring the vocab/etymology
   // BatchFeedback footer. Available in every state except when the primary button is
-  // already the terminal "See results" (last post, none remaining) — then it would
-  // duplicate. If anything's been graded it reads "See results"; otherwise "Stop quiz".
+  // already the terminal "See summary" (last post, none remaining) — then it would
+  // duplicate. The exit always reads "Finish".
   const showExit = !(isLastPost && remainingCount === 0);
   const correctCount = orderedKeys.filter((k) => postResults.get(k)?.result.correct).length;
   const unreviewedWrong = orderedKeys.filter((k) => {
@@ -219,7 +218,7 @@ export default function GrammarQuizPage() {
     }
   };
 
-  // "Next post" is always available: grade any still-empty blanks as skipped
+  // "Continue" is always available: grade any still-empty blanks as skipped
   // (instant, no model call) so their spaced-repetition schedule advances, then
   // move on.
   const handleNextPost = async () => {
@@ -242,31 +241,12 @@ export default function GrammarQuizPage() {
   };
 
   return (
-    <Box maxW="sm" mx="auto" p={4} pb={selected ? 80 : 4} minH="100vh">
-      <Box mb={2}>
-        <Link href="/quiz?tab=grammar">
-          <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
-            &lt; Quiz
-          </Text>
-        </Link>
-      </Box>
-
-      <Box mb={4}>
-        <Box display="flex" justifyContent="space-between" mb={1}>
-          <Text fontSize="sm">
-            Post {currentPostIndex + 1} / {posts.length}
-          </Text>
-          <Text fontSize="sm" aria-live="polite">
-            {correctCount} / {totalBlanks} correct
-            {gradingCount > 0 ? " · grading…" : ""}
-          </Text>
-        </Box>
-        <Progress.Root value={progress} size="sm">
-          <Progress.Track>
-            <Progress.Range />
-          </Progress.Track>
-        </Progress.Root>
-      </Box>
+    <Box maxW="xl" mx="auto" p={4} pb={selected ? 80 : 4}>
+      <QuizProgress
+        label={`Post ${currentPostIndex + 1} / ${posts.length}`}
+        secondary={`${correctCount} / ${totalBlanks} correct${gradingCount > 0 ? " · grading…" : ""}`}
+        progress={progress}
+      />
 
       {post.title && (
         <Heading size="sm" mb={3}>
@@ -281,10 +261,9 @@ export default function GrammarQuizPage() {
       {/* The full post, mistakes fixed in place. */}
       <Box
         p={4}
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.700" }}
+        bg="panel"
         borderWidth="1px"
-        borderColor="gray.200"
+        borderColor="border"
         borderRadius="lg"
         mb={4}
         fontSize="sm"
@@ -336,8 +315,7 @@ export default function GrammarQuizPage() {
                   fontWeight="bold"
                   bg={c.bg}
                   color={c.color}
-                  _dark={{ bg: c.darkBg, color: c.darkColor }}
-                  boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
+                  boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-brand-500)" : undefined}
                 >
                   <Text as="span" aria-hidden="true">{c.glyph} </Text>
                   {seg.blank.incorrect}
@@ -352,8 +330,7 @@ export default function GrammarQuizPage() {
                   <Text
                     as="span"
                     fontWeight="bold"
-                    color="blue.600"
-                    _dark={{ color: "blue.300" }}
+                    color="brand.fg"
                     textDecoration="line-through"
                   >
                     {seg.blank.incorrect}
@@ -369,8 +346,7 @@ export default function GrammarQuizPage() {
                 <Text
                   as="span"
                   fontWeight="bold"
-                  color="blue.600"
-                  _dark={{ color: "blue.300" }}
+                  color="brand.fg"
                   textDecoration="line-through"
                 >
                   {seg.blank.incorrect}
@@ -410,41 +386,41 @@ export default function GrammarQuizPage() {
         {remainingCount > 0 ? (
           // Blanks are still unanswered — reveal their answers before moving on,
           // rather than silently skipping them.
-          <Button colorPalette="blue" w="full" size="lg" onClick={revealAnswers}>
+          <Button colorPalette="brand" w="full" size="lg" onClick={revealAnswers}>
             See answers ({remainingCount} left)
           </Button>
         ) : (
-          <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
-            {isLastPost ? "See results" : "Next post"}
+          <Button colorPalette="brand" w="full" size="lg" onClick={handleNextPost}>
+            {isLastPost ? "See summary" : "Continue"}
           </Button>
         )}
         {showExit && (
-          // Early exit: stop the session at any point. If anything's been graded,
-          // review it ("See results"); otherwise leave cleanly to the grammar hub
-          // ("Stop quiz"). The current post's untouched blanks stay due (not graded),
-          // matching the vocab pages' early "See Results".
+          // Stop the session at any point — a quiet, de-emphasized secondary so it
+          // never competes with the primary Continue / See summary action. If
+          // anything's been graded it goes to the summary; otherwise straight back
+          // to the grammar hub. The current post's untouched blanks stay due.
           <Button
-            variant="outline"
-            colorPalette="green"
+            variant="ghost"
+            size="sm"
+            color="fg.muted"
             w="full"
-            size="lg"
             onClick={() =>
               router.push(results.length > 0 ? "/quiz/grammar/complete" : "/quiz?tab=grammar")
             }
           >
-            {results.length > 0 ? "See results" : "Stop quiz"}
+            Finish
           </Button>
         )}
       </VStack>
       <Box mt={1} textAlign="center" minH="1.25rem">
         {remainingCount === 0 && unreviewedWrong > 0 && (
-          <Text fontSize="xs" color="orange.600" _dark={{ color: "orange.300" }}>
+          <Text fontSize="xs" color="orange.fg">
             {unreviewedWrong} wrong {unreviewedWrong === 1 ? "correction" : "corrections"} not reviewed yet.
           </Text>
         )}
       </Box>
       {error && (
-        <Text fontSize="xs" color="red.500" mt={1} textAlign="center" aria-live="assertive">
+        <Text fontSize="xs" color="red.fg" mt={1} textAlign="center" aria-live="assertive">
           {error}
         </Text>
       )}
@@ -460,10 +436,9 @@ export default function GrammarQuizPage() {
           mx="auto"
           maxH="60vh"
           overflowY="auto"
-          bg="white"
-          _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+          bg="bg"
           borderTopWidth="1px"
-          borderTopColor="gray.200"
+          borderTopColor="border"
           borderTopRadius="xl"
           p={3}
           boxShadow="0 -4px 12px rgba(0,0,0,0.08)"

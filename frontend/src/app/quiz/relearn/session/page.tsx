@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Box, Heading, Spinner, Text } from "@chakra-ui/react";
 import { quizClient, QuizType, messageForRpcError, type SubmitRelearnAnswerResponse } from "@/lib/client";
 import { AnswerInput } from "@/components/AnswerInput";
+import { QuizScaffold } from "@/components/QuizScaffold";
 import { FeedbackActions } from "@/components/FeedbackActions";
 import { PronounceButton } from "@/components/PronounceButton";
 import { RelearnGrammarPost } from "@/components/RelearnGrammarPost";
@@ -54,6 +55,12 @@ export default function RelearnSessionPage() {
     return n + item.group.words.length;
   }, 0);
 
+  // Shared header values so every relearn screen (single card, grammar post,
+  // origin family) shows the identical progress chrome the other quiz modes do.
+  const relearnLabel = `${wordsLeft} ${wordsLeft === 1 ? "word" : "words"} left`;
+  const relearnProgress =
+    totalAnswers + wordsLeft > 0 ? (totalAnswers / (totalAnswers + wordsLeft)) * 100 : 0;
+
   // Leaving the queue empty ends the session. A direct visit with no answers
   // yet bounces back to the start screen instead of a hollow complete page.
   useEffect(() => {
@@ -79,17 +86,14 @@ export default function RelearnSessionPage() {
   // fresh even when its wrong blanks are the same set (mirrors the origin card).
   if (front.kind === "post") {
     return (
-      <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
-          {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
-        </Text>
+      <QuizScaffold label={relearnLabel} progress={relearnProgress}>
         <RelearnGrammarPost
           key={`${front.post.content} #${front.post.attempt}`}
           content={front.post.content}
           blanks={front.post.blanks}
           onComplete={(wrongBlanks, correctCount) => completeGrammarPost(wrongBlanks, correctCount)}
         />
-      </Box>
+      </QuizScaffold>
     );
   }
 
@@ -101,10 +105,7 @@ export default function RelearnSessionPage() {
   // family remounts fresh even when its wrong words are the same set.
   if (front.kind === "origin") {
     return (
-      <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
-        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
-          {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
-        </Text>
+      <QuizScaffold label={relearnLabel} progress={relearnProgress}>
         <RelearnOriginPost
           key={`${front.group.originText} ${front.group.originMeaning} #${front.group.attempt}`}
           originText={front.group.originText}
@@ -116,7 +117,7 @@ export default function RelearnSessionPage() {
           words={front.group.words}
           onComplete={(wrongWords, correctCount) => completeOrigin(wrongWords, correctCount)}
         />
-      </Box>
+      </QuizScaffold>
     );
   }
 
@@ -162,14 +163,10 @@ export default function RelearnSessionPage() {
   };
 
   return (
-    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
-      <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
-        {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
-      </Text>
-
+    <QuizScaffold label={relearnLabel} progress={relearnProgress}>
       {/* Prompt card — mirrors the source quiz's format. */}
-      <Box bg="white" _dark={{ bg: "gray.800" }} borderRadius="lg" borderWidth="1px" borderColor="gray.200" p={5} mb={4}>
-        <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium" mb={2}>
+      <Box bg="panel" borderRadius="lg" borderWidth="1px" borderColor="border" p={5} mb={4}>
+        <Text fontSize="xs" color="brand.fg" fontWeight="medium" mb={2}>
           {sourceLabel(current.sourceQuizType)}
         </Text>
 
@@ -187,7 +184,7 @@ export default function RelearnSessionPage() {
         {!isReverse && current.examples.length > 0 && (
           <Box mt={3} display="flex" flexDirection="column" gap={1}>
             {current.examples.map((ex, i) => (
-              <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
+              <Text key={i} fontSize="sm" color="fg.muted">
                 {ex.speaker ? `${ex.speaker}: ` : ""}
                 {ex.text}
               </Text>
@@ -197,7 +194,7 @@ export default function RelearnSessionPage() {
         {isReverse && current.contexts.length > 0 && (
           <Box mt={3} display="flex" flexDirection="column" gap={1}>
             {current.contexts.map((c, i) => (
-              <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
+              <Text key={i} fontSize="sm" color="fg.muted">
                 {c.maskedContext || c.context}
               </Text>
             ))}
@@ -219,7 +216,7 @@ export default function RelearnSessionPage() {
             placeholder={answerPlaceholder}
           />
           {error && (
-            <Text color="red.500" fontSize="sm" role="alert">
+            <Text color="red.fg" fontSize="sm" role="alert">
               {error}
             </Text>
           )}
@@ -240,7 +237,7 @@ export default function RelearnSessionPage() {
               isOverridden={override !== null}
               isSkipped={false}
               showExclude={false}
-              nextLabel="Next"
+              nextLabel="Continue"
               onNext={() => void handleNext()}
               onOverride={() => setOverride(!feedback.correct)}
               onUndo={() => setOverride(null)}
@@ -255,11 +252,11 @@ export default function RelearnSessionPage() {
                     {current.entry}
                   </Text>
                   {feedback.wordDetail?.pronunciation && (
-                    <Text fontSize="sm" color="fg.muted">/{feedback.wordDetail.pronunciation}/</Text>
+                    <Text fontSize="sm" color="fg.muted" fontFamily="mono">/{feedback.wordDetail.pronunciation}/</Text>
                   )}
                   <PronounceButton text={current.entry} />
                 </Box>
-                <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>
+                <Text fontSize="sm" color="fg">
                   <Text as="span" fontWeight="semibold">Meaning: </Text>
                   <Text as="span" data-testid={isReverse ? undefined : "relearn-answer"}>
                     {feedback.meaning || current.meaning}
@@ -268,8 +265,7 @@ export default function RelearnSessionPage() {
                 {answer.trim() && (
                   <Text
                     fontSize="sm"
-                    color={(override ?? feedback.correct) ? "gray.500" : "red.600"}
-                    _dark={{ color: (override ?? feedback.correct) ? "gray.400" : "red.300" }}
+                    color={(override ?? feedback.correct) ? "fg.muted" : "red.fg"}
                   >
                     <Text as="span" fontWeight="semibold">Your answer: </Text>
                     {answer}
@@ -277,7 +273,7 @@ export default function RelearnSessionPage() {
                 )}
               </Box>
               {feedback.reason && (
-                <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+                <Text fontSize="sm" fontStyle="italic" color="fg.muted">
                   {feedback.reason}
                 </Text>
               )}
@@ -290,6 +286,6 @@ export default function RelearnSessionPage() {
           )}
         </Box>
       )}
-    </Box>
+    </QuizScaffold>
   );
 }

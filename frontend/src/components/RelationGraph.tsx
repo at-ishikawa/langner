@@ -35,7 +35,7 @@ export function RelationGraph({ prompt, value, onValueChange, disabled, compact 
       return <FormBranchGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} compact={compact} />;
     default:
       return (
-        <Box p={3} borderWidth="1px" borderRadius="md" bg="gray.50" _dark={{ bg: "gray.800" }}>
+        <Box p={3} borderWidth="1px" borderRadius="md" bg="bg.subtle" borderColor="border">
           <Text fontSize="xs" color="fg.muted">
             (graph prompt shape not yet supported)
           </Text>
@@ -89,9 +89,8 @@ function FormBranchGraph({ prompt, value, onValueChange, disabled, compact }: Re
         p={{ base: 3, sm: 4 }}
         borderWidth="1px"
         borderRadius="lg"
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
-        borderColor="gray.200"
+        bg="panel"
+        borderColor="border"
         textAlign="center"
       >
         <MemberNode
@@ -113,10 +112,9 @@ function FormBranchGraph({ prompt, value, onValueChange, disabled, compact }: Re
                 px={2}
                 py={1}
                 borderRadius="md"
-                bg="green.50"
-                _dark={{ bg: "green.900", borderColor: "gray.600" }}
+                bg="green.subtle"
                 borderWidth="1px"
-                borderColor="gray.300"
+                borderColor="border"
               >
                 <Text fontFamily="mono" fontSize="sm" fontWeight="medium">
                   {f.label}
@@ -170,9 +168,8 @@ function ClusterGraph({ prompt, value, onValueChange, disabled, compact }: Relat
         p={{ base: 3, sm: 4 }}
         borderWidth="1px"
         borderRadius="lg"
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
-        borderColor="gray.200"
+        bg="panel"
+        borderColor="border"
         textAlign="center"
       >
         <ConceptChip node={concept} />
@@ -234,9 +231,8 @@ function AntonymPairGraph({ prompt, value, onValueChange, disabled, compact }: R
         p={{ base: 3, sm: 4 }}
         borderWidth="1px"
         borderRadius="lg"
-        bg="white"
-        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
-        borderColor="gray.200"
+        bg="panel"
+        borderColor="border"
       >
         <Box
           display="grid"
@@ -265,8 +261,8 @@ function AntonymPairGraph({ prompt, value, onValueChange, disabled, compact }: R
             justifyContent="center"
             pt={{ base: 0, sm: 2 }}
           >
-            <Box px={2} py={0.5} borderRadius="full" bg="red.100" _dark={{ bg: "red.900" }}>
-              <Text fontSize="xs" color="red.800" _dark={{ color: "red.200" }} fontWeight="medium">
+            <Box px={2} py={0.5} borderRadius="full" bg="red.subtle">
+              <Text fontSize="xs" color="red.fg" fontWeight="medium">
                 <Text as="span" display={compact ? "none" : { base: "none", sm: "inline" }}>⇄ antonym</Text>
                 <Text as="span" display={compact ? "inline" : { base: "inline", sm: "none" }}>⇅ antonym</Text>
               </Text>
@@ -302,14 +298,13 @@ function ConceptChip({ node }: { node: GraphNode }) {
       px={3}
       py={1.5}
       borderRadius="full"
-      bg="purple.100"
-      _dark={{ bg: "purple.900" }}
+      bg="purple.subtle"
     >
-      <Text fontSize="sm" color="purple.800" _dark={{ color: "purple.200" }} fontWeight="semibold">
+      <Text fontSize="sm" color="purple.fg" fontWeight="semibold">
         {node.label}
       </Text>
       {node.hint && (
-        <Text fontSize="xs" color="purple.700" _dark={{ color: "purple.300" }} fontFamily="mono">
+        <Text fontSize="xs" color="purple.fg" fontFamily="mono">
           ({node.hint})
         </Text>
       )}
@@ -332,12 +327,8 @@ function MemberNode({ node, isBlank, value, onValueChange, disabled }: MemberNod
       minH={{ base: "44px", sm: "auto" }}
       borderWidth={isBlank ? "2px" : "1px"}
       borderRadius="md"
-      borderColor={isBlank ? "yellow.500" : "gray.300"}
-      bg={isBlank ? "yellow.50" : "blue.50"}
-      _dark={{
-        bg: isBlank ? "yellow.900" : "blue.900",
-        borderColor: isBlank ? "yellow.500" : "gray.600",
-      }}
+      borderColor={isBlank ? "orange.solid" : "border"}
+      bg={isBlank ? "orange.subtle" : "brand.subtle"}
       textAlign="center"
     >
       {isBlank ? (
@@ -356,8 +347,7 @@ function MemberNode({ node, isBlank, value, onValueChange, disabled }: MemberNod
             // pinning the inline style here makes the rule explicit and
             // survives future theme changes that might shrink size="md".
             fontSize="16px"
-            bg="white"
-            _dark={{ bg: "gray.800" }}
+            bg="panel"
             autoFocus
           />
           {/* hint carries the blanked origin's meaning (the prompt the

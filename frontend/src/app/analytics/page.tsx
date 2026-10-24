@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -16,6 +15,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { QUIZ_TYPE_OPTIONS } from "@/components/AnalyticsFilterBar";
+import { Card } from "@/components/Card";
 import { TrendChart, type TrendMetric } from "@/components/TrendChart";
 import {
   analyticsClient,
@@ -121,7 +121,13 @@ function Segmented<T extends string | number>({
 }) {
   return (
     <HStack gap={2} align="center" flexShrink={0}>
-      <Text fontSize="xs" color="fg.muted" textTransform="uppercase" letterSpacing="wider">
+      <Text
+        fontFamily="mono"
+        fontSize="xs"
+        color="fg.muted"
+        textTransform="uppercase"
+        letterSpacing="0.12em"
+      >
         {label}
       </Text>
       <HStack gap={1} bg="bg.muted" p={1} borderRadius="md" flexWrap="wrap">
@@ -130,6 +136,7 @@ function Segmented<T extends string | number>({
             key={String(o.key)}
             size="xs"
             variant={value === o.key ? "solid" : "ghost"}
+            colorPalette={value === o.key ? "brand" : "gray"}
             disabled={disabled}
             onClick={() => onChange(o.key)}
           >
@@ -225,9 +232,6 @@ export default function AnalyticsOverviewPage() {
 
   return (
     <Box maxW="4xl" mx="auto" p={4} pb={20}>
-      <Link href="/" aria-label="Back to home">
-        <Text fontSize="sm" mb={2}>◀ Home</Text>
-      </Link>
       <Heading size="lg" mb={3}>Analytics</Heading>
 
       {/* Controls sit directly under the title so the totals below update
@@ -296,14 +300,20 @@ export default function AnalyticsOverviewPage() {
               textAlign="left"
               onClick={() => setMetric(m.key)}
               borderWidth="1px"
-              borderColor={active ? "fg" : "border"}
-              bg={active ? "bg.subtle" : "bg"}
+              borderColor={active ? "brand.solid" : "border"}
+              bg={active ? "brand.subtle" : "bg"}
               borderRadius="lg"
               p={3}
               aria-pressed={active}
             >
               <Text fontSize="xs" color="fg.muted">{m.label}</Text>
-              <Text fontSize="2xl" fontWeight="bold" lineHeight="1.1">
+              <Text
+                fontFamily="mono"
+                fontSize="2xl"
+                fontWeight="bold"
+                lineHeight="1.1"
+                css={{ fontVariantNumeric: "tabular-nums" }}
+              >
                 {value === undefined ? "—" : String(value)}
               </Text>
             </Box>
@@ -313,7 +323,7 @@ export default function AnalyticsOverviewPage() {
 
       {/* Chart */}
       {error && (
-        <Text color="red.500" data-testid="trends-error">Failed to load trends: {error}</Text>
+        <Text color="red.fg" data-testid="trends-error">Failed to load trends: {error}</Text>
       )}
       {!error && data === null && <Spinner data-testid="trends-loading" />}
       {!error && data !== null && !hasBuckets && (
@@ -323,7 +333,7 @@ export default function AnalyticsOverviewPage() {
         </Box>
       )}
       {!error && hasBuckets && (
-        <Box borderWidth="1px" borderColor="border" borderRadius="lg" p={4}>
+        <Card p={4}>
           <Flex justify="space-between" align="baseline" mb={2}>
             <Text fontSize="sm" fontWeight="semibold">{metricLabel} over time</Text>
             <Text fontSize="xs" color="fg.muted">Click a bar for that period’s days</Text>
@@ -336,7 +346,7 @@ export default function AnalyticsOverviewPage() {
             onBarClick={onBarClick}
             resolveLabel={resolveLabel}
           />
-        </Box>
+        </Card>
       )}
     </Box>
   );

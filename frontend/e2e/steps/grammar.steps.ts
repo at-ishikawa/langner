@@ -57,11 +57,11 @@ Then(
   },
 );
 
-// The single-post session ends on "See results"; a multi-post one would show
-// "Next post". Accept either, then assert we reached the summary.
+// The single-post session ends on "See summary"; a multi-post one would show
+// "Continue". Accept either, then assert we reached the summary.
 When("I finish the grammar post", async ({ page }) => {
   await page
-    .getByRole("button", { name: /^(see results|next post)$/i })
+    .getByRole("button", { name: /^(see summary|continue)$/i })
     .first()
     .click();
   await expect(page).toHaveURL(/\/quiz\/grammar\/complete/);
@@ -70,7 +70,7 @@ When("I finish the grammar post", async ({ page }) => {
 Then("I should be on the Grammar Complete page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz\/grammar\/complete/);
   await expect(
-    page.getByRole("heading", { name: "Grammar Session Complete" }),
+    page.getByRole("heading", { name: "Session summary" }),
   ).toBeVisible();
 });
 

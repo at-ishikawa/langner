@@ -1,14 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Box, Button, Heading, Input, Text, VStack } from "@chakra-ui/react";
+import { Card } from "@/components/Card";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useSession } from "@/components/SessionProvider";
 import {
   setLlmCredential,
   setPrimaryProvider,
   deleteLlmCredential,
+  logout,
 } from "@/lib/auth";
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Text
+      fontFamily="mono"
+      fontSize="xs"
+      letterSpacing="0.12em"
+      textTransform="uppercase"
+      color="fg.muted"
+      mb={2}
+    >
+      {children}
+    </Text>
+  );
+}
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -21,14 +38,14 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <Box p={4} maxW="md" mx="auto">
+      <Box p={4} maxW="2xl" mx="auto">
         <Text color="fg.muted">Loading…</Text>
       </Box>
     );
   }
   if (!user) {
     return (
-      <Box p={4} maxW="md" mx="auto">
+      <Box p={4} maxW="2xl" mx="auto">
         <Text color="fg.muted">You must be signed in to manage settings.</Text>
       </Box>
     );
@@ -59,17 +76,27 @@ export default function SettingsPage() {
     });
 
   return (
-    <Box p={4} maxW="md" mx="auto">
-      <Box mb={4}>
-        <Link href="/">
-          <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
-            &lt; Home
-          </Text>
-        </Link>
-      </Box>
-      <Heading size="lg" mb={1}>
+    <Box p={4} maxW="2xl" mx="auto">
+      <Heading size="lg" mb={5}>
         Settings
       </Heading>
+
+      <Box mb={7}>
+        <SectionLabel>Appearance</SectionLabel>
+        <Card p={4} display="flex" alignItems="center" justifyContent="space-between" gap={3}>
+          <Box>
+            <Text fontWeight="500" fontSize="sm">
+              Theme
+            </Text>
+            <Text fontSize="xs" color="fg.muted">
+              Light, dark, or match your device.
+            </Text>
+          </Box>
+          <ThemeToggle />
+        </Card>
+      </Box>
+
+      <SectionLabel>AI grading</SectionLabel>
       <Text fontSize="sm" color="fg.muted" mb={4}>
         Quizzes are graded with your own provider key(s), stored encrypted and
         never shown again. Set a key for more than one provider and grading
@@ -96,19 +123,13 @@ export default function SettingsPage() {
         {providers.map((provider) => {
           const cred = credFor(provider);
           return (
-            <Box
-              key={provider}
-              borderWidth="1px"
-              borderColor="border"
-              borderRadius="md"
-              p={3}
-            >
+            <Card key={provider} p={3}>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                 <Heading size="sm" textTransform="capitalize">
                   {provider}
                 </Heading>
                 {cred?.primary && (
-                  <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="bold">
+                  <Text fontSize="xs" color="brand.fg" fontWeight="bold">
                     primary
                   </Text>
                 )}
@@ -134,7 +155,7 @@ export default function SettingsPage() {
               />
               <Box display="flex" gap={3}>
                 <Button
-                  colorPalette="blue"
+                  colorPalette="brand"
                   size="sm"
                   onClick={() => save(provider)}
                   loading={status === "saving"}
@@ -162,7 +183,7 @@ export default function SettingsPage() {
                   </Button>
                 )}
               </Box>
-            </Box>
+            </Card>
           );
         })}
       </VStack>
@@ -177,6 +198,23 @@ export default function SettingsPage() {
           {error}
         </Box>
       )}
+
+      <Box mt={8}>
+        <SectionLabel>Account</SectionLabel>
+        <Card p={4} display="flex" alignItems="center" justifyContent="space-between" gap={3}>
+          <Box minW={0}>
+            <Text fontWeight="500" fontSize="sm" truncate>
+              {user.username}
+            </Text>
+            <Text fontSize="xs" color="fg.muted">
+              Signed in
+            </Text>
+          </Box>
+          <Button size="sm" variant="outline" flexShrink={0} onClick={() => logout()}>
+            Log out
+          </Button>
+        </Card>
+      </Box>
     </Box>
   );
 }

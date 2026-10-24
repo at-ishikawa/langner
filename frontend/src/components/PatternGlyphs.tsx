@@ -7,9 +7,9 @@ const GLYPH = {
 } as const;
 
 const COLOR = {
-  correct: { light: "green.600", dark: "green.300" },
-  wrong: { light: "red.600", dark: "red.300" },
-  none: { light: "gray.400", dark: "gray.500" },
+  correct: "green.fg",
+  wrong: "red.fg",
+  none: "fg.muted",
 } as const;
 
 const LABEL = {
@@ -36,8 +36,7 @@ export function PatternGlyphs({ pattern }: { pattern: readonly string[] }) {
         return (
           <Box
             key={i}
-            color={COLOR[key].light}
-            _dark={{ color: COLOR[key].dark }}
+            color={COLOR[key]}
             minW="1ch"
             textAlign="center"
             data-testid={`pattern-glyph-${key}`}

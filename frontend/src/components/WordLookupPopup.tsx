@@ -274,10 +274,9 @@ export function WordLookupPopup({
       bottom={0}
       left={0}
       right={0}
-      bg="bg.panel"
+      bg="panel"
       borderTopWidth="2px"
-      borderColor="blue.400"
-      _dark={{ borderColor: "blue.600" }}
+      borderColor="brand.solid"
       p={4}
       maxH="50vh"
       overflowY="auto"
@@ -357,7 +356,7 @@ function SavedDefinitionView({
         {saved.meaning || saved.definition}
       </Text>
       {saved.pronunciation && (
-        <Text fontSize="xs" color="fg.muted" mb={1}>
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>
           /{saved.pronunciation}/
         </Text>
       )}
@@ -517,6 +516,7 @@ function NewDefinitionView({
                 key={i}
                 p={3}
                 borderWidth="1px"
+                borderColor="border"
                 borderRadius="md"
                 fontSize="sm"
                 display="flex"
@@ -532,7 +532,7 @@ function NewDefinitionView({
                 </Box>
                 <Button
                   size="xs"
-                  colorPalette="green"
+                  colorPalette="brand"
                   flexShrink={0}
                   onClick={() => onSaveMeaning(s.meaning)}
                   disabled={lookup.saving}
@@ -575,7 +575,7 @@ function DefinitionCard({
   saveLabel: string;
 }) {
   return (
-    <Box p={3} borderWidth="1px" borderRadius="md" fontSize="sm">
+    <Box p={3} borderWidth="1px" borderColor="border" borderRadius="md" fontSize="sm">
       {def.partOfSpeech && (
         <Text fontSize="xs" color="fg.muted" mb={1}>
           {def.partOfSpeech}
@@ -583,7 +583,7 @@ function DefinitionCard({
       )}
       <Text mb={1}>{def.definition}</Text>
       {def.pronunciation && (
-        <Text fontSize="xs" color="fg.muted" mb={1}>
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>
           /{def.pronunciation}/
         </Text>
       )}
@@ -614,7 +614,7 @@ function DefinitionCard({
       {!saved && (
         <Button
           size="xs"
-          colorPalette="blue"
+          colorPalette="brand"
           mt={2}
           onClick={onSave}
           disabled={saving}

@@ -27,36 +27,36 @@ describe("FeedbackActions", () => {
     expect(screen.getByText("Next")).toBeInTheDocument();
   });
 
-  it("renders See Results button when nextLabel is See Results", () => {
-    renderComponent({ nextLabel: "See Results" });
-    expect(screen.getByText("See Results")).toBeInTheDocument();
+  it("renders whatever primary label the caller passes via nextLabel", () => {
+    renderComponent({ nextLabel: "See summary" });
+    expect(screen.getByText("See summary")).toBeInTheDocument();
   });
 
-  it("renders Mark as Incorrect button when isCorrect=true and onOverride provided and noteId defined", () => {
+  it("renders Mark as incorrect button when isCorrect=true and onOverride provided and noteId defined", () => {
     renderComponent({ isCorrect: true, noteId: BigInt(1), onOverride: vi.fn() });
-    expect(screen.getByText("Mark as Incorrect")).toBeInTheDocument();
+    expect(screen.getByText("Mark as incorrect")).toBeInTheDocument();
   });
 
-  it("renders Mark as Correct button when isCorrect=false and onOverride provided and noteId defined", () => {
+  it("renders Mark as correct button when isCorrect=false and onOverride provided and noteId defined", () => {
     renderComponent({ isCorrect: false, noteId: BigInt(1), onOverride: vi.fn() });
-    expect(screen.getByText("Mark as Correct")).toBeInTheDocument();
+    expect(screen.getByText("Mark as correct")).toBeInTheDocument();
   });
 
   it("does not render override button when isOverridden=true", () => {
     renderComponent({ isOverridden: true, onOverride: vi.fn() });
-    expect(screen.queryByText("Mark as Correct")).not.toBeInTheDocument();
-    expect(screen.queryByText("Mark as Incorrect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mark as correct")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mark as incorrect")).not.toBeInTheDocument();
   });
 
   it("does not render override button when noteId is undefined", () => {
     renderComponent({ noteId: undefined, onOverride: vi.fn() });
-    expect(screen.queryByText("Mark as Correct")).not.toBeInTheDocument();
-    expect(screen.queryByText("Mark as Incorrect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mark as correct")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mark as incorrect")).not.toBeInTheDocument();
   });
 
   it("renders Skip button when onSkip provided and noteId defined", () => {
     renderComponent({ onSkip: vi.fn(), noteId: BigInt(1) });
-    expect(screen.getByText("Exclude from Quizzes")).toBeInTheDocument();
+    expect(screen.getByText("Exclude from quizzes")).toBeInTheDocument();
   });
 
   it("does not render Skip button when isSkipped=true", () => {
@@ -71,7 +71,7 @@ describe("FeedbackActions", () => {
 
   it("does not render the Exclude button when showExclude=false", () => {
     renderComponent({ showExclude: false, onSkip: vi.fn(), noteId: BigInt(1) });
-    expect(screen.queryByText("Exclude from Quizzes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Exclude from quizzes")).not.toBeInTheDocument();
   });
 
   it("does not render the Excluded label when showExclude=false even if isSkipped=true", () => {
@@ -81,7 +81,7 @@ describe("FeedbackActions", () => {
 
   it("still renders the override button when showExclude=false", () => {
     renderComponent({ showExclude: false, isCorrect: false, onOverride: vi.fn() });
-    expect(screen.getByText("Mark as Correct")).toBeInTheDocument();
+    expect(screen.getByText("Mark as correct")).toBeInTheDocument();
   });
 
   it("calls onNext when Next button clicked", () => {
@@ -94,14 +94,14 @@ describe("FeedbackActions", () => {
   it("calls onOverride when override button clicked", () => {
     const onOverride = vi.fn();
     renderComponent({ isCorrect: false, onOverride });
-    fireEvent.click(screen.getByText("Mark as Correct"));
+    fireEvent.click(screen.getByText("Mark as correct"));
     expect(onOverride).toHaveBeenCalledTimes(1);
   });
 
   it("calls onSkip immediately when Skip button clicked (no confirmation)", () => {
     const onSkip = vi.fn();
     renderComponent({ onSkip, noteId: BigInt(1) });
-    fireEvent.click(screen.getByText("Exclude from Quizzes"));
+    fireEvent.click(screen.getByText("Exclude from quizzes"));
     expect(onSkip).toHaveBeenCalledTimes(1);
   });
 
@@ -180,22 +180,22 @@ describe("FeedbackActions", () => {
     });
   });
 
-  // onSeeResults tests
+  // onSeeResults tests — the early-exit control reads "Finish" (quiet secondary)
   describe("onSeeResults", () => {
-    it("renders See Results button when onSeeResults is provided", () => {
-      renderComponent({ onSeeResults: vi.fn(), nextLabel: "Next" });
-      expect(screen.getByText("See Results")).toBeInTheDocument();
+    it("renders the Finish button when onSeeResults is provided", () => {
+      renderComponent({ onSeeResults: vi.fn(), nextLabel: "Continue" });
+      expect(screen.getByText("Finish")).toBeInTheDocument();
     });
 
-    it("does not render See Results button when onSeeResults is not provided", () => {
-      renderComponent({ nextLabel: "Next" });
-      expect(screen.queryByText("See Results")).not.toBeInTheDocument();
+    it("does not render the Finish button when onSeeResults is not provided", () => {
+      renderComponent({ nextLabel: "Continue" });
+      expect(screen.queryByText("Finish")).not.toBeInTheDocument();
     });
 
-    it("calls onSeeResults when See Results button clicked", () => {
+    it("calls onSeeResults when the Finish button clicked", () => {
       const onSeeResults = vi.fn();
-      renderComponent({ onSeeResults, nextLabel: "Next" });
-      fireEvent.click(screen.getByText("See Results"));
+      renderComponent({ onSeeResults, nextLabel: "Continue" });
+      fireEvent.click(screen.getByText("Finish"));
       expect(onSeeResults).toHaveBeenCalledTimes(1);
     });
   });

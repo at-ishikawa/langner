@@ -90,7 +90,7 @@ function DayDetailPage() {
         href={`/history${backQuery ? `?${backQuery}` : ""}`}
         aria-label="Back to history"
       >
-        <Text fontSize="sm" mb={2}>◀ History</Text>
+        <Text fontSize="sm" color="brand.fg" mb={2}>◀ History</Text>
       </Link>
       <Heading size="md" mb={1}>
         {formatDayHeader(date)}
@@ -99,12 +99,26 @@ function DayDetailPage() {
       <HStack mb={4} gap={3}>
         {detail?.previousDate && (
           <Link href={dayLink(detail.previousDate)} aria-label="Previous day with activity">
-            <Text fontSize="sm">◀ {detail.previousDate}</Text>
+            <Text
+              fontSize="sm"
+              color="brand.fg"
+              fontFamily="mono"
+              css={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              ◀ {detail.previousDate}
+            </Text>
           </Link>
         )}
         {detail?.nextDate && (
           <Link href={dayLink(detail.nextDate)} aria-label="Next day with activity">
-            <Text fontSize="sm">{detail.nextDate} ▶</Text>
+            <Text
+              fontSize="sm"
+              color="brand.fg"
+              fontFamily="mono"
+              css={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {detail.nextDate} ▶
+            </Text>
           </Link>
         )}
       </HStack>
@@ -117,7 +131,7 @@ function DayDetailPage() {
       />
 
       {error && (
-        <Text color="red.500" data-testid="day-detail-error">
+        <Text color="red.fg" data-testid="day-detail-error">
           Failed to load day: {error}
         </Text>
       )}
