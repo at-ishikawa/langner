@@ -7,12 +7,35 @@ import { quizClient, type NotebookSummary } from "@/lib/client";
 import { PageShell } from "@/components/PageShell";
 import { Card } from "@/components/Card";
 import { StatTile } from "@/components/StatTile";
+import { LandingPage } from "@/components/LandingPage";
+import { useSession } from "@/components/SessionProvider";
+
+// RootPage is the single "/" route. "/" is a public path (see SessionProvider),
+// so a logged-out visitor is NOT bounced through Google — they see the marketing
+// LandingPage. A signed-in user gets the Today dashboard. While the initial
+// /auth/me probe is in flight we render nothing but a spinner so neither view
+// flashes before auth is known.
+export default function RootPage() {
+  const { user, loading } = useSession();
+
+  if (loading) {
+    return (
+      <Box textAlign="center" py={24}>
+        <Spinner size="lg" color="brand.solid" />
+      </Box>
+    );
+  }
+  if (!user) {
+    return <LandingPage />;
+  }
+  return <TodayDashboard />;
+}
 
 // Today: the daily entry point. Shows what's actually due (from the same quiz
 // options the Quiz hub reads) and gets you into a session in one tap. Primary
 // navigation lives in the bottom tab bar, so this screen stays focused on "what
 // should I do right now".
-export default function TodayPage() {
+function TodayDashboard() {
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
