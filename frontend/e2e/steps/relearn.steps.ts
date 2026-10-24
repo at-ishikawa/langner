@@ -261,6 +261,16 @@ Then(
   },
 );
 
+// Save a success-path screenshot at the Desktop Chrome viewport so the rendered
+// Relearn feedback layout (inline on desktop) can be reviewed as a CI artifact,
+// not only asserted — the workflow uploads frontend/test-results/*.png always.
+Then(
+  "I capture a desktop screenshot {string}",
+  async ({ page }, name: string) => {
+    await page.screenshot({ path: `test-results/${name}.png`, fullPage: true });
+  },
+);
+
 // covers route: /quiz/relearn/complete
 Then("I should be on the Relearn Complete page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz\/relearn\/complete/);

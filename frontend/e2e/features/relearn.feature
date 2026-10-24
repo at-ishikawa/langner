@@ -96,3 +96,4 @@ Feature: Relearn Quiz
     And I tap See answers on the grammar relearn post
     Then the grammar relearn feedback shows "the John" is incorrect and not excluded
     And the grammar relearn post has no Exclude control
+    And I capture a desktop screenshot "relearn-grammar-feedback"
