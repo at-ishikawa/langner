@@ -145,6 +145,15 @@ export function login(next?: string): void {
   redirectToSignIn(next ?? "/");
 }
 
+// signup starts account creation. Langner has no password store: an account is
+// provisioned on the first successful Google sign-in whose email is on the
+// server allowlist (the callback upserts the user). So "sign up" runs the SAME
+// Google OAuth flow as sign-in — the first allowed callback creates the account;
+// a non-allowlisted email is bounced to /login?error=not_allowed.
+export function signup(next?: string): void {
+  redirectToSignIn(next ?? "/");
+}
+
 // logout revokes the refresh token server-side (the cookie is sent via
 // credentials:"include") so a leaked copy can't be used after sign-out, drops
 // the in-memory access token, and returns to /login.
