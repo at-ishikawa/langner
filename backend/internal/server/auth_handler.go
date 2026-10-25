@@ -44,7 +44,6 @@ type AuthHandler struct {
 	deviceCodes    *auth.CLIDeviceCodeRepository
 	refreshTokens  *auth.CLIRefreshTokenRepository
 	credentials    *auth.CredentialsRepository
-	allowedEmails  []string
 	frontendURL    string
 	allowedOrigins []string
 	cookieSecure   bool
@@ -87,7 +86,6 @@ type AuthHandlerConfig struct {
 	// the CLI; the /auth/token/refresh endpoint is keyed by user_id, not client).
 	// May be nil in tests / DB-less setups: no web refresh token is issued.
 	RefreshTokens *auth.CLIRefreshTokenRepository
-	AllowedEmails []string
 	FrontendURL   string
 	// AllowedOrigins is the set of frontend origins a post-sign-in redirect may
 	// target (the open-redirect allowlist for `next`); the configured
@@ -113,7 +111,6 @@ func NewAuthHandler(cfg AuthHandlerConfig) *AuthHandler {
 		credentials:    cfg.Credentials,
 		deviceCodes:    cfg.DeviceCodes,
 		refreshTokens:  cfg.RefreshTokens,
-		allowedEmails:  cfg.AllowedEmails,
 		frontendURL:    cfg.FrontendURL,
 		allowedOrigins: cfg.AllowedOrigins,
 		cookieSecure:   cfg.CookieSecure,
@@ -189,13 +186,8 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Allowlist uses the plaintext email straight from Google — never a stored
-	// value — so encryption-at-rest never affects who may sign in.
-	if !auth.IsAllowed(info.Email, h.allowedEmails) {
-		http.Redirect(w, r, h.frontendURL+"/login?error=not_allowed", http.StatusFound)
-		return
-	}
-
+	// Sign-in is open: any Google account that completes the OAuth flow gets an
+	// account (upserted below) — there is no allowlist gating who may sign in.
 	user, err := h.users.Upsert(ctx, info.Sub)
 	if err != nil {
 		slog.Error("auth: upsert user failed", "error", err)

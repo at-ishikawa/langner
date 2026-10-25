@@ -495,7 +495,6 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*AuthComponents, error) {
 		DeviceCodes:    deviceCodes,
 		RefreshTokens:  refreshTokens,
 		Credentials:    credentials,
-		AllowedEmails:  cfg.Auth.AllowedEmails,
 		FrontendURL:    cfg.Auth.FrontendURL,
 		AllowedOrigins: cfg.Server.CORS.AllowedOrigins,
 		CookieSecure:   cfg.Auth.CookieSecure,

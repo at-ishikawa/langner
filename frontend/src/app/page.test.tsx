@@ -71,7 +71,7 @@ describe("RootPage — public vs. signed-in branching", () => {
     // Marketing hero + both entry points, no Today dashboard chrome.
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     const getStarted = screen.getByRole("link", { name: "Get started" });
-    expect(getStarted).toHaveAttribute("href", "/signup");
+    expect(getStarted).toHaveAttribute("href", "/login");
     expect(screen.getAllByRole("link", { name: "Sign in" })[0]).toHaveAttribute(
       "href",
       "/login",
