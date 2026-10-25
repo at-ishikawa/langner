@@ -7,6 +7,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import NextLink from "next/link";
 import {
   Box,
   Button,
@@ -22,6 +23,7 @@ import {
   type NotebookWord,
   type WordDefinition,
 } from "@/lib/client";
+import { useSession } from "./SessionProvider";
 import { PronounceButton } from "./PronounceButton";
 
 // LookupState is exported so callers can read e.g. `lookup !== null` to decide
@@ -440,6 +442,12 @@ function NewDefinitionView({
   onSaveMeaning,
   onClose,
 }: Omit<WordLookupPopupProps, "popupRef" | "onDelete">) {
+  const { user } = useSession();
+  // A word lookup calls the user's own LLM provider when the shared dictionary
+  // has no entry. A freshly signed-up account has no key registered yet, so the
+  // backend degrades to an empty result — which would otherwise read as the
+  // misleading "No definitions found." Detect that case and point at Settings.
+  const needsApiKey = !!user && user.credentials.length === 0;
   return (
     <Box>
       <Box
@@ -499,11 +507,21 @@ function NewDefinitionView({
       {!lookup.loading &&
         lookup.definitions.length === 0 &&
         lookup.suggestions.length === 0 &&
-        !lookup.error && (
+        !lookup.error &&
+        (needsApiKey ? (
+          <Box>
+            <Text color="fg.muted" fontSize="sm" mb={2}>
+              To look up and save meanings, add an OpenAI or Gemini API key.
+            </Text>
+            <Button asChild variant="outline" size="sm">
+              <NextLink href="/settings">Add a key in Settings</NextLink>
+            </Button>
+          </Box>
+        ) : (
           <Text color="fg.muted" fontSize="sm">
             No definitions found.
           </Text>
-        )}
+        ))}
 
       {!lookup.loading && !lookup.saved && lookup.suggestions.length > 0 && (
         <Box mb={3}>
