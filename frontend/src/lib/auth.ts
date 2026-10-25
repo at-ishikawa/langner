@@ -140,17 +140,10 @@ export function redirectToSignIn(next?: string): void {
   window.location.href = `/auth/google/login?next=${encodeURIComponent(target)}`;
 }
 
-// login starts the Google OAuth flow (the explicit "Sign in" button).
+// login starts the Google OAuth flow. There is no separate "sign up": Langner
+// has no password store, so signing in with Google IS account creation — the
+// callback upserts the user on first sign-in. One flow, one button, one page.
 export function login(next?: string): void {
-  redirectToSignIn(next ?? "/");
-}
-
-// signup starts account creation. Langner has no password store: an account is
-// provisioned on the first successful Google sign-in whose email is on the
-// server allowlist (the callback upserts the user). So "sign up" runs the SAME
-// Google OAuth flow as sign-in — the first allowed callback creates the account;
-// a non-allowlisted email is bounced to /login?error=not_allowed.
-export function signup(next?: string): void {
   redirectToSignIn(next ?? "/");
 }
 
