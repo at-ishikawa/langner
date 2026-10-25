@@ -8,10 +8,10 @@ import { Card } from "./Card";
 // LandingPage is the public front door shown at "/" to a logged-out visitor
 // (the SessionProvider guard treats "/" as public, so it is not bounced through
 // Google). It leads with the core feature — spaced-repetition vocabulary
-// quizzes — and routes to the two real entry points: "Get started" → /signup
-// (account creation via Google) and "Sign in" → /login. Styled through the
-// Reading Room tokens so it is theme-aware and responsive like the rest of the
-// app.
+// quizzes — and routes to the one auth entry point: both "Get started" and
+// "Sign in" go to /login, because signing in with Google IS account creation
+// (there is no separate sign-up). Styled through the Reading Room tokens so it
+// is theme-aware and responsive like the rest of the app.
 export function LandingPage() {
   return (
     <Box as="main">
@@ -41,7 +41,7 @@ export function LandingPage() {
           </Text>
           <Flex gap={3} flexWrap="wrap" justify="center" pt={2}>
             <Button asChild colorPalette="brand" size="lg">
-              <NextLink href="/signup">Get started</NextLink>
+              <NextLink href="/login">Get started</NextLink>
             </Button>
             <Button asChild variant="outline" size="lg">
               <NextLink href="/login">Sign in</NextLink>
@@ -92,23 +92,6 @@ export function LandingPage() {
             get it wrong. Words you find hard stay close; words you know drift further
             into the future. You just answer what&apos;s due each day — the schedule takes
             care of the timing for you.
-          </Text>
-        </Box>
-
-        <Box textAlign="center" mt={{ base: 12, md: 16 }}>
-          <Text color="fg.muted" fontSize="sm">
-            Already have an account?{" "}
-            <Button
-              asChild
-              variant="plain"
-              size="sm"
-              color="brand.fg"
-              h="auto"
-              py={0}
-              textDecoration="underline"
-            >
-              <NextLink href="/login">Sign in</NextLink>
-            </Button>
           </Text>
         </Box>
       </Box>
