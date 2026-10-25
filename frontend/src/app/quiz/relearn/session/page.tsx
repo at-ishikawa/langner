@@ -18,9 +18,9 @@ import RelearnContext from "@/components/RelearnContext";
 function sourceLabel(source: QuizType): string {
   switch (source) {
     case QuizType.REVERSE:
-      return "Reverse — recall the word";
+      return "Reverse — see the meaning, type the word";
     default:
-      return "Recognition — recall the meaning";
+      return "Standard — see the word, type its meaning";
   }
 }
 

@@ -135,7 +135,7 @@ describe("RelearnSessionPage", () => {
     renderPage();
     expect(screen.getByText("alpha")).toBeInTheDocument();
     expect(screen.getByText("2 words left")).toBeInTheDocument();
-    expect(screen.getByText(/Recognition/)).toBeInTheDocument();
+    expect(screen.getByText(/Standard/)).toBeInTheDocument();
   });
 
   it("renders a reverse-format card as meaning-to-word", () => {
