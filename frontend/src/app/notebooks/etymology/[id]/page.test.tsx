@@ -125,7 +125,7 @@ describe("EtymologyNotebookPage - Origin List", () => {
     vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText("Etymology")).toBeInTheDocument();
+      expect(screen.getByText("Word roots")).toBeInTheDocument();
       expect(screen.getByText("< Learn")).toBeInTheDocument();
     });
     const backLink = screen.getByText("< Learn").closest("a");
@@ -241,7 +241,7 @@ describe("EtymologyNotebookPage - Origin List", () => {
     vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
     renderPageDark();
     await waitFor(() => {
-      expect(screen.getByText("Etymology")).toBeInTheDocument();
+      expect(screen.getByText("Word roots")).toBeInTheDocument();
       expect(screen.getByText("graph")).toBeInTheDocument();
       expect(screen.getByText("tele")).toBeInTheDocument();
     });
