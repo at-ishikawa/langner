@@ -86,47 +86,12 @@ export function LandingPage() {
             Review less. Remember more.
           </Heading>
           <Text color="fg.muted" fontSize={{ base: "md", md: "lg" }} lineHeight="1.7">
-            Every time you get a word right, you remember it for longer — so
-            there&apos;s no point drilling it again tomorrow. Langner waits a little
-            longer after each success before asking again. Words you find hard come
-            back soon; words you know drift far into the future. You just answer what&apos;s
-            due each day, and the gaps grow on their own:
-          </Text>
-
-          <Flex
-            gap={2}
-            flexWrap="wrap"
-            justify="center"
-            align="center"
-            mt={6}
-            fontFamily="mono"
-            fontSize={{ base: "xs", md: "sm" }}
-          >
-            {["Now", "in 3 days", "in 1 week", "in 1 month", "in 3 months"].map(
-              (label, i) => (
-                <Flex key={label} align="center" gap={2}>
-                  {i > 0 && (
-                    <Text aria-hidden color="fg.muted">
-                      →
-                    </Text>
-                  )}
-                  <Box
-                    borderWidth="1px"
-                    borderColor="border"
-                    borderRadius="full"
-                    px={3}
-                    py={1}
-                    color={i === 0 ? "brand.fg" : "fg.muted"}
-                    css={{ fontVariantNumeric: "tabular-nums" }}
-                  >
-                    {label}
-                  </Box>
-                </Flex>
-              ),
-            )}
-          </Flex>
-          <Text color="fg.subtle" fontSize="xs" mt={3}>
-            Each correct answer pushes the next review further out; a wrong one brings it back.
+            Every time you get a word right, you remember it for longer — so there&apos;s
+            no point drilling it again tomorrow. Langner waits a little longer after
+            each success before asking again, and brings a word back sooner when you
+            get it wrong. Words you find hard stay close; words you know drift further
+            into the future. You just answer what&apos;s due each day — the schedule takes
+            care of the timing for you.
           </Text>
         </Box>
 
