@@ -35,9 +35,9 @@ export function LandingPage() {
             Learn English words — and actually remember them.
           </Heading>
           <Text fontSize={{ base: "md", md: "lg" }} color="fg.muted" maxW="xl">
-            Langner quizzes you on the English words and grammar you want to learn,
-            graded on meaning rather than spelling, and schedules each one so it comes
-            back right before you would forget. A few minutes a day is enough.
+            Langner quizzes you on the English words you want to learn, checking that
+            you know what they mean rather than how they&apos;re spelled, and brings each
+            one back right before you would forget. A few minutes a day is enough.
           </Text>
           <Flex gap={3} flexWrap="wrap" justify="center" pt={2}>
             <Button asChild colorPalette="brand" size="lg">
@@ -51,8 +51,8 @@ export function LandingPage() {
 
         <SimpleGrid columns={{ base: 1, md: 3 }} gap={4} mt={{ base: 12, md: 20 }}>
           <Feature
-            title="Quizzes that grade on meaning"
-            body="Recognition and recall quizzes check that you know what a word means — a close paraphrase or synonym counts, a typo doesn't fail you. Grammar practice works the same way."
+            title="Checks that you understand"
+            body="Langner shows you a word and asks what it means, or gives the meaning and asks for the word. It cares that you got the idea — a close paraphrase or a synonym counts, and a small typo won't fail you."
           />
           <Feature
             title="A schedule that beats forgetting"
@@ -86,7 +86,7 @@ export function LandingPage() {
             Review less. Remember more.
           </Heading>
           <Text color="fg.muted" fontSize={{ base: "md", md: "lg" }} lineHeight="1.7">
-            Every time you recall a word correctly, you remember it for longer — so
+            Every time you get a word right, you remember it for longer — so
             there&apos;s no point drilling it again tomorrow. Langner waits a little
             longer after each success before asking again. Words you find hard come
             back soon; words you know drift far into the future. You just answer what&apos;s
