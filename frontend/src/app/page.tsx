@@ -10,6 +10,10 @@ import { StatTile } from "@/components/StatTile";
 import { LandingPage } from "@/components/LandingPage";
 import { useSession } from "@/components/SessionProvider";
 
+// Dismissing the "add a key" nudge is remembered locally so it doesn't nag on
+// every visit; it reappears only if storage is cleared.
+const KEY_NUDGE_DISMISSED = "langner:apiKeyNudgeDismissed";
+
 // RootPage is the single "/" route. "/" is a public path (see SessionProvider),
 // so a logged-out visitor is NOT bounced through Google — they see the marketing
 // LandingPage. A signed-in user gets the Today dashboard. While the initial
@@ -36,8 +40,15 @@ export default function RootPage() {
 // navigation lives in the bottom tab bar, so this screen stays focused on "what
 // should I do right now".
 function TodayDashboard() {
+  const { user } = useSession();
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  // Read the stored dismissal lazily. On the server there is no localStorage, so
+  // this is false (not dismissed); the first client render agrees because the
+  // banner is gated on `user`, which is null until /auth/me resolves post-mount.
+  const [nudgeDismissed, setNudgeDismissed] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(KEY_NUDGE_DISMISSED) === "1",
+  );
 
   useEffect(() => {
     quizClient
@@ -46,6 +57,15 @@ function TodayDashboard() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  const dismissNudge = () => {
+    setNudgeDismissed(true);
+    localStorage.setItem(KEY_NUDGE_DISMISSED, "1");
+  };
+
+  // A new account has no LLM key, so lookups and grading can't work until one is
+  // added — nudge toward Settings instead of letting the app look broken.
+  const showKeyNudge = !!user && user.credentials.length === 0 && !nudgeDismissed;
 
   const wordsDue = notebooks.reduce((s, n) => s + n.reviewCount, 0);
   const grammarDue = notebooks.reduce((s, n) => s + n.grammarReviewCount, 0);
@@ -67,6 +87,36 @@ function TodayDashboard() {
 
   return (
     <PageShell title="Today" maxW="xl">
+      {showKeyNudge && (
+        <Card px={5} py={4} mb={6}>
+          <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={3}>
+            <Box>
+              <Text fontWeight="600" fontSize="sm" mb={1}>
+                Add an API key to get started
+              </Text>
+              <Text color="fg.muted" fontSize="sm">
+                Langner checks your answers with your own OpenAI or Gemini key.
+                Add one to quiz words and look up meanings.
+              </Text>
+              <Button asChild variant="outline" size="sm" mt={3}>
+                <NextLink href="/settings">Add a key in Settings</NextLink>
+              </Button>
+            </Box>
+            <Button
+              variant="plain"
+              size="sm"
+              color="fg.muted"
+              h="auto"
+              p={1}
+              onClick={dismissNudge}
+              aria-label="Dismiss"
+            >
+              ✕
+            </Button>
+          </Box>
+        </Card>
+      )}
+
       <SimpleGrid columns={2} gap={3} mb={6}>
         <StatTile accent value={wordsDue} label="words due" />
         <StatTile value={grammarDue} label="grammar notes" />

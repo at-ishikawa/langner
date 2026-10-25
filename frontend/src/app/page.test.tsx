@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import RootPage from "./page";
 import * as client from "@/lib/client";
@@ -23,7 +23,7 @@ vi.mock("next/link", () => ({
 const signedIn: AuthUser = {
   username: "reader-1",
   hasApiKey: true,
-  credentials: [],
+  credentials: [{ provider: "openai", model: "", primary: true }],
   availableProviders: [],
 };
 
@@ -97,6 +97,7 @@ describe("TodayDashboard (signed in)", () => {
   afterEach(() => {
     document.documentElement.classList.remove("dark");
     document.documentElement.removeAttribute("data-theme");
+    localStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -173,6 +174,34 @@ describe("TodayDashboard (signed in)", () => {
     expect(screen.getByText("4")).toBeInTheDocument();
     // Exactly one "Reading Journal" plan row (one link), not a duplicate.
     expect(screen.getAllByRole("link", { name: /Reading Journal/ })).toHaveLength(1);
+  });
+
+  it("nudges a keyless user toward Settings, and the nudge is dismissible", async () => {
+    mockSession({ user: { ...signedIn, hasApiKey: false, credentials: [] }, loading: false });
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [nb({ notebookId: "a", name: "Word Power", reviewCount: 3, vocabularyCount: 10 })],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
+    renderPage();
+
+    expect(await screen.findByText("Add an API key to get started")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Add a key in Settings/i });
+    expect(link).toHaveAttribute("href", "/settings");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("Add an API key to get started")).not.toBeInTheDocument();
+    expect(localStorage.getItem("langner:apiKeyNudgeDismissed")).toBe("1");
+  });
+
+  it("shows no key nudge once a provider key is registered", async () => {
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [nb({ notebookId: "a", name: "Word Power", reviewCount: 3, vocabularyCount: 10 })],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
+    renderPage();
+
+    expect(await screen.findByText("Today")).toBeInTheDocument();
+    expect(screen.queryByText("Add an API key to get started")).not.toBeInTheDocument();
   });
 
   it("renders in dark mode without errors", async () => {
