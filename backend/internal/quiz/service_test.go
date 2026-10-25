@@ -2639,3 +2639,79 @@ func TestService_DefinitionsBookSummaryMatchesLoad(t *testing.T) {
 		})
 	}
 }
+
+// TestService_GradeNotebookAnswer_PassesStoredMeaningAsGroundTruth pins failure
+// mode A at the request layer: the card's stored meaning MUST be sent to the
+// judge as the authoritative ground truth, so the grader compares the learner's
+// answer to the notebook's meaning instead of substituting its own dictionary
+// definition. The stored meaning here is deliberately NARROWER than the word's
+// common sense ("bank" = riverside land, not a financial institution) so a
+// grader falling back to its own knowledge would score differently. GENERIC data.
+func TestService_GradeNotebookAnswer_PassesStoredMeaningAsGroundTruth(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	svc := newTestService(t, mockClient)
+
+	card := Card{
+		Entry:   "bank",
+		Meaning: "the land alongside a river",
+	}
+
+	var got inference.AnswerMeaningsRequest
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req inference.AnswerMeaningsRequest) (inference.AnswerMeaningsResponse, error) {
+			got = req
+			return inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{{
+					Expression:        req.Expressions[0].Expression,
+					AnswersForContext: []inference.AnswersForContext{{Correct: true, Quality: 5}},
+				}},
+			}, nil
+		})
+
+	_, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "the ground next to a river", 1000)
+	require.NoError(t, err)
+
+	require.Len(t, got.Expressions, 1)
+	assert.Equal(t, card.Meaning, got.Expressions[0].ReferenceMeaning,
+		"the card's stored meaning must be sent to the judge as the authoritative ground truth")
+	assert.Equal(t, "the ground next to a river", got.Expressions[0].Meaning,
+		"the Meaning field carries the learner's answer, not the stored meaning")
+}
+
+// TestService_GradeNotebookAnswer_ExpectedAnswerIsStoredMeaningVerbatim pins the
+// feedback half of failure mode A: when an answer is marked incorrect, the
+// expected answer surfaced to the learner is the card's stored meaning VERBATIM,
+// never a definition the model pulled from its own knowledge. Here the model
+// returns its own canonical "meaning" field AND a terse reason; the learner-facing
+// feedback must still carry the stored meaning and must not echo the model's
+// invented definition. GENERIC data.
+func TestService_GradeNotebookAnswer_ExpectedAnswerIsStoredMeaningVerbatim(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	svc := newTestService(t, mockClient)
+
+	card := Card{
+		Entry:   "bank",
+		Meaning: "the land alongside a river",
+	}
+
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{{
+				Expression: "bank",
+				Meaning:    "a financial institution", // model's own definition — must never surface
+				AnswersForContext: []inference.AnswersForContext{
+					{Correct: false, Reason: "wrong sense", Quality: 1},
+				},
+			}},
+		}, nil)
+
+	result, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "a place that holds money", 1000)
+	require.NoError(t, err)
+	assert.False(t, result.Correct)
+	assert.Contains(t, result.Reason, card.Meaning,
+		"incorrect feedback must surface the stored meaning verbatim as the expected answer")
+	assert.NotContains(t, result.Reason, "a financial institution",
+		"feedback must not echo a definition the model invented from its own knowledge")
+}

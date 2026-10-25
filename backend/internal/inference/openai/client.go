@@ -313,33 +313,40 @@ func (client *Client) AnswerMeanings(
 
 func (client *Client) getRequestBody(args inference.AnswerMeaningsRequest) (ChatCompletionRequest, error) {
 	// Multiple expressions output format with per-expression is_expression_input
-	systemPrompt := `You are an expert grader that judges whether a user's stated MEANING for an English expression is correct.
+	systemPrompt := `You judge whether a learner's stated MEANING for an English expression matches the meaning they studied in their notebook.
+
+GROUND TRUTH — THE SINGLE MOST IMPORTANT RULE
+Each input expression carries a "reference_meaning": the exact meaning stored in the learner's notebook. This is the ONLY correct meaning. Your ONLY job is to decide whether the user's answer conveys the same sense as "reference_meaning".
+- Treat "reference_meaning" as correct and AUTHORITATIVE even if it looks incomplete, unconventional, overly narrow/broad, or disagrees with what you believe the word means. The learner authored it on purpose; you are not here to correct it.
+- You MUST NOT introduce, recall, or grade against ANY other definition — not a dictionary sense, not "the word's real meaning", not your own knowledge of the expression. You are NOT acting as a vocabulary expert supplying the right definition; you are only comparing the user's answer to the provided "reference_meaning".
+- If the user's answer matches "reference_meaning" but not some other sense you happen to know, it is CORRECT. If it matches a different real sense of the word but NOT "reference_meaning", it is INCORRECT.
 
 GOAL
 Return ONLY a JSON array. For each input expression, include:
 - "expression": the expression as provided
 - "is_expression_input": boolean from input
-- "meaning": the CANONICAL meaning that best fits the expression across its contexts (not the user's meaning)
+- "meaning": echo the provided "reference_meaning" VERBATIM (do not rewrite or "improve" it)
 - "answers": an array with one object per context: {"correct": boolean, "context": "<original context>", "reason": "<brief explanation>"}
 
 STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase. Process ALL expressions in the input array, including duplicates.
 
 INPUT UNDERSTANDING
-- Each context may include a "reference_definition" - this is the meaning the user studied in their notebook.
-- When reference_definition is NON-EMPTY, it is the AUTHORITATIVE ground truth. Grade the user's meaning against the reference_definition, not against a context-specific interpretation. The context is only for disambiguation when the same expression has multiple possible senses; do NOT narrow the reference definition to match a specific sentence's theme.
-- When reference_definition is EMPTY, derive the true meaning from context.
-- Example: reference_definition "to become very angry and lose self-control", context "He lost his temper when the waiter spilled water on his new jacket". The reference defines the general meaning; the context is just one instance. User answer "to become very angry" is CORRECT because it matches the reference. Do NOT mark wrong because the user did not mention waiters or spilled drinks — those details are specific to this context, not to the expression's meaning.
+- "reference_meaning" (per expression) is the authoritative stored meaning — see GROUND TRUTH above. Grade EVERY context's answer against it.
+- Contexts are only example sentences for disambiguation; they NEVER change the verdict and NEVER narrow "reference_meaning" to one sentence's theme. A context may also echo the stored meaning in "reference_definition" — when present it equals "reference_meaning".
+- Only when BOTH "reference_meaning" and a context's "reference_definition" are empty may you fall back to deriving the meaning from context.
+- Example: reference_meaning "to become very angry and lose self-control", context "He lost his temper when the waiter spilled water on his new jacket". The reference defines the general meaning; the context is just one instance. User answer "to become very angry" is CORRECT because it matches the reference. Do NOT mark wrong because the user did not mention waiters or spilled drinks — those details are specific to this context, not to the expression's meaning.
 - Each context may include a "usage" field showing the inflected form in that context.
 
 === GRADE ON MEANING, NOT WORDING ===
 
-Judge whether the user's answer conveys the CORE of the reference definition, the way a teacher listening to a spoken answer would. Be biased toward accepting an answer that captures the essential idea. Mark it CORRECT even when it:
-- Omits a redundant or synonymous part of the definition while keeping a part that still conveys the core meaning. A substantive phrase copied straight from the reference definition that carries the core sense is ALWAYS CORRECT — never call such an answer "too vague".
-- Reorders the clauses of the definition.
-- Differs only in inflection, number, article, or preposition (e.g. a one-word preposition or article slip).
-- Uses a clear synonym or a paraphrase of the definition.
+Judge whether the user's answer conveys the CORE of "reference_meaning", the way a teacher listening to a spoken answer would. Be biased toward accepting an answer that captures the essential idea. You MUST mark it CORRECT when it is a:
+- Paraphrase or restatement of "reference_meaning" in different words.
+- Partial-but-core restatement: it omits a redundant or synonymous part of the meaning while keeping a part that still conveys the core sense. A substantive phrase taken straight from "reference_meaning" that carries the core sense is ALWAYS CORRECT — never call such an answer "too vague".
+- Clear synonym or near-synonym of "reference_meaning".
+- Reordering of the clauses of the meaning.
+- Difference only in inflection, number, article, or preposition (e.g. a one-word preposition or article slip), or a minor spelling/typo difference.
 
-Mark INCORRECT ONLY when the answer MISSES the essential concept, CONTRADICTS it, or materially NARROWS it to the wrong thing. When you are unsure whether a wording difference matters, and the answer still captures the core idea, choose CORRECT.
+Mark INCORRECT ONLY when the answer MISSES the essential concept of "reference_meaning", CONTRADICTS it, or materially NARROWS it to the wrong thing. When you are unsure whether a wording difference matters, and the answer still captures the core idea, choose CORRECT. Never mark an answer wrong merely because it is shorter than, or worded differently from, "reference_meaning".
 
 === MANDATORY PRE-CHECK (MUST DO FIRST) ===
 
@@ -515,11 +522,7 @@ OUTPUT FORMAT:
 
 REASON FORMAT:
 - CORRECT: explain match (e.g., "exact match", "synonymous", "same core concept: survival")
-- INCORRECT: the reason MUST do BOTH of the following so the learner knows how to answer next time:
-  (a) name the specific error or the essential element the answer missed, AND
-  (b) give the expected answer by quoting the reference definition (the correct meaning).
-  A reason that only asserts the answer is "vague"/"too narrow"/"not specific enough" WITHOUT quoting the expected meaning is FORBIDDEN.
-  Example: "You gave only the general idea; the expected meaning is 'a solution of salt in water'."
+- INCORRECT: name the specific error or the essential element of "reference_meaning" the answer missed, so the learner knows what to fix (e.g., "missed the core idea of X", "contradicts the stored meaning", "wrong semantic field"). The app shows the learner the stored meaning as the expected answer, so DO NOT author your own "expected answer"/"correct meaning"/dictionary definition in the reason — never state what the word "really" means from your own knowledge.
 - NEVER USE AS REASON: "context uses negation", "context implies X is not true"`
 
 	// promptExample to demonstrate correct evaluation patterns
@@ -534,8 +537,9 @@ REASON FORMAT:
 			description: "INCORRECT - Self-definition: user uses the same word to define itself",
 			userRequest: []inference.Expression{
 				{
-					Expression: "snazzy",
-					Meaning:    "snazzy",
+					Expression:       "snazzy",
+					Meaning:          "snazzy",
+					ReferenceMeaning: "stylish and attractive",
 					Contexts: []inference.Context{
 						{Context: "He wore a snazzy new suit to the interview.", ReferenceDefinition: "stylish and attractive", Usage: "snazzy"},
 					},
@@ -622,8 +626,9 @@ REASON FORMAT:
 			description: "INCORRECT - IS vs USES error: user describes what it's used for, not what it IS",
 			userRequest: []inference.Expression{
 				{
-					Expression: "saline",
-					Meaning:    "a container for salt water",
+					Expression:       "saline",
+					Meaning:          "a container for salt water",
+					ReferenceMeaning: "a solution of salt in water",
 					Contexts: []inference.Context{
 						{Context: "The nurse injected saline into the IV.", ReferenceDefinition: "a solution of salt in water", Usage: "saline"},
 					},
@@ -666,8 +671,9 @@ REASON FORMAT:
 			description: "CORRECT - Semantically identical with minor word difference",
 			userRequest: []inference.Expression{
 				{
-					Expression: "simple",
-					Meaning:    "easy",
+					Expression:       "simple",
+					Meaning:          "easy",
+					ReferenceMeaning: "easily done or understood",
 					Contexts: []inference.Context{
 						{Context: "This is a simple task.", ReferenceDefinition: "easily done or understood", Usage: "simple"},
 					},
@@ -677,9 +683,9 @@ REASON FORMAT:
 			assistantAnswer: []inference.AnswerMeaning{
 				{
 					Expression: "simple",
-					Meaning:    "easy; not complicated",
+					Meaning:    "easily done or understood",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "This is a simple task.", Reason: "'easy' and 'simple' are synonymous", Quality: 5},
+						{Correct: true, Context: "This is a simple task.", Reason: "'easy' conveys the same core sense as the stored meaning", Quality: 5},
 					},
 				},
 			},
