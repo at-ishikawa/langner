@@ -8,9 +8,20 @@ server:
 # harness can mint a bearer access token deterministically via
 # `langner-admin auth issue-test-token`. cookie_secure:false because e2e runs
 # over plain http (the OAuth `state` cookie only).
+#
+# Google is replaced by a local mock OAuth provider (frontend/e2e/mock-oauth-server.mjs)
+# so the auth scenarios run the real sign-in round-trip. The topology mirrors
+# production: Google redirects back to the FRONTEND origin (proxied to the API by
+# next.config.ts), and the SPA reaches the API on a DIFFERENT host
+# (127.0.0.1:8080, see playwright.config.ts). Cookies ignore ports, so with
+# both on `localhost` a state cookie set on the wrong host would still pass.
 auth:
   google_client_id: "e2e-test-client-id"
-  redirect_url: "http://localhost:8080/auth/google/callback"
+  redirect_url: "http://localhost:3100/auth/google/callback"
+  oauth_endpoint:
+    auth_url: "http://localhost:8090/authorize"
+    token_url: "http://localhost:8090/token"
+    userinfo_url: "http://localhost:8090/userinfo"
   frontend_url: "http://localhost:3100"
   allowed_emails:
     - "e2e@example.com"

@@ -54,15 +54,11 @@ function routeMatchesText(route: string, text: string): boolean {
   return new RegExp(`(^|\\b|"|/)\\/?${pattern.replace(/^\\\//, "")}(\\b|"|$|/|\\?)`).test(text);
 }
 
-// Routes with no .feature scenario BY DESIGN: auth-flow pages whose only
-// behavior depends on a real Google round-trip the e2e never performs (it seeds
-// the access token directly instead of signing in), so nothing drives them.
-const EXCLUDED_ROUTES = new Set<string>([
-  "/auth/callback", // token-mint redirect target: reads #access_token, then bounces
-  "/auth/device", // CLI device-login approval: acts only by kicking off a real
-  // Google sign-in (+ a backend-issued user_code); the e2e runs no device/OAuth
-  // flow, so no scenario visits it (mirrors /auth/callback).
-]);
+// Routes with no .feature scenario BY DESIGN. Keep this empty where possible:
+// the auth pages (/auth/callback, /auth/device) used to be listed here, which is
+// how a broken CLI device login shipped unnoticed. They are now driven through
+// the e2e mock OAuth provider (login.feature).
+const EXCLUDED_ROUTES = new Set<string>([]);
 
 const pages = walk(APP_DIR);
 const routes = pages.map(routeFromPagePath).filter((r) => !EXCLUDED_ROUTES.has(r));

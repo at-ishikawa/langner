@@ -3,6 +3,8 @@ import { defineBddConfig } from "playwright-bdd";
 
 const FRONTEND_PORT = 3100;
 const BACKEND_PORT = 8080;
+// Mock OAuth provider standing in for Google (config.e2e.yml auth.oauth_endpoint).
+const MOCK_OAUTH_PORT = 8090;
 
 const testDir = defineBddConfig({
   features: "e2e/features/**/*.feature",
@@ -110,12 +112,21 @@ export default defineConfig({
       timeout: 180000,
     },
     {
+      command: "node e2e/mock-oauth-server.mjs",
+      env: { MOCK_OAUTH_PORT: String(MOCK_OAUTH_PORT), E2E_EMAIL },
+      url: `http://localhost:${MOCK_OAUTH_PORT}/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 10000,
+    },
+    {
       command: `pnpm dev --port ${FRONTEND_PORT}`,
       url: `http://localhost:${FRONTEND_PORT}`,
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
       env: {
-        NEXT_PUBLIC_API_BASE_URL: `http://localhost:${BACKEND_PORT}`,
+        // 127.0.0.1, not localhost: the API must be a different cookie host than
+        // the frontend, as in production (see config.e2e.yml auth comment).
+        NEXT_PUBLIC_API_BASE_URL: `http://127.0.0.1:${BACKEND_PORT}`,
         NEXT_PUBLIC_CONNECT_JSON: "true",
       },
     },

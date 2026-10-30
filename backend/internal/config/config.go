@@ -75,6 +75,9 @@ type AuthConfig struct {
 	InitialAdminEmail string   `mapstructure:"initial_admin_email"`
 	CookieSecure      bool     `mapstructure:"cookie_secure"`
 	CookieSameSite    string   `mapstructure:"cookie_samesite"`
+	// OAuthEndpoint overrides Google's OAuth endpoints. Leave empty in real
+	// deployments; e2e points it at a local mock OAuth server.
+	OAuthEndpoint OAuthEndpointConfig `mapstructure:"oauth_endpoint"`
 
 	// Secrets — TokenSigningKey signs the access JWT (HS256) for BOTH the web SPA
 	// and the CLI, and keys the OAuth CSRF `state` signer; GoogleClientSecret is
@@ -85,6 +88,14 @@ type AuthConfig struct {
 	GoogleClientSecret      string `mapstructure:"google_client_secret"`
 	TokenSigningKey         string `mapstructure:"token_signing_key"`
 	CredentialEncryptionKey string `mapstructure:"credential_encryption_key"`
+}
+
+// OAuthEndpointConfig is the OAuth provider's authorize/token/userinfo URLs.
+// An empty field keeps Google's default for it.
+type OAuthEndpointConfig struct {
+	AuthURL     string `mapstructure:"auth_url"`
+	TokenURL    string `mapstructure:"token_url"`
+	UserInfoURL string `mapstructure:"userinfo_url"`
 }
 
 // Enabled reports whether auth is configured — i.e. the required token signing

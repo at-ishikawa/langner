@@ -44,18 +44,37 @@ type OAuthClient struct {
 	fetcher UserInfoFetcher
 }
 
-// NewOAuthClient builds an OAuthClient. A nil fetcher defaults to the live
-// Google userinfo endpoint.
-func NewOAuthClient(clientID, clientSecret, redirectURL string, fetcher UserInfoFetcher) *OAuthClient {
+// Endpoint overrides the OAuth provider URLs. An empty field keeps Google's
+// default; only e2e sets these (to a local mock OAuth server).
+type Endpoint struct {
+	AuthURL     string
+	TokenURL    string
+	UserInfoURL string
+}
+
+// NewOAuthClient builds an OAuthClient. A nil fetcher defaults to the userinfo
+// endpoint (Google's unless overridden).
+func NewOAuthClient(clientID, clientSecret, redirectURL string, endpoint Endpoint, fetcher UserInfoFetcher) *OAuthClient {
+	oauthEndpoint := google.Endpoint
+	if endpoint.AuthURL != "" {
+		oauthEndpoint.AuthURL = endpoint.AuthURL
+	}
+	if endpoint.TokenURL != "" {
+		oauthEndpoint.TokenURL = endpoint.TokenURL
+	}
 	cfg := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
 		Scopes:       []string{"openid", "email", "profile"},
-		Endpoint:     google.Endpoint,
+		Endpoint:     oauthEndpoint,
 	}
 	if fetcher == nil {
-		fetcher = googleUserInfoFetcher{}
+		userInfoURL := endpoint.UserInfoURL
+		if userInfoURL == "" {
+			userInfoURL = googleUserInfoURL
+		}
+		fetcher = httpUserInfoFetcher{url: userInfoURL}
 	}
 	return &OAuthClient{config: cfg, fetcher: fetcher}
 }
@@ -79,14 +98,16 @@ func (c *OAuthClient) FetchUserInfo(ctx context.Context, token *oauth2.Token) (U
 	return c.fetcher.FetchUserInfo(ctx, token)
 }
 
-// googleUserInfoFetcher calls Google's OpenID userinfo endpoint using the
-// access token.
-type googleUserInfoFetcher struct{}
+// httpUserInfoFetcher calls an OpenID userinfo endpoint (Google's by default)
+// using the access token.
+type httpUserInfoFetcher struct {
+	url string
+}
 
 const googleUserInfoURL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
-func (googleUserInfoFetcher) FetchUserInfo(ctx context.Context, token *oauth2.Token) (UserInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleUserInfoURL, nil)
+func (f httpUserInfoFetcher) FetchUserInfo(ctx context.Context, token *oauth2.Token) (UserInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.url, nil)
 	if err != nil {
 		return UserInfo{}, fmt.Errorf("build userinfo request: %w", err)
 	}
