@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -14,20 +15,31 @@ import (
 	migrate "github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	_ "github.com/jackc/pgx/v5/stdlib" // register the pgx driver under the name "pgx"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/at-ishikawa/langner/internal/config"
 )
 
-// Open opens a PostgreSQL connection using the provided config.
+// Open opens a PostgreSQL connection using the provided config. Every
+// connection counts the bytes it receives and traces its queries, so
+// QueryStatsMiddleware can report per-request database usage.
 func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
-	dsn := buildDSN(cfg)
-
-	db, err := sqlx.Open("pgx", dsn)
+	connConfig, err := pgx.ParseConfig(buildDSN(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("open database connection: %w", err)
 	}
+	dial := connConfig.DialFunc
+	connConfig.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := dial(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return &countingConn{Conn: conn}, nil
+	}
+	connConfig.Tracer = queryTracer{}
+	db := sqlx.NewDb(stdlib.OpenDB(*connConfig), "pgx")
 
 	if cfg.MaxOpenConns > 0 {
 		db.SetMaxOpenConns(cfg.MaxOpenConns)

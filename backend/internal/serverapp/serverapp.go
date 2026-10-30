@@ -139,6 +139,7 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 		} else {
 			db = opened
 			closers = append(closers, func() { _ = db.Close() })
+			database.LogUnattributedQueries()
 		}
 	}
 
@@ -389,6 +390,10 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	// token for both the connect interceptor and /auth/me. Never rejects —
 	// /auth/* and CORS preflight pass through; the interceptor gates RPCs.
 	rootHandler = server.AuthBearerMiddleware(rootHandler, authSetup.Tokens)
+	// Logs one "db usage" line per request that queried Postgres (counts, rows,
+	// bytes received, top query shapes — never data), to find endpoints that
+	// pull a lot of data from the database.
+	rootHandler = database.QueryStatsMiddleware(rootHandler)
 
 	return corsMiddleware(rootHandler, cfg.Server.CORS.AllowedOrigins), authSetup, cleanup, nil
 }
