@@ -51,9 +51,12 @@ function DeviceApproval() {
         takes you through a one-time Google sign-in; the account you sign in as is the account the
         CLI will act as. Only approve a code you started yourself.
       </Text>
-      {/* GET → the API's Google sign-in (folds user_code into the signed OAuth
-          state); the Deny button POSTs to the API, which redirects back here. */}
-      <form method="get" action={`${API_BASE}/auth/google/login`} style={{ width: "100%" }}>
+      {/* GET → Google sign-in (folds user_code into the signed OAuth state). It
+          is SAME-ORIGIN (reverse-proxied to the API, see next.config.ts) so the
+          OAuth state cookie lands on the host Google redirects back to; posting
+          to the API host directly leaves the callback without it (invalid_state).
+          The Deny button POSTs to the API, which redirects back here. */}
+      <form method="get" action="/auth/google/login" style={{ width: "100%" }}>
         <VStack gap={4}>
           <Input
             name="user_code"

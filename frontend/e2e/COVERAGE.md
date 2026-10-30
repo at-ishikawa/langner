@@ -45,11 +45,22 @@ actual navigation).
 | `/quiz/relearn/complete`            | relearn           | Relearn a word missed moments ago in a Standard quiz    |
 | `/analytics`                        | analytics         | Open the Analytics Day List from home                   |
 | `/analytics/[date]`                 | analytics         | Open a Day Detail page with seeded wrong words          |
+| `/login`                            | login             | The login page offers Google sign-in                    |
+| `/auth/callback`                    | login             | Sign in with Google from the login page                 |
+| `/auth/device`                      | login             | Approve a CLI device login in the browser               |
 
 ## Interactions per page
 
 These are the user-visible inputs and outputs that a scenario should exercise.
 Tick the box when at least one scenario hits the interaction.
+
+### `/login`, `/auth/callback`, `/auth/device` (sign-in)
+
+Run against the e2e mock OAuth provider (`e2e/mock-oauth-server.mjs`) in place
+of Google, with the API on a different host than the frontend (as in production).
+
+- [x] Click "Sign in with Google" → OAuth round-trip → `/auth/callback` → signed in on `/`
+- [x] `langner login` → enter the printed code on `/auth/device` → Approve → "Approved", CLI logged in
 
 ### `/` (home)
 

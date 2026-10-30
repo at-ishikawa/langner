@@ -486,7 +486,11 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*AuthComponents, error) {
 		credentials = auth.NewCredentialsRepository(db, enc)
 	}
 
-	authenticator := auth.NewOAuthClient(cfg.Auth.GoogleClientID, cfg.Auth.GoogleClientSecret, cfg.Auth.RedirectURL, nil)
+	authenticator := auth.NewOAuthClient(cfg.Auth.GoogleClientID, cfg.Auth.GoogleClientSecret, cfg.Auth.RedirectURL, auth.Endpoint{
+		AuthURL:     cfg.Auth.OAuthEndpoint.AuthURL,
+		TokenURL:    cfg.Auth.OAuthEndpoint.TokenURL,
+		UserInfoURL: cfg.Auth.OAuthEndpoint.UserInfoURL,
+	}, nil)
 	handler := server.NewAuthHandler(server.AuthHandlerConfig{
 		Authenticator:  authenticator,
 		Tokens:         tokens,
