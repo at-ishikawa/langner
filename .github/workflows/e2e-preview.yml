@@ -52,7 +52,9 @@ jobs:
     # must never run a fork's test code with secrets — forks are covered by the
     # local e2e in frontend.yml instead.
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is now 26.04, where Playwright 1.58 cannot install
+    # Chromium ("Playwright does not support chromium on ubuntu26.04-x64").
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     concurrency:
       # Serialize: all runs reset the one shared preview database.
