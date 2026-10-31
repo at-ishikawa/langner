@@ -70,7 +70,7 @@ describe("WordDetailView", () => {
           { origin: "spect", type: "root", language: "Latin", meaning: "to see" },
         ],
       });
-      expect(screen.getByText("Etymology")).toBeInTheDocument();
+      expect(screen.getByText("Word roots")).toBeInTheDocument();
       expect(screen.getByText("spect")).toBeInTheDocument();
       expect(screen.getByText("(to see)")).toBeInTheDocument();
       expect(screen.getByText("Latin")).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("WordDetailView", () => {
 
     it("does not show Etymology section when originParts is empty", () => {
       renderView({ originParts: [], synonyms: ["x"] });
-      expect(screen.queryByText("Etymology")).not.toBeInTheDocument();
+      expect(screen.queryByText("Word roots")).not.toBeInTheDocument();
     });
   });
 
@@ -173,7 +173,7 @@ describe("WordDetailView", () => {
         memo: "memo text",
       });
       expect(screen.getByText("Origin")).toBeInTheDocument();
-      expect(screen.getByText("Etymology")).toBeInTheDocument();
+      expect(screen.getByText("Word roots")).toBeInTheDocument();
       expect(screen.getByText("Synonyms")).toBeInTheDocument();
       expect(screen.getByText("Antonyms")).toBeInTheDocument();
       expect(screen.getByText("Note")).toBeInTheDocument();
@@ -186,7 +186,7 @@ describe("WordDetailView", () => {
         antonyms: [],
       });
       expect(screen.getByText("Origin")).toBeInTheDocument();
-      expect(screen.queryByText("Etymology")).not.toBeInTheDocument();
+      expect(screen.queryByText("Word roots")).not.toBeInTheDocument();
       expect(screen.queryByText("Synonyms")).not.toBeInTheDocument();
       expect(screen.queryByText("Antonyms")).not.toBeInTheDocument();
       expect(screen.queryByText("Note")).not.toBeInTheDocument();
@@ -200,7 +200,7 @@ describe("WordDetailView", () => {
           "The idiom originally refers to herbs or plants that were cut and dried for medicinal or commercial use.",
       });
       expect(screen.getByText("Origin")).toBeInTheDocument();
-      expect(screen.queryByText("Etymology")).not.toBeInTheDocument();
+      expect(screen.queryByText("Word roots")).not.toBeInTheDocument();
     });
 
     it("latin-root word with origin parts but no prose", () => {
@@ -210,7 +210,7 @@ describe("WordDetailView", () => {
           { origin: "mence", type: "root", language: "Latin", meaning: "to begin" },
         ],
       });
-      expect(screen.getByText("Etymology")).toBeInTheDocument();
+      expect(screen.getByText("Word roots")).toBeInTheDocument();
       expect(screen.queryByText("Origin")).not.toBeInTheDocument();
     });
 
@@ -222,7 +222,7 @@ describe("WordDetailView", () => {
       expect(screen.getByText("Synonyms")).toBeInTheDocument();
       expect(screen.getByText("Antonyms")).toBeInTheDocument();
       expect(screen.queryByText("Origin")).not.toBeInTheDocument();
-      expect(screen.queryByText("Etymology")).not.toBeInTheDocument();
+      expect(screen.queryByText("Word roots")).not.toBeInTheDocument();
     });
   });
 });

@@ -10,7 +10,7 @@ type Tab = "vocabulary" | "journals" | "etymology";
 const TAB_LABELS: { key: Tab; label: string }[] = [
   { key: "vocabulary", label: "Vocabulary" },
   { key: "journals", label: "Journals" },
-  { key: "etymology", label: "Etymology" },
+  { key: "etymology", label: "Word roots" },
 ];
 
 export default function LearnHubPage() {

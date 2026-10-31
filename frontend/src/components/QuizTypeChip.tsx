@@ -1,12 +1,12 @@
 import { Badge } from "@chakra-ui/react";
 
 const LABEL: Record<string, string> = {
-  notebook: "Notebook",
-  reverse: "Reverse",
-  freeform: "Freeform",
-  etymology_breakdown: "Etym · Breakdown",
-  etymology_assembly: "Etym · Assembly",
-  etymology_freeform: "Etym · Freeform",
+  notebook: "What does it mean?",
+  reverse: "Which word is it?",
+  freeform: "Free practice",
+  etymology_breakdown: "Word roots",
+  etymology_assembly: "Word roots",
+  etymology_freeform: "Word roots",
   grammar: "Grammar",
 };
 

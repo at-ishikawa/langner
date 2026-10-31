@@ -53,12 +53,12 @@ const filterOptions: { value: StatusFilter; label: string }[] = [
 // labels for the skip badges shown next to each word. The keys must match
 // the values written by the backend's SkippedAtMap (notebook/quiz_type.go).
 const SKIPPED_TYPE_LABELS: Record<string, string> = {
-  notebook: "Standard",
-  reverse: "Reverse",
-  freeform: "Freeform",
-  etymology_breakdown: "Etym. Std",
-  etymology_assembly: "Etym. Rev",
-  etymology_freeform: "Etym. FF",
+  notebook: "What does it mean?",
+  reverse: "Which word is it?",
+  freeform: "Free practice",
+  etymology_breakdown: "Word roots",
+  etymology_assembly: "Word roots",
+  etymology_freeform: "Word roots",
 };
 
 function SkippedTypeBadges({ types }: { types: string[] }) {
@@ -588,9 +588,9 @@ function SceneRow({
 // Etymology types are intentionally excluded — vocab notebook words aren't
 // shown in etymology quizzes, so toggling them here would be meaningless.
 const VOCAB_SKIP_TYPES: { key: string; label: string; quizType: QuizType }[] = [
-  { key: "notebook", label: "Standard", quizType: QuizType.STANDARD },
-  { key: "reverse", label: "Reverse", quizType: QuizType.REVERSE },
-  { key: "freeform", label: "Freeform", quizType: QuizType.FREEFORM },
+  { key: "notebook", label: "What does it mean?", quizType: QuizType.STANDARD },
+  { key: "reverse", label: "Which word is it?", quizType: QuizType.REVERSE },
+  { key: "freeform", label: "Free practice", quizType: QuizType.FREEFORM },
 ];
 
 // groupDefinitionsByConcept collapses concept member rows into a single

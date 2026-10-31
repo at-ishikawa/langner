@@ -92,31 +92,31 @@ describe("QuizHubPage", () => {
   it("shows Vocabulary tab with 3 quiz mode cards by default", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText("Standard")).toBeInTheDocument();
+      expect(screen.getByText("What does it mean?")).toBeInTheDocument();
     });
     expect(screen.getByText("See a word, type its meaning")).toBeInTheDocument();
-    expect(screen.getByText("Reverse")).toBeInTheDocument();
-    expect(screen.getByText("Freeform")).toBeInTheDocument();
+    expect(screen.getByText("Which word is it?")).toBeInTheDocument();
+    expect(screen.getByText("Free practice")).toBeInTheDocument();
   });
 
   it("selecting a mode highlights it and shows Start button", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText("Standard")).toBeInTheDocument();
+      expect(screen.getByText("What does it mean?")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText("Standard"));
+    fireEvent.click(screen.getByText("What does it mean?"));
     expect(screen.getByText("Start")).toBeInTheDocument();
   });
 
   it("deselects mode when clicking it again", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText("Standard")).toBeInTheDocument();
+      expect(screen.getByText("What does it mean?")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText("Standard"));
+    fireEvent.click(screen.getByText("What does it mean?"));
     expect(screen.getByText("Start")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Standard"));
+    fireEvent.click(screen.getByText("What does it mean?"));
     expect(screen.queryByText("Start")).not.toBeInTheDocument();
   });
 
@@ -124,9 +124,9 @@ describe("QuizHubPage", () => {
     renderPageDark();
     await waitFor(() => {
       expect(screen.getByText("Quiz")).toBeInTheDocument();
-      expect(screen.getByText("Standard")).toBeInTheDocument();
-      expect(screen.getByText("Reverse")).toBeInTheDocument();
-      expect(screen.getByText("Freeform")).toBeInTheDocument();
+      expect(screen.getByText("What does it mean?")).toBeInTheDocument();
+      expect(screen.getByText("Which word is it?")).toBeInTheDocument();
+      expect(screen.getByText("Free practice")).toBeInTheDocument();
     });
   });
 });
@@ -171,9 +171,9 @@ describe("QuizHubPage vocab-tab filtering by vocabularyCount", () => {
 
   async function openPickerWithUnstudied() {
     const { container } = renderPage();
-    await waitFor(() => expect(screen.getByText("Standard")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("What does it mean?")).toBeInTheDocument());
     // Select a mode so the notebook picker + "Include unstudied" toggle appear.
-    fireEvent.click(screen.getByText("Standard"));
+    fireEvent.click(screen.getByText("What does it mean?"));
     // Turn the toggle ON: a with-vocabulary notebook that has no due reviews
     // (reviewCount 0) must still appear — the structural gate never removes it.
     // Before the toggle the SR filter hides every reviewCount-0 notebook, so

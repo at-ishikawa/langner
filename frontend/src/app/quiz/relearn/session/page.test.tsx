@@ -135,7 +135,7 @@ describe("RelearnSessionPage", () => {
     renderPage();
     expect(screen.getByText("alpha")).toBeInTheDocument();
     expect(screen.getByText("2 words left")).toBeInTheDocument();
-    expect(screen.getByText(/Recognition/)).toBeInTheDocument();
+    expect(screen.getByText(/What does it mean/)).toBeInTheDocument();
   });
 
   it("renders a reverse-format card as meaning-to-word", () => {
@@ -144,7 +144,7 @@ describe("RelearnSessionPage", () => {
     // The meaning is the prompt; the word is NOT shown.
     expect(screen.getByTestId("relearn-prompt")).toHaveTextContent("a change or difference");
     expect(screen.queryByText("delta")).not.toBeInTheDocument();
-    expect(screen.getByText(/Reverse/)).toBeInTheDocument();
+    expect(screen.getByText(/Which word is it/)).toBeInTheDocument();
     expect(screen.getByText("The word")).toBeInTheDocument();
   });
 
@@ -440,7 +440,7 @@ describe("RelearnSessionPage", () => {
     expect(post).toHaveTextContent("to write");
     expect(post).toHaveTextContent("describe");
     expect(post).toHaveTextContent("inscribe");
-    expect(screen.getByText(/Etymology/)).toBeInTheDocument();
+    expect(screen.getByText(/Word roots/)).toBeInTheDocument();
 
     // Answer one word wrong → its pinned feedback shows the origin breakdown +
     // literal gloss (the etymology feedback), keyed to that word.
