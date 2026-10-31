@@ -249,10 +249,45 @@ func (s *Service) visibleNotebooks(userID int64) (notebook.VisibilityPredicate, 
 // Service. In YAML-only mode the on-disk reader is single-tenant and ignores
 // userID.
 func (s *Service) loadHistoriesForNotebooks(userID int64, notebookIDs ...string) (map[string][]notebook.LearningHistory, error) {
+	var load func(context.Context, []string, int64) (map[string][]notebook.LearningHistory, error)
+	if s.historyStore != nil {
+		load = s.historyStore.LoadForNotebooks
+	}
+	return s.loadScopedHistories(load, userID, notebookIDs)
+}
+
+// loadSummaryHistoriesForNotebooks is loadHistoriesForNotebooks for count-only
+// views: when the store supports it, it reads only the logs review scheduling
+// uses (see learning.DBHistoryStore.LoadSummaryForNotebooks), so the quiz
+// options summary doesn't download the learner's entire history.
+func (s *Service) loadSummaryHistoriesForNotebooks(userID int64, notebookIDs ...string) (map[string][]notebook.LearningHistory, error) {
+	if st, ok := s.historyStore.(interface {
+		LoadSummaryForNotebooks(context.Context, []string, int64) (map[string][]notebook.LearningHistory, error)
+	}); ok {
+		return s.loadScopedHistories(st.LoadSummaryForNotebooks, userID, notebookIDs)
+	}
+	return s.loadHistoriesForNotebooks(userID, notebookIDs...)
+}
+
+// loadSkipStateForNotebooks is loadHistoriesForNotebooks for callers that only
+// ask whether a word is excluded from a quiz: when the store supports it, no
+// learning logs are read (see learning.DBHistoryStore.LoadSkipStateForNotebooks).
+func (s *Service) loadSkipStateForNotebooks(userID int64, notebookIDs ...string) (map[string][]notebook.LearningHistory, error) {
+	if st, ok := s.historyStore.(interface {
+		LoadSkipStateForNotebooks(context.Context, []string, int64) (map[string][]notebook.LearningHistory, error)
+	}); ok {
+		return s.loadScopedHistories(st.LoadSkipStateForNotebooks, userID, notebookIDs)
+	}
+	return s.loadHistoriesForNotebooks(userID, notebookIDs...)
+}
+
+// loadScopedHistories reads notebookIDs' histories with load (nil = the YAML
+// files) and filters them by notebook visibility.
+func (s *Service) loadScopedHistories(load func(context.Context, []string, int64) (map[string][]notebook.LearningHistory, error), userID int64, notebookIDs []string) (map[string][]notebook.LearningHistory, error) {
 	var histories map[string][]notebook.LearningHistory
 	var err error
-	if s.historyStore != nil {
-		histories, err = s.historyStore.LoadForNotebooks(context.Background(), notebookIDs, userID)
+	if load != nil {
+		histories, err = load(context.Background(), notebookIDs, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -407,7 +442,7 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 	for id := range summaryIDSet {
 		summaryIDs = append(summaryIDs, id)
 	}
-	learningHistories, err := s.loadHistoriesForNotebooks(userID, summaryIDs...)
+	learningHistories, err := s.loadSummaryHistoriesForNotebooks(userID, summaryIDs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -693,6 +728,58 @@ func buildWordDetail(note *notebook.Note, originMap map[string]notebook.Etymolog
 // ResolveReverseCardByNote for the rationale, including why originNotebookID is
 // needed to disambiguate a word shared across notebooks under one sense_id.
 func (s *Service) ResolveCardByNote(userID int64, note *notebook.NoteRecord, originNotebookID string) (Card, bool, error) {
+	cards, found := s.ResolveCardsByNotes(userID, []*notebook.NoteRecord{note}, []string{originNotebookID})
+	return cards[0], found[0], nil
+}
+
+// ResolveCardsByNotes is ResolveCardByNote for a batch: notes that resolve
+// against the same notebooks share ONE card load, instead of reloading the
+// notebook (and its learning history) for every answer.
+func (s *Service) ResolveCardsByNotes(userID int64, notes []*notebook.NoteRecord, originNotebookIDs []string) ([]Card, []bool) {
+	return resolveByNotes(notes, originNotebookIDs,
+		func(nbIDs []string) ([]Card, error) { return s.LoadCards(userID, nbIDs, true, nil) },
+		func(c Card) string { return c.ID })
+}
+
+// resolveByNotes finds each note's card (by sense id) among the cards of the
+// notebooks the note resolves to (see resolveNoteNotebooks), loading each
+// distinct notebook set once. found[i] is false for a note with no target
+// notebooks, no sense id, or no matching card, or when loading its notebooks
+// failed (logged; the other notes still resolve).
+func resolveByNotes[C any](notes []*notebook.NoteRecord, originNotebookIDs []string, load func(nbIDs []string) ([]C, error), cardID func(C) string) ([]C, []bool) {
+	cards := make([]C, len(notes))
+	found := make([]bool, len(notes))
+	loaded := make(map[string][]C)
+	for i, note := range notes {
+		nbIDs := resolveNoteNotebooks(note, originNotebookIDs[i])
+		if len(nbIDs) == 0 || note.SenseID == "" {
+			continue
+		}
+		key := strings.Join(nbIDs, "\x00")
+		candidates, ok := loaded[key]
+		if !ok {
+			var err error
+			if candidates, err = load(nbIDs); err != nil {
+				slog.Warn("resolve cards by notes: load failed", "notebooks", nbIDs, "error", err)
+			}
+			loaded[key] = candidates
+		}
+		for _, c := range candidates {
+			if cardID(c) == note.SenseID {
+				cards[i] = c
+				found[i] = true
+				break
+			}
+		}
+	}
+	return cards, found
+}
+
+// resolveNoteNotebooks returns the notebooks a note's card is loaded from: the
+// originating notebook when the note belongs to it (so a word shared across
+// notebooks resolves to the card actually quizzed), otherwise every notebook
+// the note belongs to (legacy first-match fallback).
+func resolveNoteNotebooks(note *notebook.NoteRecord, originNotebookID string) []string {
 	seen := map[string]bool{}
 	var nbIDs []string
 	for _, nn := range note.NotebookNotes {
@@ -701,24 +788,10 @@ func (s *Service) ResolveCardByNote(userID int64, note *notebook.NoteRecord, ori
 			nbIDs = append(nbIDs, nn.NotebookID)
 		}
 	}
-	// Scope to the originating notebook when the note belongs to it (see
-	// ResolveReverseCardByNote); empty = legacy first-match fallback.
 	if originNotebookID != "" && seen[originNotebookID] {
-		nbIDs = []string{originNotebookID}
+		return []string{originNotebookID}
 	}
-	if len(nbIDs) == 0 || note.SenseID == "" {
-		return Card{}, false, nil
-	}
-	cards, err := s.LoadCards(userID, nbIDs, true, nil)
-	if err != nil {
-		return Card{}, false, err
-	}
-	for _, c := range cards {
-		if c.ID == note.SenseID {
-			return c, true, nil
-		}
-	}
-	return Card{}, false, nil
+	return nbIDs
 }
 
 // LoadCards returns filtered quiz cards for the given notebooks.
@@ -1553,32 +1626,16 @@ type ReverseContext struct {
 // Empty (legacy clients that don't echo the notebook) falls back to the old
 // first-match behavior.
 func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteRecord, originNotebookID string) (ReverseCard, bool, error) {
-	seen := map[string]bool{}
-	var nbIDs []string
-	for _, nn := range note.NotebookNotes {
-		if nn.NotebookID != "" && !seen[nn.NotebookID] {
-			seen[nn.NotebookID] = true
-			nbIDs = append(nbIDs, nn.NotebookID)
-		}
-	}
-	// Scope to the originating notebook when it is one the note belongs to, so
-	// a word shared across notebooks resolves to the card actually quizzed.
-	if originNotebookID != "" && seen[originNotebookID] {
-		nbIDs = []string{originNotebookID}
-	}
-	if len(nbIDs) == 0 || note.SenseID == "" {
-		return ReverseCard{}, false, nil
-	}
-	cards, err := s.LoadReverseCards(userID, nbIDs, false, true, nil)
-	if err != nil {
-		return ReverseCard{}, false, err
-	}
-	for _, c := range cards {
-		if c.ID == note.SenseID {
-			return c, true, nil
-		}
-	}
-	return ReverseCard{}, false, nil
+	cards, found := s.ResolveReverseCardsByNotes(userID, []*notebook.NoteRecord{note}, []string{originNotebookID})
+	return cards[0], found[0], nil
+}
+
+// ResolveReverseCardsByNotes is ResolveReverseCardByNote for a batch (see
+// ResolveCardsByNotes).
+func (s *Service) ResolveReverseCardsByNotes(userID int64, notes []*notebook.NoteRecord, originNotebookIDs []string) ([]ReverseCard, []bool) {
+	return resolveByNotes(notes, originNotebookIDs,
+		func(nbIDs []string) ([]ReverseCard, error) { return s.LoadReverseCards(userID, nbIDs, false, true, nil) },
+		func(c ReverseCard) string { return c.ID })
 }
 
 func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
@@ -2390,13 +2447,29 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 	flashcardIndexes := reader.GetFlashcardIndexes()
 	originMap := buildOriginMap(reader)
 
+	// The loaders below consult histories only to drop words excluded from the
+	// freeform quiz, so read every notebook's skip state in ONE load, without
+	// learning logs, instead of a full history read per notebook.
+	skipStateIDs := make([]string, 0, len(storyIndexes)+len(flashcardIndexes))
+	for id := range storyIndexes {
+		skipStateIDs = append(skipStateIDs, id)
+	}
+	for id := range flashcardIndexes {
+		skipStateIDs = append(skipStateIDs, id)
+	}
+	skipStateIDs = append(skipStateIDs, reader.GetDefinitionsBookIDs()...)
+	skipStates, err := s.loadSkipStateForNotebooks(userID, skipStateIDs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load skip state: %w", err)
+	}
+
 	var cards []FreeformCard
 
 	for notebookID := range storyIndexes {
 		if !visible(notebookID) {
 			continue
 		}
-		words, err := s.loadStoryWords(userID, reader, notebookID, originMap)
+		words, err := loadStoryWords(reader, notebookID, originMap, skipStates[notebookID])
 		if err != nil {
 			continue
 		}
@@ -2407,18 +2480,14 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 		if !visible(notebookID) {
 			continue
 		}
-		words, err := s.loadFlashcardWords(userID, reader, notebookID, originMap)
+		words, err := loadFlashcardWords(reader, notebookID, originMap, skipStates[notebookID])
 		if err != nil {
 			continue
 		}
 		cards = append(cards, words...)
 	}
 
-	// Also load from definitions-only books. loadDefinitionWords only consults
-	// these books' histories (to drop skipped_at-excluded words), so scope the
-	// read to exactly the definitions-book IDs instead of loading every
-	// notebook's history — the definitions books are the only keys it indexes.
-	learningHistories, _ := s.loadHistoriesForNotebooks(userID, reader.GetDefinitionsBookIDs()...)
+	// Also load from definitions-only books (their skip state is in skipStates).
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
 		if !visible(nbID) {
 			continue
@@ -2429,7 +2498,7 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
 			continue
 		}
-		defWords := loadDefinitionWords(reader, nbID, originMap, learningHistories)
+		defWords := loadDefinitionWords(reader, nbID, originMap, skipStates)
 		cards = append(cards, defWords...)
 	}
 
@@ -2571,15 +2640,12 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 	return cards
 }
 
-func (s *Service) loadStoryWords(userID int64, reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
+// loadStoryWords returns a story notebook's words as freeform cards, dropping
+// words excluded from the freeform quiz in histories (the notebook's skip state).
+func loadStoryWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin, histories []notebook.LearningHistory) ([]FreeformCard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
 		return nil, err
-	}
-
-	learningHistories, err := s.loadHistoriesForNotebooks(userID, notebookID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
 	var cards []FreeformCard
@@ -2587,7 +2653,7 @@ func (s *Service) loadStoryWords(userID int64, reader *notebook.Reader, notebook
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
 				// Skip words marked as skipped from freeform mode
-				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeFreeform, nil) {
+				if isExpressionSkippedInHistory(histories, story.Event, scene.Title, &definition, notebook.QuizTypeFreeform, nil) {
 					continue
 				}
 
@@ -2618,22 +2684,20 @@ func (s *Service) loadStoryWords(userID int64, reader *notebook.Reader, notebook
 	return cards, nil
 }
 
-func (s *Service) loadFlashcardWords(userID int64, reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
+// loadFlashcardWords returns a flashcard notebook's words as freeform cards,
+// dropping words excluded from the freeform quiz in histories (the notebook's
+// skip state).
+func loadFlashcardWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin, histories []notebook.LearningHistory) ([]FreeformCard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		return nil, err
-	}
-
-	learningHistories, err := s.loadHistoriesForNotebooks(userID, notebookID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
 	var cards []FreeformCard
 	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
 			// Skip words marked as skipped from freeform mode
-			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeFreeform, nil) {
+			if isExpressionSkippedInHistory(histories, nb.Title, "", &card, notebook.QuizTypeFreeform, nil) {
 				continue
 			}
 

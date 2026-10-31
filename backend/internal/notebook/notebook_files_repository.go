@@ -7,10 +7,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/at-ishikawa/langner/internal/database"
 )
 
 // NotebookFile is one raw YAML file of a stored notebook bundle. Path is
@@ -129,11 +132,7 @@ func (r *NotebookFileRepository) PushBundle(ctx context.Context, nb UserNotebook
 		if strings.TrimSpace(family) == "" {
 			family = familyDir(nb.Kind) // single-kind push: every file in the notebook's one family
 		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO notebook_files (notebook_id, family, path, content, content_sha256, byte_size)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			nb.NotebookID, family, f.Path, f.Content, FileSHA256(f.Content), len(f.Content),
-		); err != nil {
+		if err := r.insertFile(ctx, tx, nb.NotebookID, family, f); err != nil {
 			return fmt.Errorf("insert notebook_file %s: %w", f.Path, err)
 		}
 	}
@@ -208,11 +207,7 @@ func (r *NotebookFileRepository) ImportShippedBundle(ctx context.Context, notebo
 		if strings.TrimSpace(family) == "" {
 			family = familyDir(kind)
 		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO notebook_files (notebook_id, family, path, content, content_sha256, byte_size)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			notebookID, family, f.Path, f.Content, FileSHA256(f.Content), len(f.Content),
-		); err != nil {
+		if err := r.insertFile(ctx, tx, notebookID, family, f); err != nil {
 			return fmt.Errorf("insert notebook_file %s/%s: %w", family, f.Path, err)
 		}
 	}
@@ -234,17 +229,71 @@ func (r *NotebookFileRepository) ListFiles(ctx context.Context, notebookID strin
 	return files, nil
 }
 
-// ListContentNotebookIDs returns every notebook id that has stored blobs,
-// regardless of source ('shipped' imported catalog + 'user' pushes). This is
-// the enumeration DBContentSource materializes — presence of blobs, not the
-// notebooks.kind, decides what the DB serves (design §13.4).
-func (r *NotebookFileRepository) ListContentNotebookIDs(ctx context.Context) ([]string, error) {
-	var ids []string
-	if err := r.db.SelectContext(ctx, &ids,
-		`SELECT DISTINCT notebook_id FROM notebook_files ORDER BY notebook_id`); err != nil {
-		return nil, fmt.Errorf("list content notebook ids: %w", err)
+// contentGzColumn reports whether migration 037's compressed copy exists. The
+// server does not migrate on boot, so the old uncompressed queries stay in use
+// until the migration is applied.
+var contentGzColumn = database.NewColumnCheck("notebook_files", "content_gz")
+
+// insertFile inserts one blob, with its gzip copy when the column exists.
+func (r *NotebookFileRepository) insertFile(ctx context.Context, tx *sqlx.Tx, notebookID, family string, f NotebookFile) error {
+	if !contentGzColumn.Exists(ctx, r.db) {
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO notebook_files (notebook_id, family, path, content, content_sha256, byte_size)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			notebookID, family, f.Path, f.Content, FileSHA256(f.Content), len(f.Content))
+		return err
 	}
-	return ids, nil
+	_, err := tx.ExecContext(ctx,
+		`INSERT INTO notebook_files (notebook_id, family, path, content, content_gz, content_sha256, byte_size)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		notebookID, family, f.Path, f.Content, database.Gzip(f.Content), FileSHA256(f.Content), len(f.Content))
+	return err
+}
+
+// ListAllFilesForServing returns every stored file of every notebook in ONE
+// query, ordered by notebook id, family, then path. It reads the gzip copy and
+// decompresses it here, so far fewer bytes cross the wire than reading content.
+// A row without a copy yet (written before migration 037) is read uncompressed
+// and its copy is backfilled, best-effort.
+func (r *NotebookFileRepository) ListAllFilesForServing(ctx context.Context) ([]NotebookFile, error) {
+	if !contentGzColumn.Exists(ctx, r.db) {
+		var files []NotebookFile
+		if err := r.db.SelectContext(ctx, &files,
+			`SELECT notebook_id, family, path, content, content_sha256, byte_size
+			 FROM notebook_files ORDER BY notebook_id, family, path`); err != nil {
+			return nil, fmt.Errorf("list all notebook_files: %w", err)
+		}
+		return files, nil
+	}
+
+	var rows []struct {
+		NotebookFile
+		ContentGz []byte `db:"content_gz"`
+	}
+	if err := r.db.SelectContext(ctx, &rows,
+		`SELECT notebook_id, family, path, content_sha256, byte_size, content_gz,
+		        CASE WHEN content_gz IS NULL THEN content END AS content
+		 FROM notebook_files ORDER BY notebook_id, family, path`); err != nil {
+		return nil, fmt.Errorf("list all notebook_files: %w", err)
+	}
+	files := make([]NotebookFile, 0, len(rows))
+	for _, row := range rows {
+		f := row.NotebookFile
+		if row.ContentGz != nil {
+			content, err := database.Gunzip(row.ContentGz)
+			if err != nil {
+				return nil, fmt.Errorf("decompress notebook_file %s/%s/%s: %w", f.NotebookID, f.Family, f.Path, err)
+			}
+			f.Content = content
+		} else if _, err := r.db.ExecContext(ctx,
+			`UPDATE notebook_files SET content_gz = $1
+			 WHERE notebook_id = $2 AND family = $3 AND path = $4 AND content_sha256 = $5 AND content_gz IS NULL`,
+			database.Gzip(f.Content), f.NotebookID, f.Family, f.Path, f.ContentSHA256); err != nil {
+			slog.Warn("backfill notebook_files.content_gz failed", "notebook", f.NotebookID, "path", f.Path, "error", err)
+		}
+		files = append(files, f)
+	}
+	return files, nil
 }
 
 // ListUserNotebooks returns every notebook owned by ownerUserID — regardless of
@@ -331,35 +380,20 @@ func (r *NotebookFileRepository) GetNotebookOwnership(ctx context.Context, noteb
 	return row.OwnerUserID, row.Source, row.Visibility, true, nil
 }
 
-// Fingerprint returns a stable digest of ALL stored notebook content (every
-// blob's id + family + path + per-file hash), so DBContentSource can cheaply
-// detect when a push OR a filesystem re-import changed the materialized content
-// and needs a refresh. Computed straight from notebook_files so it covers both
-// 'shipped' and 'user' notebooks.
+// Fingerprint returns a digest of ALL stored notebook content (every blob's id
+// + family + path + per-file hash), so DBContentSource can cheaply detect when a
+// push OR a filesystem re-import changed the materialized content and needs a
+// refresh. Computed straight from notebook_files so it covers both 'shipped'
+// and 'user' notebooks. The digest is computed in Postgres so only one short
+// row crosses the wire (it runs on every request).
 func (r *NotebookFileRepository) Fingerprint(ctx context.Context) (string, error) {
-	type fp struct {
-		NotebookID    string `db:"notebook_id"`
-		Family        string `db:"family"`
-		Path          string `db:"path"`
-		ContentSHA256 string `db:"content_sha256"`
-	}
-	var rows []fp
-	if err := r.db.SelectContext(ctx, &rows,
-		`SELECT notebook_id, family, path, content_sha256
-		 FROM notebook_files ORDER BY notebook_id, family, path`); err != nil {
+	var fp string
+	if err := r.db.GetContext(ctx, &fp,
+		`SELECT COALESCE(md5(string_agg(
+		     notebook_id || E'\n' || family || E'\n' || path || E'\n' || content_sha256, E'\n'
+		     ORDER BY notebook_id, family, path)), '')
+		 FROM notebook_files`); err != nil {
 		return "", fmt.Errorf("fingerprint notebook_files: %w", err)
 	}
-	var b strings.Builder
-	for _, r := range rows {
-		b.WriteString(r.NotebookID)
-		b.WriteByte('\n')
-		b.WriteString(r.Family)
-		b.WriteByte('\n')
-		b.WriteString(r.Path)
-		b.WriteByte('\n')
-		b.WriteString(r.ContentSHA256)
-		b.WriteByte('\n')
-	}
-	sum := sha256.Sum256([]byte(b.String()))
-	return hex.EncodeToString(sum[:]), nil
+	return fp, nil
 }
