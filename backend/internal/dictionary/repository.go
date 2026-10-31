@@ -8,7 +8,13 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/at-ishikawa/langner/internal/database"
 )
+
+// responseGzColumn reports whether migration 037's compressed copy exists (the
+// server does not migrate on boot; see database.ColumnCheck).
+var responseGzColumn = database.NewColumnCheck("dictionary_entries", "response_gz")
 
 // DictionaryRepository defines operations for managing dictionary entries.
 type DictionaryRepository interface {
@@ -56,11 +62,20 @@ func (r *DBDictionaryRepository) FindResponseByWord(ctx context.Context, word st
 
 // BatchUpsert inserts or updates multiple dictionary entries.
 func (r *DBDictionaryRepository) BatchUpsert(ctx context.Context, entries []*DictionaryEntry) error {
+	withGz := responseGzColumn.Exists(ctx, r.db)
 	for _, e := range entries {
-		_, err := r.db.ExecContext(ctx,
-			`INSERT INTO dictionary_entries (word, source_type, response) VALUES ($1, $2, $3)
-			 ON CONFLICT (word) DO UPDATE SET source_type = EXCLUDED.source_type, response = EXCLUDED.response`,
-			e.Word, e.SourceType, e.Response)
+		var err error
+		if withGz {
+			_, err = r.db.ExecContext(ctx,
+				`INSERT INTO dictionary_entries (word, source_type, response, response_gz) VALUES ($1, $2, $3, $4)
+				 ON CONFLICT (word) DO UPDATE SET source_type = EXCLUDED.source_type, response = EXCLUDED.response, response_gz = EXCLUDED.response_gz`,
+				e.Word, e.SourceType, e.Response, database.Gzip(e.Response))
+		} else {
+			_, err = r.db.ExecContext(ctx,
+				`INSERT INTO dictionary_entries (word, source_type, response) VALUES ($1, $2, $3)
+				 ON CONFLICT (word) DO UPDATE SET source_type = EXCLUDED.source_type, response = EXCLUDED.response`,
+				e.Word, e.SourceType, e.Response)
+		}
 		if err != nil {
 			return fmt.Errorf("upsert dictionary entry: %w", err)
 		}

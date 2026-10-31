@@ -386,6 +386,45 @@ func (h *QuizHandler) resolveCard(ctx context.Context, userID, noteID int64, ori
 	return resolved, true
 }
 
+// resolveBatch is resolveCard / resolveReverseCard for a whole batch: store
+// hits as before, and every other answer's note resolved through resolveNotes
+// in one call, so a batch loads each notebook once instead of once per answer.
+func resolveBatch[C any](ctx context.Context, h *QuizHandler, store map[int64]C, noteIDs []int64, originNotebookIDs []string,
+	resolveNotes func(notes []*notebook.NoteRecord, originNotebookIDs []string) ([]C, []bool)) ([]C, []bool) {
+	cards := make([]C, len(noteIDs))
+	resolved := make([]bool, len(noteIDs))
+	var pending []int
+	var notes []*notebook.NoteRecord
+	var origins []string
+	for i, noteID := range noteIDs {
+		h.mu.Lock()
+		card, ok := store[noteID]
+		h.mu.Unlock()
+		if ok {
+			cards[i], resolved[i] = card, true
+			continue
+		}
+		if noteID <= 0 || noteID >= sessionIDBase || h.noteRepository == nil {
+			continue
+		}
+		note, err := h.noteRepository.FindByID(ctx, noteID)
+		if err != nil || note == nil {
+			continue
+		}
+		pending = append(pending, i)
+		notes = append(notes, note)
+		origins = append(origins, originNotebookIDs[i])
+	}
+	if len(pending) == 0 {
+		return cards, resolved
+	}
+	found, ok := resolveNotes(notes, origins)
+	for k, i := range pending {
+		cards[i], resolved[i] = found[k], ok[k]
+	}
+	return cards, resolved
+}
+
 func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitReverseAnswerRequest]) (*connect.Response[apiv1.SubmitReverseAnswerResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err

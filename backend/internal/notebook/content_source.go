@@ -128,7 +128,7 @@ func (s *DBContentSource) Dirs(ctx context.Context) (ContentDirs, error) {
 // — keyed by the file's OWN family, so one composite id fans out across the
 // family roots it belongs to — and returns the family roots that exist.
 func (s *DBContentSource) materialize(ctx context.Context) (string, ContentDirs, error) {
-	ids, err := s.repo.ListContentNotebookIDs(ctx)
+	files, err := s.repo.ListAllFilesForServing(ctx)
 	if err != nil {
 		return "", ContentDirs{}, err
 	}
@@ -138,28 +138,21 @@ func (s *DBContentSource) materialize(ctx context.Context) (string, ContentDirs,
 	}
 
 	used := make(map[string]bool)
-	for _, id := range ids {
-		files, err := s.repo.ListFiles(ctx, id)
-		if err != nil {
+	for _, f := range files {
+		family := strings.TrimSpace(f.Family)
+		if family == "" {
+			family = "flashcards"
+		}
+		dest := filepath.Join(root, family, f.NotebookID, filepath.Clean("/"+f.Path))
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			_ = os.RemoveAll(root)
-			return "", ContentDirs{}, err
+			return "", ContentDirs{}, fmt.Errorf("mkdir for blob %s/%s: %w", family, f.Path, err)
 		}
-		for _, f := range files {
-			family := strings.TrimSpace(f.Family)
-			if family == "" {
-				family = "flashcards"
-			}
-			dest := filepath.Join(root, family, id, filepath.Clean("/"+f.Path))
-			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-				_ = os.RemoveAll(root)
-				return "", ContentDirs{}, fmt.Errorf("mkdir for blob %s/%s: %w", family, f.Path, err)
-			}
-			if err := os.WriteFile(dest, f.Content, 0o644); err != nil {
-				_ = os.RemoveAll(root)
-				return "", ContentDirs{}, fmt.Errorf("write blob %s/%s: %w", family, f.Path, err)
-			}
-			used[family] = true
+		if err := os.WriteFile(dest, f.Content, 0o644); err != nil {
+			_ = os.RemoveAll(root)
+			return "", ContentDirs{}, fmt.Errorf("write blob %s/%s: %w", family, f.Path, err)
 		}
+		used[family] = true
 	}
 
 	dirs := ContentDirs{}

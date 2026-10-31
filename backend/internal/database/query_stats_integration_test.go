@@ -168,3 +168,13 @@ func TestQueryTracer_OutsideAnyRequest_LivePostgres_Integration(t *testing.T) {
 		assert.Greater(t, lines[0]["bytes_in"], float64(1000))
 	})
 }
+
+// TestColumnCheck_LivePostgres_Integration pins the fallback the compressed
+// columns rely on: a column the database doesn't have yet reads as absent.
+func TestColumnCheck_LivePostgres_Integration(t *testing.T) {
+	db := openQueryStatsTestDB(t)
+	ctx := context.Background()
+	assert.True(t, NewColumnCheck("query_stats_test_items", "body").Exists(ctx, db))
+	assert.False(t, NewColumnCheck("query_stats_test_items", "body_gz").Exists(ctx, db))
+	assert.False(t, NewColumnCheck("no_such_table", "body").Exists(ctx, db))
+}
