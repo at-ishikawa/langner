@@ -122,11 +122,12 @@ func newMigrateSchemaCommand() *cobra.Command {
 		Short: "Apply pending schema migrations only (no data import)",
 		Long: `Apply all pending schema migrations to the database configured in the
 config file. Unlike "import-db", this runs ONLY the embedded schema
-migrations — it does not import or reconcile any notebook data.
+migrations — it does not import or reconcile any notebook data. Notebooks
+stored as raw YAML files by older versions are converted to content rows.
 
 The database connection is read from --config, so no DATABASE_URL is
 needed. Idempotent: a no-op when the schema is already up to date.`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, db, err := openConfigAndDB()
 			if err != nil {
 				return err
@@ -137,6 +138,15 @@ needed. Idempotent: a no-op when the schema is already up to date.`,
 				return fmt.Errorf("apply schema migrations: %w", err)
 			}
 			fmt.Println("Schema migrations applied (or already up to date).")
+			// Notebooks pushed before migration 038 are stored as raw files;
+			// move them into the content tables the server reads.
+			n, err := ConvertStoredFiles(cmd.Context(), db, cmd.OutOrStdout())
+			if n > 0 {
+				fmt.Printf("Converted %d notebook(s) from stored files to content rows.\n", n)
+			}
+			if err != nil {
+				return fmt.Errorf("convert stored notebook files: %w", err)
+			}
 			return nil
 		},
 	}
@@ -228,7 +238,7 @@ func newMigrateResetDBCommand() *cobra.Command {
 				}
 			}
 			// Import notebook CONTENT (the configured example catalog) into
-			// notebook_files so the server serves content from the DB — the same
+			// the content tables so the server serves content from the DB — the same
 			// content path dev, e2e, and prod all use (no filesystem serving).
 			if _, err := ImportShippedContent(ctx, cfg, db, io.Discard); err != nil {
 				return fmt.Errorf("import notebook content: %w", err)

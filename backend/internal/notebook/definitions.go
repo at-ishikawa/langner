@@ -14,9 +14,9 @@ import (
 
 // Definitions represents a definitions file for a book/story
 type Definitions struct {
-	Metadata DefinitionsMetadata  `yaml:"metadata"`
-	Scenes   []DefinitionsScene   `yaml:"scenes"`
-	Concepts []DefinitionConcept  `yaml:"concepts,omitempty"`
+	Metadata DefinitionsMetadata `yaml:"metadata"`
+	Scenes   []DefinitionsScene  `yaml:"scenes"`
+	Concepts []DefinitionConcept `yaml:"concepts,omitempty"`
 }
 
 // DefinitionsMetadata contains metadata about which notebook the definitions apply to
@@ -161,7 +161,13 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap, raw 
 	if err != nil {
 		return fmt.Errorf("readYamlFile(%s): %w", path, err)
 	}
+	addDefinitions(definitions, bookID, result, raw, dates)
+	return nil
+}
 
+// addDefinitions adds one definitions file's sessions to the maps (see
+// loadDefinitionsFile).
+func addDefinitions(definitions []Definitions, bookID string, result DefinitionsMap, raw map[string][]Definitions, dates map[string]time.Time) {
 	if result[bookID] == nil {
 		result[bookID] = make(map[string]map[string][]Note)
 	}
@@ -194,8 +200,6 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap, raw 
 			)
 		}
 	}
-
-	return nil
 }
 
 // NewDefinitionsMap loads definitions from the given directories. Returns the
@@ -338,6 +342,7 @@ func MergeDefinitionsIntoNotebooks(
 // GetDefinitionsNotes returns the definitions for a given book ID from the definitions map.
 // The returned map is keyed by title/notebook name, then by scene index key (__index_N).
 func (r Reader) GetDefinitionsNotes(bookID string) (map[string]map[string][]Note, bool) {
+	r.ensureDefinitions(bookID)
 	defs, ok := r.definitionsMap[bookID]
 	return defs, ok
 }
@@ -356,6 +361,7 @@ func (r Reader) GetDefinitionsNotes(bookID string) (map[string]map[string][]Note
 // scene entries. The __index_N map stays in place for the story-merge
 // path, which needs positional keys because story scene titles repeat.
 func (r Reader) GetDefinitionsNotesByTitle(bookID string) (map[string]map[string][]Note, bool) {
+	r.ensureDefinitions(bookID)
 	defs, ok := r.definitionsRaw[bookID]
 	if !ok || len(defs) == 0 {
 		return nil, false
@@ -389,6 +395,7 @@ func (r Reader) GetDefinitionsNotesByTitle(bookID string) (map[string]map[string
 // Returns nil when the book has no raw definitions (e.g. a standalone file
 // loaded without an index.yml).
 func (r Reader) GetDefinitionsSessionOrder(bookID string) []string {
+	r.ensureDefinitions(bookID)
 	defs, ok := r.definitionsRaw[bookID]
 	if !ok || len(defs) == 0 {
 		return nil
@@ -415,6 +422,12 @@ func (r Reader) GetDefinitionsSessionOrder(bookID string) []string {
 // GetDefinitionsBookIDs returns all book IDs that have definitions in the definitions map.
 func (r Reader) GetDefinitionsBookIDs() []string {
 	var ids []string
+	if r.content != nil {
+		for id := range r.definitionIDs {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	for id := range r.definitionsMap {
 		ids = append(ids, id)
 	}
@@ -424,6 +437,7 @@ func (r Reader) GetDefinitionsBookIDs() []string {
 // GetDefinitionsLatestDate returns the latest `date` across all definition
 // files for the given book ID, or the zero time if no dates are set.
 func (r Reader) GetDefinitionsLatestDate(bookID string) time.Time {
+	r.ensureDefinitions(bookID)
 	return r.definitionsDates[bookID]
 }
 

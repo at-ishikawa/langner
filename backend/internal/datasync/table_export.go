@@ -70,9 +70,27 @@ func DataTablesInDependencyOrder() []string {
 		"cli_device_codes",     // -> users (migration 029 CLI device flow); child of users
 		"cli_refresh_tokens",   // -> users (migration 030 CLI refresh tokens); child of users
 		"user_llm_credentials", // -> users (migration 034 per-user LLM keys); child of users
-		"notebook_files",       // FK-free string notebook_id (migration 031); user-notebook content blobs
-		"notebooks",            // -> users (migration 027 notebook ownership); child of users
-		"users",                // leaf parent (migration 024); notebooks + learning_logs.user_id reference it
+		"notebook_files",       // FK-free string notebook_id (migration 031); pre-038 raw content files
+		// Notebook content (migration 038), children first; all -> notebooks.
+		"content_corrections",
+		"content_relations",
+		"content_origin_concept_members",
+		"content_origin_concepts",
+		"content_definition_concepts",
+		"content_origin_forms",
+		"content_origins",
+		"content_note_references",
+		"content_note_phrases",
+		"content_note_origin_parts",
+		"content_note_examples",
+		"content_notes",
+		"content_lines",
+		"content_scenes",
+		"content_entries",
+		"content_files",
+		"content_indexes",
+		"notebooks", // -> users (migration 027 notebook ownership); child of users
+		"users",     // leaf parent (migration 024); notebooks + learning_logs.user_id reference it
 	}
 }
 

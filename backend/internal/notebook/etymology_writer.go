@@ -114,7 +114,7 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		// validator already loads this via loadEtymologyBookView for
 		// book-wide checks; here we just want the per-session view so
 		// the template can render a Concepts section.
-		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(sessionPath)
+		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(writer.reader, sessionPath)
 
 		// Build origin map for resolving origin_parts meanings
 		originMap := buildOriginMap(sessionOrigins)
@@ -218,7 +218,7 @@ func chapterIsEmpty(c assets.EtymologyChapter) bool {
 // session title; returned origins are tagged with that title via
 // SessionTitle.
 func readSessionOrigins(path string) ([]EtymologyOrigin, error) {
-	wrapped, err := loadEtymologySessionAnyShape(path)
+	wrapped, err := loadEtymologySessionAnyShape(nil, path)
 	if err != nil {
 		return nil, fmt.Errorf("read etymology session %s: %w", path, err)
 	}
@@ -379,8 +379,8 @@ func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, _ /*nbTitle: unus
 // when the file declares neither, so callers can use len() without nil
 // checks. Read errors are swallowed and treated as no-data: the
 // validator at load time already reports malformed session files.
-func readSessionConceptsAndRelations(path string) ([]Concept, []Relation) {
-	if newShape, err := readYamlFile[[]EtymologyNotebookEntry](path); err == nil && hasNewShape(newShape) {
+func readSessionConceptsAndRelations(r *Reader, path string) ([]Concept, []Relation) {
+	if newShape, err := readContent[[]EtymologyNotebookEntry](r, path); err == nil && hasNewShape(newShape) {
 		var concepts []Concept
 		var relations []Relation
 		for _, entry := range newShape {
@@ -389,7 +389,7 @@ func readSessionConceptsAndRelations(path string) ([]Concept, []Relation) {
 		}
 		return concepts, relations
 	}
-	wrapped, err := readYamlFile[etymologySessionFile](path)
+	wrapped, err := readContent[etymologySessionFile](r, path)
 	if err != nil {
 		return nil, nil
 	}

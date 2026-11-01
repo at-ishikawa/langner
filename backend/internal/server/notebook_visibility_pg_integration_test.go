@@ -119,7 +119,7 @@ func TestNotebookVisibility_GetNotebookDetail_HardRejects(t *testing.T) {
 		EtymologyDirectories:   []string{filepath.Join(ex, "etymology")},
 		LearningNotesDirectory: t.TempDir(),
 	}
-	h := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, inference.StaticResolver(mock.NewClient()), nil)
+	h := newDirNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, inference.StaticResolver(mock.NewClient()), nil)
 	h.SetNotebookACL(fakeVisibility{privateNotebook: visPrivateNotebook, ownerID: ownerID})
 
 	detail := func(userID int64, nbID string) error {
@@ -210,7 +210,7 @@ func newVisibilityFixture(t *testing.T) visibilityFixture {
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
 	svc.SetNotebookACL(repos.ACL)
 
-	notebookHandler := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, inference.StaticResolver(mock.NewClient()), repos.Note)
+	notebookHandler := newDirNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, inference.StaticResolver(mock.NewClient()), repos.Note)
 	notebookHandler.SetHistoryStore(repos.HistoryStore)
 	notebookHandler.SetNotebookACL(repos.ACL)
 

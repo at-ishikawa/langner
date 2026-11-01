@@ -29,7 +29,6 @@ import (
 	"github.com/at-ishikawa/langner/internal/clicmd"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
-	"github.com/at-ishikawa/langner/internal/datasync"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -143,19 +142,6 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 		}
 	}
 
-	// Load the dictionary from Postgres (dictionary_entries, filled at import
-	// time and by live lookups). This is the ONLY dictionary source for the
-	// server: a story word whose meaning comes from the dictionary
-	// (dictionary_number set, no inline meaning) resolves from here.
-	if db != nil {
-		if dbMap, derr := dictionary.NewDBDictionaryRepository(db).LoadResponseMap(context.Background()); derr != nil {
-			slog.Warn("failed to load dictionary from database", "error", derr)
-		} else {
-			dictionaryMap = dbMap
-			slog.Info("loaded dictionary from database", "entries", len(dbMap))
-		}
-	}
-
 	// Always-on auth (design §2). Google-OAuth sign-in mints a langner access
 	// JWT for the web SPA (delivered in the URL fragment, no session cookie) and
 	// the RFC 8628 device flow mints one for the CLI; EVERY connect RPC is gated
@@ -207,59 +193,31 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	noteRepo := repos.Note
 	historyStore := repos.HistoryStore
 
-	// Notebook CONTENT directories every reader below walks. With a database,
-	// content is served from Postgres (DBContentSource materializes it to a temp
-	// tree); WITHOUT one, the configured on-disk directories are used. Resolving
-	// these ONCE and sharing them means analytics meaning/grammar resolution,
-	// ensure-on-serve, and notebook detail all read from the SAME place — so on a
-	// DB-only/serverless deploy, where cfg.Notebooks.* are empty, they resolve
-	// content from the DB instead of the absent filesystem (the #88/#89 class).
-	// Dirs() is fingerprint-cached, so one call shared across readers is cheap.
-	var dbFileRepo *notebook.NotebookFileRepository
-	var dbContentSource *notebook.DBContentSource
+	// Notebook content is stored in Postgres (the content_* tables): every
+	// reader below is built per request and loads only the notebooks the
+	// request reads.
+	// Dictionary-backed words resolve from dictionary_entries, fetched with the
+	// notebooks that use them.
+	var store *notebook.NotebookStore
+	var content notebook.ContentLoader
+	var dictionaryEntries notebook.DictionarySource
 	var userDefsRepo *notebook.UserDefinitionsRepository
-	contentDirs := notebook.ContentDirs{
-		Stories:     cfg.Notebooks.StoriesDirectories,
-		Flashcards:  cfg.Notebooks.FlashcardsDirectories,
-		Books:       cfg.Notebooks.BooksDirectories,
-		Definitions: cfg.Notebooks.DefinitionsDirectories,
-		Etymology:   cfg.Notebooks.EtymologyDirectories,
-		Journals:    cfg.Notebooks.JournalsDirectories,
-		Grammars:    cfg.Notebooks.GrammarsDirectories,
-	}
 	if db != nil {
-		dbFileRepo = notebook.NewNotebookFileRepository(db)
-		dbContentSource = notebook.NewDBContentSource(dbFileRepo)
+		dictionaryEntries = dictionary.NewDBDictionaryRepository(db)
+		store = notebook.NewNotebookStore(db)
+		content = notebook.NewCachedContent(notebook.NewContentRepository(db))
 		userDefsRepo = notebook.NewUserDefinitionsRepository(db)
-		if dirs, derr := dbContentSource.Dirs(context.Background()); derr != nil {
-			slog.Warn("DB content dirs unavailable; readers fall back to filesystem dirs", "error", derr)
-		} else {
-			contentDirs = dirs
-		}
 	}
 
 	// Analytics reads through the same learning-history seam the quiz service
-	// uses: the DB-backed store when a database is connected, else the on-disk
-	// YAML learning_notes files.
+	// uses, and resolves a wrong word's meaning / grammar correction from the
+	// stored notebooks.
 	yamlAnalyticsRepo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
-	// Journals are read alongside stories (they share the story format, see
-	// quiz.Service.newReader) so a grammar attempt's notebook — a journal —
-	// resolves here too; LoadGrammars then attaches the corrections themselves,
-	// which resolveGrammar needs to turn a correction id back into its text.
-	analyticsStoryDirectories := append(append([]string{}, contentDirs.Stories...), contentDirs.Journals...)
-	if reader, err := notebook.NewReader(
-		analyticsStoryDirectories,
-		contentDirs.Flashcards,
-		contentDirs.Books,
-		contentDirs.Definitions,
-		contentDirs.Etymology,
-		dictionaryMap,
-	); err != nil {
-		slog.Warn("analytics meaning lookup disabled — notebook reader init failed", "error", err)
-	} else if err := reader.LoadGrammars(contentDirs.Grammars); err != nil {
-		slog.Warn("analytics grammar meaning lookup disabled — LoadGrammars failed", "error", err)
-	} else {
-		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
+	if content != nil {
+		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewContentMetadataResolver(
+			func(ctx context.Context) (*notebook.Reader, error) {
+				return notebook.NewContentReader(ctx, content, dictionaryEntries)
+			}))
 	}
 
 	// historyStore is the DB-backed READ side for learning history, non-nil only
@@ -278,35 +236,10 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	svc.SetHistoryStore(historyStore)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
 
-	// Per-user + shipped notebooks (DB mode only): the quiz service, the
-	// notebook-detail reader, and the ensure-on-serve hook all read notebook
-	// CONTENT from the DB content source — never the filesystem. YAML-only mode
-	// (no DB) leaves these nil, so the reader uses the configured directories and
-	// the push/pull/list RPCs return Unimplemented.
-	// DB content serving (DB mode only): install the content source on the quiz
-	// service and wire ensure-on-serve from the SAME shared contentDirs resolved
-	// above — one content path across analytics / quiz / ensure, no filesystem.
-	if dbContentSource != nil {
-		svc.SetContentSource(dbContentSource)
-		// Per-user highlight overlay on the quiz card loaders (DB mode only).
+	if content != nil {
+		svc.SetContent(content, dictionaryEntries)
+		// Per-user highlight overlay on the quiz card loaders.
 		svc.SetUserDefinitionsRepo(userDefsRepo)
-
-		if ensureReader, rerr := notebook.NewReader(
-			contentDirs.Stories,
-			contentDirs.Flashcards,
-			contentDirs.Books,
-			contentDirs.Definitions,
-			contentDirs.Etymology,
-			dictionaryMap,
-		); rerr != nil {
-			slog.Warn("ensure-on-serve disabled — notebook reader init failed", "error", rerr)
-		} else {
-			_ = ensureReader.LoadJournals(contentDirs.Journals)
-			_ = ensureReader.LoadGrammars(contentDirs.Grammars)
-			noteSource := notebook.NewYAMLNoteRepository(ensureReader)
-			ensurer := datasync.NewImporter(noteRepo, nil, noteSource, nil, nil, nil, io.Discard)
-			svc.SetNoteEnsurer(ensurer)
-		}
 	}
 	// Enforce notebook public/private visibility on every quiz read path (auth
 	// Phase 3). Nil (no DB) keeps every notebook visible.
@@ -323,14 +256,15 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	if db != nil {
 		dictReader = dictionary.NewDBReader(dictionary.NewDBDictionaryRepository(db), dictConfig)
 	}
-	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, clientResolver, noteRepo)
+	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictReader, clientResolver, noteRepo)
 	notebookHandler.SetHistoryStore(historyStore)
 	notebookHandler.SetNotebookACL(repos.ACL)
 
-	// Give the notebook handler the push/pull/list dependencies (DB mode only),
-	// reusing the content source already installed on the quiz service above.
+	// Give the notebook handler the stored notebooks to read and the
+	// push/pull/list store.
 	if db != nil {
-		notebookHandler.SetPushDeps(db, dbFileRepo, dbContentSource)
+		notebookHandler.SetContent(content, dictionaryEntries)
+		notebookHandler.SetPushDeps(db, store)
 		// Per-user registrations + Gutenberg import (DB mode). A nil HTTP client
 		// makes gutenberg use a default client with a timeout; real outbound HTTP
 		// runs only in preview/prod.

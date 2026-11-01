@@ -47,8 +47,8 @@ if [ "${existing}" -lt 1 ]; then
   # Notebook CONTENT is served from Postgres (the same path as prod — no
   # filesystem serving). `migrate seed-e2e` seeds STATE (auth accounts +
   # deterministic learning history via the fixtures library) AND imports the
-  # notebook content catalog (config.e2e.yml fixtures) into notebook_files; notes
-  # are then created on demand by ensure-on-serve from that DB content.
+  # notebook content catalog (config.e2e.yml fixtures) into the content tables,
+  # creating the notes its words need.
   echo "[seed] applying schema (migrate schema)"
   DB_PASSWORD="${DB_PASSWORD}" ./langner-admin migrate schema --config "${TEST_CONFIG_PATH}"
 

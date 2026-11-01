@@ -67,7 +67,7 @@ func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 }
 
 // CountNotebookNotes returns how many notebook_notes rows link to notebookID.
-// It is the cheap "is this notebook synced?" probe the ensure-on-serve path
+// It is the cheap "is this notebook synced?" probe the notes-ensure path
 // uses to skip the full note load when the DB already has every YAML note (see
 // datasync.Importer.EnsureNotesForNotebook). Not part of the NoteRepository
 // interface — it's an optional capability the ensure step type-asserts for.

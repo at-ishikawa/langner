@@ -375,6 +375,7 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 	}
 
 	dayStr := dayKey(day)
+	resolver := forRequest(ctx, r.resolver)
 	// Index attempts by (notebookID, id-or-expression, quizType) so we can
 	// find each word's full log to compute streak/pattern. Two entries that
 	// share a spelling but carry different ids form two independent series;
@@ -438,7 +439,7 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 		for i := hitIdx; i < len(records); i++ {
 			fromHit = append(fromHit, records[i].Attempt)
 		}
-		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.ID, hit.Expression, hit.ExpressionType, hit.QuizType)
+		meta := resolver.Resolve(ctx, hit.NotebookID, hit.ID, hit.Expression, hit.ExpressionType, hit.QuizType)
 		cards = append(cards, dayCard{
 			seq: hit.Seq,
 			word: WrongWord{

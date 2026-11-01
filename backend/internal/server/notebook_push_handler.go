@@ -3,8 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -48,8 +46,8 @@ func findIndexFile(files []notebook.NotebookFile) (notebook.NotebookFile, bool) 
 }
 
 // rewriteTopLevelID replaces the first top-level `id:` line in an index.yml with
-// the server-minted nb_ id, preserving the rest of the bytes so pull stays a
-// faithful round-trip of what the server stored. The app owns notebook identity
+// the server-minted nb_ id, preserving the rest of the bytes (the content hash
+// covers the bundle as stored). The app owns notebook identity
 // (design §6): whatever `id:` the author wrote is ignored for identity.
 func rewriteTopLevelID(content []byte, newID string) []byte {
 	lines := strings.Split(string(content), "\n")
@@ -66,10 +64,10 @@ func rewriteTopLevelID(content []byte, newID string) []byte {
 }
 
 // PushNotebook validates + stores a user-authored notebook bundle: it mints an
-// nb_ id (create) or confirms ownership (update), rewrites the index.yml id,
-// writes the raw blobs + a private ownership row transactionally, then runs the
-// existing additive importer over the blobs so the notebook is immediately
-// quizzable by the caller. Private by default.
+// nb_ id (create) or confirms ownership (update), parses the bundle, stores its
+// content rows + a private ownership row transactionally, then creates the
+// notes its words need so the notebook is immediately quizzable by the caller.
+// Private by default.
 func (h *NotebookHandler) PushNotebook(
 	ctx context.Context,
 	req *connect.Request[apiv1.PushNotebookRequest],
@@ -78,7 +76,7 @@ func (h *NotebookHandler) PushNotebook(
 	if err != nil {
 		return nil, err
 	}
-	if h.db == nil || h.fileRepo == nil {
+	if h.db == nil || h.store == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("per-user notebooks require a configured database"))
 	}
 	msg := req.Msg
@@ -141,7 +139,7 @@ func (h *NotebookHandler) PushNotebook(
 	// exists and the caller owns it (adopting its source/visibility), an error
 	// when it exists but belongs to someone else, (claimed=false) when absent.
 	claimExisting := func(id string) (bool, error) {
-		owner, source, vis, found, gerr := h.fileRepo.GetNotebookOwnership(ctx, id)
+		owner, source, vis, found, gerr := h.store.GetNotebookOwnership(ctx, id)
 		if gerr != nil {
 			return false, connect.NewError(connect.CodeInternal, gerr)
 		}
@@ -169,7 +167,7 @@ func (h *NotebookHandler) PushNotebook(
 		if strings.TrimSpace(displayName) == "" {
 			return false, nil
 		}
-		owned, lerr := h.fileRepo.ListUserNotebooks(ctx, userID)
+		owned, lerr := h.store.ListUserNotebooks(ctx, userID)
 		if lerr != nil {
 			return false, connect.NewError(connect.CodeInternal, lerr)
 		}
@@ -247,6 +245,17 @@ func (h *NotebookHandler) PushNotebook(
 		kind = ""
 	}
 
+	// A single-family push's files live in the family its kind names.
+	for i := range files {
+		if strings.TrimSpace(files[i].Family) == "" {
+			files[i].Family = notebook.FamilyForKind(kind)
+		}
+	}
+	content, err := notebook.ParseBundle(notebookID, files)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parse notebook: %w", err))
+	}
+
 	nb := notebook.UserNotebook{
 		NotebookID:  notebookID,
 		OwnerUserID: &userID,
@@ -255,15 +264,15 @@ func (h *NotebookHandler) PushNotebook(
 		Kind:        kind,
 		DisplayName: name,
 		ContentHash: notebook.HashBundle(files),
+		ByteSize:    notebook.BundleBytes(files),
 	}
-	if err := h.fileRepo.PushBundle(ctx, nb, files); err != nil {
+	if err := h.store.PushBundle(ctx, nb, content); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("store notebook: %w", err))
 	}
 
-	// Import the stored blobs so notes/notebook_notes exist (the notebook is
-	// quizzable and its learning logs resolvable). Reuses the SAME additive,
-	// no-reconcile importer path ensure-on-serve uses — no new ingestion path.
-	importedNotes, ierr := h.importPushedNotebook(ctx, notebookID, kind, files)
+	// Create the notes the notebook's words need so it is quizzable and its
+	// learning logs resolve. Additive: existing notes are kept.
+	importedNotes, ierr := datasync.EnsureContentNotes(ctx, h.db, content)
 	if ierr != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("import notebook: %w", ierr))
 	}
@@ -272,60 +281,6 @@ func (h *NotebookHandler) PushNotebook(
 		NotebookId:   notebookID,
 		ImportedRows: map[string]int32{"notes": int32(importedNotes)},
 	}), nil
-}
-
-// importPushedNotebook materializes the pushed blobs to a temp dir, builds a
-// reader over just that notebook, and runs EnsureNotesForNotebook — the
-// additive (never-deletes) importer path — so the notebook's notes +
-// notebook_notes exist in the DB. Returns the number of notes created.
-func (h *NotebookHandler) importPushedNotebook(ctx context.Context, notebookID, kind string, files []notebook.NotebookFile) (int, error) {
-	root, err := os.MkdirTemp("", "langner-push-*")
-	if err != nil {
-		return 0, fmt.Errorf("temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(root) }()
-
-	// Materialize each file under <root>/<family>/<notebookID>/<path>, keyed by
-	// the file's OWN family (falling back to the notebook kind for a
-	// single-family push), so a composite notebook's several families each land
-	// under their own root — the same layout DBContentSource uses, so the reader
-	// registers one id across several family maps with no divergence (§13.2).
-	dirs := notebook.ContentDirs{}
-	used := map[string]bool{}
-	for _, f := range files {
-		family := strings.TrimSpace(f.Family)
-		if family == "" {
-			family = familyForKind(kind)
-		}
-		dest := filepath.Join(root, family, notebookID, filepath.Clean("/"+f.Path))
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return 0, fmt.Errorf("mkdir: %w", err)
-		}
-		if err := os.WriteFile(dest, f.Content, 0o644); err != nil {
-			return 0, fmt.Errorf("write: %w", err)
-		}
-		used[family] = true
-	}
-	add := func(family string, target *[]string) {
-		if used[family] {
-			*target = append(*target, filepath.Join(root, family))
-		}
-	}
-	add("stories", &dirs.Stories)
-	add("journals", &dirs.Journals)
-	add("flashcards", &dirs.Flashcards)
-	add("books", &dirs.Books)
-	add("definitions", &dirs.Definitions)
-	add("etymology", &dirs.Etymology)
-
-	reader, err := notebook.NewReader(dirs.Stories, dirs.Flashcards, dirs.Books, dirs.Definitions, dirs.Etymology, nil)
-	if err != nil {
-		return 0, fmt.Errorf("reader: %w", err)
-	}
-	noteSource := notebook.NewYAMLNoteRepository(reader)
-	noteRepo := notebook.NewDBNoteRepository(h.db)
-	importer := datasync.NewImporter(noteRepo, nil, noteSource, nil, nil, nil, io.Discard)
-	return importer.EnsureNotesForNotebook(ctx, notebookID)
 }
 
 // compositeKind is the reserved PushNotebookRequest.kind sentinel signaling a
@@ -343,26 +298,10 @@ func knownFamily(seg string) bool {
 	return false
 }
 
-// familyForKind mirrors notebook.familyDir for the push-time reader assembly.
-func familyForKind(kind string) string {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "story":
-		return "stories"
-	case "journal":
-		return "journals"
-	case "book":
-		return "books"
-	case "definitions", "definition":
-		return "definitions"
-	case "etymology":
-		return "etymology"
-	default:
-		return "flashcards"
-	}
-}
-
-// PullNotebook streams the stored blobs of an owned notebook back to the caller
-// (owner-only, gated by the same VisibleNotebookIDs predicate).
+// PullNotebook returns an owned notebook as YAML files rendered from its stored
+// content (owner-only, gated by the same VisibleNotebookIDs predicate). A
+// notebook with several families returns each file under its family folder,
+// the layout a composite push takes.
 func (h *NotebookHandler) PullNotebook(
 	ctx context.Context,
 	req *connect.Request[apiv1.PullNotebookRequest],
@@ -371,27 +310,35 @@ func (h *NotebookHandler) PullNotebook(
 	if err != nil {
 		return nil, err
 	}
-	if h.fileRepo == nil {
+	if h.store == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("per-user notebooks require a configured database"))
 	}
 	notebookID := req.Msg.NotebookId
 	if err := h.ensureNotebookVisible(ctx, userID, notebookID); err != nil {
 		return nil, err
 	}
-	nb, found, err := h.fileRepo.GetUserNotebook(ctx, notebookID)
+	nb, found, err := h.store.GetUserNotebook(ctx, notebookID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	if !found {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
 	}
-	files, err := h.fileRepo.ListFiles(ctx, notebookID)
+	content, _, err := h.store.LoadContent(ctx, notebookID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	files, err := content.Bundle()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	out := make([]*apiv1.NotebookFile, 0, len(files))
 	for _, f := range files {
-		out = append(out, &apiv1.NotebookFile{Path: f.Path, Content: f.Content})
+		p := f.Path
+		if len(content.Families) > 1 {
+			p = f.Family + "/" + p
+		}
+		out = append(out, &apiv1.NotebookFile{Path: p, Content: f.Content})
 	}
 	return connect.NewResponse(&apiv1.PullNotebookResponse{
 		Files:       out,
@@ -408,10 +355,10 @@ func (h *NotebookHandler) ListMyNotebooks(
 	if err != nil {
 		return nil, err
 	}
-	if h.fileRepo == nil {
+	if h.store == nil {
 		return connect.NewResponse(&apiv1.ListMyNotebooksResponse{}), nil
 	}
-	rows, err := h.fileRepo.ListUserNotebooks(ctx, userID)
+	rows, err := h.store.ListUserNotebooks(ctx, userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -429,8 +376,8 @@ func (h *NotebookHandler) ListMyNotebooks(
 	return connect.NewResponse(&apiv1.ListMyNotebooksResponse{Notebooks: entries}), nil
 }
 
-// DeleteNotebook permanently removes a notebook the caller owns — its stored
-// files, per-notebook memberships, and ownership row (shared notes are left
+// DeleteNotebook permanently removes a notebook the caller owns — its content,
+// per-notebook memberships, and ownership row (shared notes are left
 // intact). Used to clean up duplicates. NotFound when the id doesn't exist;
 // PermissionDenied when it exists but belongs to someone else.
 func (h *NotebookHandler) DeleteNotebook(
@@ -441,14 +388,14 @@ func (h *NotebookHandler) DeleteNotebook(
 	if err != nil {
 		return nil, err
 	}
-	if h.db == nil || h.fileRepo == nil {
+	if h.db == nil || h.store == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("per-user notebooks require a configured database"))
 	}
 	id := strings.TrimSpace(req.Msg.GetNotebookId())
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("notebook_id is required"))
 	}
-	owner, _, _, found, gerr := h.fileRepo.GetNotebookOwnership(ctx, id)
+	owner, _, _, found, gerr := h.store.GetNotebookOwnership(ctx, id)
 	if gerr != nil {
 		return nil, connect.NewError(connect.CodeInternal, gerr)
 	}
@@ -458,7 +405,7 @@ func (h *NotebookHandler) DeleteNotebook(
 	if owner == nil || *owner != userID {
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("not the owner of %s", id))
 	}
-	if err := h.fileRepo.DeleteUserNotebook(ctx, id); err != nil {
+	if err := h.store.DeleteUserNotebook(ctx, id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete notebook: %w", err))
 	}
 	return connect.NewResponse(&apiv1.DeleteNotebookResponse{NotebookId: id}), nil

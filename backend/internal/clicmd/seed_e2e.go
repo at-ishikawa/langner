@@ -10,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
 
+	"github.com/at-ishikawa/langner/internal/datasync"
 	"github.com/at-ishikawa/langner/internal/dbseed"
 )
 
@@ -32,7 +33,7 @@ type e2eHistoryFixture struct {
 	Title string
 	// SenseID is the vocab card's content-derived stable id (a flashcard `id:`),
 	// "" for an id-less card keyed by (usage, entry). It MUST match the on-disk
-	// content so the seeded note is the SAME row the runtime ensure-on-serve
+	// content so the seeded note is the SAME row the content import
 	// resolves — otherwise a runtime answer forks a membership-less duplicate
 	// note and the word vanishes from Relearn / reconstruction reads.
 	SenseID string
@@ -72,7 +73,7 @@ var e2eHistoryFixtures = []e2eHistoryFixture{
 
 // NewMigrateSeedE2ECommand seeds the deterministic learning-history the e2e
 // suite asserts on, through the real write path (internal/dbseed), AND imports
-// the notebook CONTENT catalog (config.e2e.yml fixtures) into notebook_files so
+// the notebook CONTENT catalog (config.e2e.yml fixtures) into Postgres so
 // e2e serves content from the DB — the SAME content path as prod (no filesystem
 // serving). It seeds STATE (history, attributed to the initial-admin account)
 // plus content. Runs once on a fresh DB at server start; the per-scenario reset
@@ -109,10 +110,11 @@ func NewMigrateSeedE2ECommand() *cobra.Command {
 // quiz run mutates. reset-e2e truncates exactly these back to the seeded
 // baseline; CASCADE clears their dependents (note_images / note_references /
 // note_origin_parts / etymology_origin_forms). users, notebooks (ownership),
-// notebook_files (the imported content catalog — baseline, not per-scenario
-// state), the CLI auth tables, and schema_migrations are deliberately preserved
-// so the pre-minted access token keeps resolving and the DB-served notebook
-// content survives a reset; ensure-on-serve recreates notes from that content.
+// the content_* tables (the imported content catalog — baseline, not
+// per-scenario state), the CLI auth tables, and schema_migrations are
+// deliberately preserved so the pre-minted access token keeps resolving and the
+// notebook content survives a reset; the reset recreates notes from that
+// content.
 //
 // user_llm_credentials is per-user STATE a scenario can create (the Settings
 // register flow) — cleared each reset so every scenario starts with no key. It
@@ -155,6 +157,9 @@ func NewMigrateResetE2ECommand() *cobra.Command {
 			}
 			if err := seedE2EHistory(ctx, db, ownerID); err != nil {
 				return err
+			}
+			if err := datasync.EnsureAllContentNotes(ctx, db); err != nil {
+				return fmt.Errorf("restore notes: %w", err)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reset e2e state and re-seeded %d learning-history rows.\n", len(e2eHistoryFixtures))
 			return nil

@@ -103,6 +103,21 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		_, err = seeder.SeedAll(ctx)
 		require.NoError(t, err)
 	}
+	// Notebook content rows (the content_* tables), as reset-db imports them,
+	// plus the child rows the example notebooks leave empty.
+	_, err = ImportShippedContent(ctx, loaded, db, io.Discard)
+	require.NoError(t, err)
+	firstNote := `FROM (SELECT * FROM content_notes ORDER BY notebook_id, family, file_no, entry_no, scene_no, note_no LIMIT 1) n`
+	seedIfEmpty(ctx, t, db, "content_note_phrases",
+		`INSERT INTO content_note_phrases (notebook_id, family, file_no, entry_no, scene_no, note_no, item_no, actor, remarks)
+		 SELECT notebook_id, family, file_no, entry_no, scene_no, note_no, 0, 'Narrator', 'a seeded remark' `+firstNote)
+	seedIfEmpty(ctx, t, db, "content_note_references",
+		`INSERT INTO content_note_references (notebook_id, family, file_no, entry_no, scene_no, note_no, item_no, url, description)
+		 SELECT notebook_id, family, file_no, entry_no, scene_no, note_no, 0, 'https://example.com', 'a seeded reference' `+firstNote)
+	seedIfEmpty(ctx, t, db, "content_definition_concepts",
+		`INSERT INTO content_definition_concepts (notebook_id, family, file_no, entry_no, concept_no, head, meaning, kind, expressions)
+		 SELECT notebook_id, family, file_no, entry_no, 0, 'break the ice', 'start a conversation', 'family', ARRAY['break the ice']
+		 FROM (SELECT * FROM content_entries ORDER BY notebook_id, family, file_no, entry_no LIMIT 1) e`)
 
 	// Exercise the columns / tables the example config leaves empty so ALL 20
 	// tables carry data through the round trip:

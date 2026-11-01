@@ -52,12 +52,6 @@ type Service struct {
 	skipFlagRepo notebook.SkipFlagRepository
 	noteRepo     notebook.NoteRepository
 	originRepo   notebook.EtymologyOriginRepository
-	// noteEnsurer, when set (DB mode), additively creates any DB notes a
-	// notebook's YAML declares but the database is missing, right before its
-	// cards are served — so a notebook whose YAML gained units without a fresh
-	// `migrate import-db` still has the notes rows every DB-state write
-	// (exclude/SkipWord, SRS logs, overrides) needs. Nil in YAML-only mode.
-	noteEnsurer NoteEnsurer
 	// aclRepo, when set (DB mode), resolves notebook public/private visibility
 	// (auth Phase 3). Every read path that lists or loads a notebook consults
 	// its predicate so a private notebook never leaks to a non-owner: the
@@ -67,25 +61,19 @@ type Service struct {
 	// each notebook id. Nil in YAML-only / no-DB dev, where every notebook is
 	// visible.
 	aclRepo notebook.NotebookVisibility
-	// contentSource, when set (DB mode), contributes user-notebook content
-	// (source='user' rows) to the reader alongside the shipped filesystem
-	// catalog. It materializes stored blobs and the SAME parsers read them, so
-	// user notebooks are quizzed through one code path. Nil in YAML-only mode.
-	contentSource notebook.ContentSource
+	// content, when set, is where notebooks are read from: the Postgres
+	// content tables on the server. Nil only for the local CLI quiz, which
+	// reads the learner's own notebook directories from notebooksConfig.
+	content notebook.ContentLoader
+	// dictionary resolves dictionary-backed words of the notebooks content
+	// readers load (the server's dictionary_entries).
+	dictionary notebook.DictionarySource
 	// userDefsRepo, when set (DB mode), is the per-user private registration
 	// store. The story card/reverse-card loaders overlay the requesting user's
 	// registered highlights onto the shared book's scenes so a registered word
 	// becomes THAT user's Standard/Reverse card — privately, never leaking to
 	// other readers of a shared book. Nil in YAML-only / no-DB dev.
 	userDefsRepo *notebook.UserDefinitionsRepository
-}
-
-// NoteEnsurer additively creates any notes a notebook's YAML declares but the
-// database is missing (implemented by datasync.Importer.EnsureNotesForNotebook).
-// It is an interface so the quiz package need not import datasync; main injects
-// the concrete importer via SetNoteEnsurer only when a database is configured.
-type NoteEnsurer interface {
-	EnsureNotesForNotebook(ctx context.Context, notebookID string) (int, error)
 }
 
 // NewService creates a new Service.
@@ -121,29 +109,6 @@ func (s *Service) SetSkipStores(skipFlagRepo notebook.SkipFlagRepository, noteRe
 	s.originRepo = originRepo
 }
 
-// SetNoteEnsurer installs the DB-mode ensure-on-serve hook. Called from
-// bootstrap once the database is connected; nil in YAML-only mode (where notes
-// aren't a DB concern and SkipWord stubs its own YAML entry).
-func (s *Service) SetNoteEnsurer(e NoteEnsurer) {
-	s.noteEnsurer = e
-}
-
-// ensureNotes additively self-heals the DB notes for the notebooks about to be
-// served (DB mode only). Best-effort: a failure is logged but never blocks the
-// quiz — the worst case is the pre-existing "note missing" behavior for a
-// brand-new unit, not a broken session. The ensurer's own cheap fast path makes
-// this a no-op on already-synced notebooks.
-func (s *Service) ensureNotes(notebookIDs []string) {
-	if s.noteEnsurer == nil {
-		return
-	}
-	for _, id := range notebookIDs {
-		if _, err := s.noteEnsurer.EnsureNotesForNotebook(context.Background(), id); err != nil {
-			slog.Warn("ensure notes on serve failed", "notebook", id, "error", err)
-		}
-	}
-}
-
 // SetNotebookACL installs the notebook visibility resolver (auth Phase 3).
 // Called from bootstrap once the database is connected; nil (YAML-only / no-DB
 // dev) means every notebook is visible.
@@ -151,12 +116,13 @@ func (s *Service) SetNotebookACL(aclRepo notebook.NotebookVisibility) {
 	s.aclRepo = aclRepo
 }
 
-// SetContentSource installs the DB-backed user-notebook content source (auth
-// Phase 3 / per-user notebooks). Called from bootstrap once the database is
-// connected; nil (YAML-only / no-DB dev) means the reader sees only the shipped
-// filesystem catalog.
-func (s *Service) SetContentSource(cs notebook.ContentSource) {
-	s.contentSource = cs
+// SetContent installs where notebooks are read from (the Postgres content
+// tables on the server) and the stored dictionary their words resolve
+// through. Without it the Service reads the configured local
+// notebook directories, which only the CLI does.
+func (s *Service) SetContent(content notebook.ContentLoader, dictionary notebook.DictionarySource) {
+	s.content = content
+	s.dictionary = dictionary
 }
 
 // SetUserDefinitionsRepo installs the per-user private registration store so
@@ -187,37 +153,6 @@ func (s *Service) readStoryNotebooksOverlaid(reader *notebook.Reader, userID int
 		return stories, nil
 	}
 	return notebook.ApplyUserDefinitionsOverlay(notebookID, stories, paths, rows), nil
-}
-
-// contentDirs returns the directory roots the reader walks. It is the ONE place
-// the reader's directory set is assembled.
-//
-// When a DB content source is installed (every served environment — dev, e2e,
-// prod set one once the database is connected) the reader reads notebook CONTENT
-// SOLELY from the DB's materialized dirs; the configured filesystem
-// `*_directories` are NOT served, they are only an import source that fills
-// notebook_files. This keeps serving identical across dev/e2e/prod and removes
-// every filesystem content read from the serving path. With no content source
-// (component unit tests that build the Service directly) the reader falls back
-// to the configured filesystem directories, so those tests keep using their
-// on-disk fixtures unchanged.
-func (s *Service) contentDirs() (notebook.ContentDirs, error) {
-	if s.contentSource == nil {
-		return notebook.ContentDirs{
-			Stories:     s.notebooksConfig.StoriesDirectories,
-			Flashcards:  s.notebooksConfig.FlashcardsDirectories,
-			Books:       s.notebooksConfig.BooksDirectories,
-			Definitions: s.notebooksConfig.DefinitionsDirectories,
-			Etymology:   s.notebooksConfig.EtymologyDirectories,
-			Journals:    s.notebooksConfig.JournalsDirectories,
-			Grammars:    s.notebooksConfig.GrammarsDirectories,
-		}, nil
-	}
-	dbDirs, err := s.contentSource.Dirs(context.Background())
-	if err != nil {
-		return notebook.ContentDirs{}, fmt.Errorf("resolve notebook content dirs: %w", err)
-	}
-	return dbDirs, nil
 }
 
 // visibleNotebooks returns a predicate reporting whether a notebook is visible
@@ -375,9 +310,17 @@ func (s *Service) PreloadHistoriesForNotebooks(userID int64, notebookIDs ...stri
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
-	dirs, err := s.contentDirs()
-	if err != nil {
-		return nil, err
+	if s.content != nil {
+		return notebook.NewContentReader(context.Background(), s.content, s.dictionary)
+	}
+	dirs := notebook.ContentDirs{
+		Stories:     s.notebooksConfig.StoriesDirectories,
+		Flashcards:  s.notebooksConfig.FlashcardsDirectories,
+		Books:       s.notebooksConfig.BooksDirectories,
+		Definitions: s.notebooksConfig.DefinitionsDirectories,
+		Etymology:   s.notebooksConfig.EtymologyDirectories,
+		Journals:    s.notebooksConfig.JournalsDirectories,
+		Grammars:    s.notebooksConfig.GrammarsDirectories,
 	}
 	reader, err := notebook.NewReader(
 		dirs.Stories,
@@ -454,6 +397,10 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 	if err != nil {
 		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
 	}
+	// The summary reads every notebook the user can see: load them together.
+	if err := reader.PreloadMatching(visible); err != nil {
+		return nil, err
+	}
 
 	var summaries []NotebookSummary
 
@@ -471,7 +418,7 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		}
 
 		filtered, err := notebook.FilterStoryNotebooks(
-			stories, learningHistories[id], s.dictionaryMap,
+			stories, learningHistories[id], reader.Dictionary(),
 			false, includeUnstudied, true, false, notebook.QuizTypeNotebook,
 			false, // summary needs the due COUNT only — don't resolve meanings
 		)
@@ -525,7 +472,7 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		// unstudied words" toggle on. The frontend re-fetches with
 		// includeUnstudied=true when the toggle flips.
 		filtered, err := notebook.FilterFlashcardNotebooks(
-			notebooks, learningHistories[id], s.dictionaryMap, false, includeUnstudied, notebook.QuizTypeNotebook,
+			notebooks, learningHistories[id], reader.Dictionary(), false, includeUnstudied, notebook.QuizTypeNotebook,
 			false, // summary needs the due COUNT only — don't resolve meanings
 		)
 		if err != nil {
@@ -648,9 +595,30 @@ func notebookDisplayName(reader *notebook.Reader, id string) string {
 }
 
 // buildOriginMap builds a map of origin|language -> EtymologyOrigin from all etymology notebooks.
+// visibleIDs returns the ids visible accepts.
+func visibleIDs(ids []string, visible notebook.VisibilityPredicate) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if visible(id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 func buildOriginMap(reader *notebook.Reader) map[string]notebook.EtymologyOrigin {
 	originMap := make(map[string]notebook.EtymologyOrigin)
+	if err := reader.PreloadEtymology(); err != nil {
+		slog.Warn("load etymology notebooks failed", "error", err)
+	}
+	// Sorted so an origin declared by two notebooks resolves the same way on
+	// every request (the later notebook id wins).
+	ids := make([]string, 0, len(reader.GetEtymologyIndexes()))
 	for id := range reader.GetEtymologyIndexes() {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
 		origins, err := reader.ReadEtymologyNotebook(id)
 		if err != nil {
 			continue
@@ -805,7 +773,6 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 	// DB mode: additively create any notes these notebooks' YAML declares but
 	// the DB is missing, so a later exclude/SkipWord (or SRS write) on a word
 	// from a freshly-added unit lands on a real note instead of erroring.
-	s.ensureNotes(notebookIDs)
 
 	reader, err := s.newReader()
 	if err != nil {
@@ -821,6 +788,9 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 	visible, err := s.visibleNotebooks(userID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+	if err := reader.Preload(visibleIDs(notebookIDs, visible)...); err != nil {
+		return nil, err
 	}
 
 	storyIndexes := reader.GetStoryIndexes()
@@ -932,7 +902,7 @@ func (s *Service) loadStoryCards(
 	}
 
 	filtered, err := notebook.FilterStoryNotebooks(
-		stories, learningHistories[notebookID], s.dictionaryMap,
+		stories, learningHistories[notebookID], reader.Dictionary(),
 		false, includeUnstudied, true, false, notebook.QuizTypeNotebook,
 		true, // building cards — resolve meanings for display
 	)
@@ -991,7 +961,7 @@ func (s *Service) loadFlashcardCards(
 	}
 
 	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], s.dictionaryMap, false, includeUnstudied, notebook.QuizTypeNotebook,
+		notebooks, learningHistories[notebookID], reader.Dictionary(), false, includeUnstudied, notebook.QuizTypeNotebook,
 		true, // building cards — resolve meanings for display
 	)
 	if err != nil {
@@ -1634,13 +1604,14 @@ func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteReco
 // ResolveCardsByNotes).
 func (s *Service) ResolveReverseCardsByNotes(userID int64, notes []*notebook.NoteRecord, originNotebookIDs []string) ([]ReverseCard, []bool) {
 	return resolveByNotes(notes, originNotebookIDs,
-		func(nbIDs []string) ([]ReverseCard, error) { return s.LoadReverseCards(userID, nbIDs, false, true, nil) },
+		func(nbIDs []string) ([]ReverseCard, error) {
+			return s.LoadReverseCards(userID, nbIDs, false, true, nil)
+		},
 		func(c ReverseCard) string { return c.ID })
 }
 
 func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
 	// DB mode: self-heal missing notes before serving (see LoadCards).
-	s.ensureNotes(notebookIDs)
 
 	reader, err := s.newReader()
 	if err != nil {
@@ -1656,6 +1627,10 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 	visible, err := s.visibleNotebooks(userID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+
+	if err := reader.Preload(visibleIDs(notebookIDs, visible)...); err != nil {
+		return nil, err
 	}
 
 	storyIndexes := reader.GetStoryIndexes()
@@ -2441,6 +2416,10 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 	visible, err := s.visibleNotebooks(userID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+	// Every word the user can see: load those notebooks together.
+	if err := reader.PreloadMatching(visible); err != nil {
+		return nil, err
 	}
 
 	storyIndexes := reader.GetStoryIndexes()

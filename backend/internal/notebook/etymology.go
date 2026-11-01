@@ -283,7 +283,7 @@ func (r *Reader) readEtymologySessionFile(
 	candidates map[string][]OriginSceneCandidate,
 ) ([]EtymologyOrigin, error) {
 	// Try new shape first: a top-level list of event entries.
-	if newShape, err := readYamlFile[[]EtymologyNotebookEntry](path); err == nil && hasNewShape(newShape) {
+	if newShape, err := readContent[[]EtymologyNotebookEntry](r, path); err == nil && hasNewShape(newShape) {
 		var out []EtymologyOrigin
 		for _, entry := range newShape {
 			session := strings.TrimSpace(entry.Event)
@@ -308,7 +308,7 @@ func (r *Reader) readEtymologySessionFile(
 	}
 
 	// Legacy shape: metadata + flat origins.
-	wrapped, err := readYamlFile[etymologySessionFile](path)
+	wrapped, err := readContent[etymologySessionFile](r, path)
 	if err != nil {
 		return nil, fmt.Errorf("read etymology session %s: %w", path, err)
 	}
@@ -381,8 +381,8 @@ func ReadLegacyEtymologySession(path string) (LegacyEtymologySession, error) {
 // struct so existing callers don't need to know which shape the file
 // uses. SceneTitle on origins is intentionally dropped — callers that
 // need it should go through Reader.ReadEtymologyNotebook.
-func loadEtymologySessionAnyShape(path string) (etymologySessionFile, error) {
-	if newShape, err := readYamlFile[[]EtymologyNotebookEntry](path); err == nil && hasNewShape(newShape) {
+func loadEtymologySessionAnyShape(r *Reader, path string) (etymologySessionFile, error) {
+	if newShape, err := readContent[[]EtymologyNotebookEntry](r, path); err == nil && hasNewShape(newShape) {
 		var out etymologySessionFile
 		for _, entry := range newShape {
 			if out.Metadata.Title == "" {
@@ -399,7 +399,7 @@ func loadEtymologySessionAnyShape(path string) (etymologySessionFile, error) {
 		}
 		return out, nil
 	}
-	return readYamlFile[etymologySessionFile](path)
+	return readContent[etymologySessionFile](r, path)
 }
 
 // ReadEtymologyIndex loads an etymology directory's index.yml.
@@ -528,6 +528,7 @@ func (r *Reader) buildOriginSceneIndex() map[string][]OriginSceneCandidate {
 		})
 	}
 	out := make(map[string][]OriginSceneCandidate)
+	r.ensureAllDefinitions()
 
 	// Story notebooks: each event has scenes with definitions carrying
 	// origin_parts. The "session title" is the event name. Rank is taken
@@ -536,7 +537,7 @@ func (r *Reader) buildOriginSceneIndex() map[string][]OriginSceneCandidate {
 	for storyID, idx := range r.indexes {
 		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			notebooks, err := readYamlFile[[]StoryNotebook](path)
+			notebooks, err := readContent[[]StoryNotebook](r, path)
 			if err != nil {
 				continue
 			}
@@ -579,7 +580,7 @@ func (r *Reader) buildOriginSceneIndex() map[string][]OriginSceneCandidate {
 	for etymID, idx := range r.etymologyIndexes {
 		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			wrapped, err := loadEtymologySessionAnyShape(path)
+			wrapped, err := loadEtymologySessionAnyShape(r, path)
 			if err != nil {
 				continue
 			}
@@ -612,7 +613,7 @@ func (r *Reader) ReadAllEtymologyDefinitions() []EtymologyDefinitionEntry {
 				continue
 			}
 			seen[path] = true
-			wrapped, err := readYamlFile[etymologySessionFile](path)
+			wrapped, err := readContent[etymologySessionFile](r, path)
 			if err != nil {
 				continue
 			}
@@ -664,7 +665,7 @@ func (r *Reader) ReadEtymologyNotebookDefinitions() []EtymologyDefinitionEntry {
 				continue
 			}
 			seen[path] = true
-			wrapped, err := readYamlFile[etymologySessionFile](path)
+			wrapped, err := readContent[etymologySessionFile](r, path)
 			if err != nil {
 				continue
 			}
@@ -702,11 +703,11 @@ func (r *Reader) GetEtymologyConceptsBySession(etymologyID string) (concepts map
 	relations = make(map[string][]Relation)
 	for _, nb := range index.NotebookPaths {
 		path := filepath.Join(index.Path, nb)
-		title := sessionTitleFromFile(path)
+		title := sessionTitleFromFile(r, path)
 		if title == "" {
 			continue
 		}
-		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(path)
+		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(r, path)
 		concepts[title] = append(concepts[title], sessionConcepts...)
 		relations[title] = append(relations[title], sessionRelations...)
 	}
@@ -717,15 +718,15 @@ func (r *Reader) GetEtymologyConceptsBySession(etymologyID string) (concepts map
 // to discover the session title (the new-shape `event:` field or the
 // legacy `metadata.title`). Both shapes are tried; the first that
 // yields a non-empty title wins. Returns "" when neither is present.
-func sessionTitleFromFile(path string) string {
-	if newShape, err := readYamlFile[[]EtymologyNotebookEntry](path); err == nil {
+func sessionTitleFromFile(r *Reader, path string) string {
+	if newShape, err := readContent[[]EtymologyNotebookEntry](r, path); err == nil {
 		for _, entry := range newShape {
 			if t := strings.TrimSpace(entry.Event); t != "" {
 				return t
 			}
 		}
 	}
-	if wrapped, err := readYamlFile[etymologySessionFile](path); err == nil {
+	if wrapped, err := readContent[etymologySessionFile](r, path); err == nil {
 		return strings.TrimSpace(wrapped.Metadata.Title)
 	}
 	return ""
@@ -752,7 +753,7 @@ func (r *Reader) GetEtymologyConceptsAndRelations(etymologyID string) ([]Concept
 	seenMember := make(map[string]map[conceptMemberKey]bool)
 	for _, nb := range index.NotebookPaths {
 		path := filepath.Join(index.Path, nb)
-		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(path)
+		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(r, path)
 		for _, c := range sessionConcepts {
 			if c.Key == "" {
 				continue
@@ -852,7 +853,7 @@ func walkEtymologyIndexFiles(rootDir string, indexMap map[string]EtymologyIndex)
 		// time when origins disappear from the deduplicated set.
 		for _, nbPath := range index.NotebookPaths {
 			sessionPath := filepath.Join(dir, nbPath)
-			wrapped, err := loadEtymologySessionAnyShape(sessionPath)
+			wrapped, err := loadEtymologySessionAnyShape(nil, sessionPath)
 			if err != nil {
 				return fmt.Errorf("read etymology session %s: %w", sessionPath, err)
 			}

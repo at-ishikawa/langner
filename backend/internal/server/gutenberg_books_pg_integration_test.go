@@ -110,16 +110,16 @@ func newBooksFixture(t *testing.T) booksFixture {
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
 	svc.SetNotebookACL(repos.ACL)
 
-	notebookHandler := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, inference.StaticResolver(mock.NewClient()), repos.Note)
+	notebookHandler := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, nil, inference.StaticResolver(mock.NewClient()), repos.Note)
 	notebookHandler.SetHistoryStore(repos.HistoryStore)
 	notebookHandler.SetNotebookACL(repos.ACL)
 
-	fileRepo := notebook.NewNotebookFileRepository(db)
-	contentSource := notebook.NewDBContentSource(fileRepo)
+	content := notebook.NewContentRepository(db)
 	userDefsRepo := notebook.NewUserDefinitionsRepository(db)
-	svc.SetContentSource(contentSource)
+	svc.SetContent(content, nil)
 	svc.SetUserDefinitionsRepo(userDefsRepo)
-	notebookHandler.SetPushDeps(db, fileRepo, contentSource)
+	notebookHandler.SetContent(content, nil)
+	notebookHandler.SetPushDeps(db, notebook.NewNotebookStore(db))
 	notebookHandler.SetBookDeps(userDefsRepo, fakeGutendexClient{sourceID: "77", raw: string(raw)})
 
 	return booksFixture{svc: svc, notebookHandler: notebookHandler, db: db, userA: userA, userB: userB}
@@ -143,13 +143,14 @@ func TestImportBook_SharedPublicAndIdempotent_LivePostgres_Integration(t *testin
 	assert.Equal(t, "shipped", source)
 	assert.Nil(t, owner, "shared books are owner-less")
 
-	// Files land under the "books" family.
+	// Content lands under the "books" family.
 	var family string
-	require.NoError(t, f.db.Get(&family, `SELECT family FROM notebook_files WHERE notebook_id = $1 LIMIT 1`, "gutenberg-77"))
+	require.NoError(t, f.db.Get(&family, `SELECT family FROM content_indexes WHERE notebook_id = $1`, "gutenberg-77"))
 	assert.Equal(t, "books", family)
 
-	var blobCount int
-	require.NoError(t, f.db.Get(&blobCount, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = $1`, "gutenberg-77"))
+	var lineCount int
+	require.NoError(t, f.db.Get(&lineCount, `SELECT COUNT(*) FROM content_lines WHERE notebook_id = $1`, "gutenberg-77"))
+	require.Positive(t, lineCount, "the book's sentences are stored as rows")
 
 	// A second import by a DIFFERENT user is an idempotent no-op (upsert by id).
 	resp2, err := f.notebookHandler.ImportBook(testutil.WithTestUser(context.Background(), f.userB),
@@ -157,11 +158,11 @@ func TestImportBook_SharedPublicAndIdempotent_LivePostgres_Integration(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, "gutenberg-77", resp2.Msg.NotebookId)
 
-	var nbCount, blobCount2 int
+	var nbCount, lineCount2 int
 	require.NoError(t, f.db.Get(&nbCount, `SELECT COUNT(*) FROM notebooks WHERE notebook_id = $1`, "gutenberg-77"))
-	require.NoError(t, f.db.Get(&blobCount2, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = $1`, "gutenberg-77"))
+	require.NoError(t, f.db.Get(&lineCount2, `SELECT COUNT(*) FROM content_lines WHERE notebook_id = $1`, "gutenberg-77"))
 	assert.Equal(t, 1, nbCount, "one shared copy")
-	assert.Equal(t, blobCount, blobCount2, "re-import replaces blobs wholesale, no duplication")
+	assert.Equal(t, lineCount, lineCount2, "re-import replaces the content wholesale, no duplication")
 
 	// A different user can READ the shared book.
 	detail, err := f.notebookHandler.GetNotebookDetail(testutil.WithTestUser(context.Background(), f.userB),

@@ -1,6 +1,7 @@
 package clicmd
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -192,64 +193,52 @@ func resolveCompositeBundle(dir string) ([]bundleFile, bundleMeta, error) {
 	return files, bundleMeta{ID: id, Kind: compositeBundleKind, Name: name}, nil
 }
 
-// validateBundleLocally parses the bundle through the SAME notebook reader the
-// server uses, catching structural errors before an upload. It materializes the
-// files to a temp dir, builds a reader with the bundle slotted into the family
-// its kind names, and confirms the notebook loads. Returns a descriptive error
-// on failure so `push` can fail fast.
+// validateBundleLocally parses the bundle the way the server stores it and
+// reads it back through the server's Reader, catching structural errors before
+// an upload. Returns a descriptive error on failure so `push` can fail fast.
 func validateBundleLocally(files []bundleFile, meta bundleMeta) error {
-	root, err := os.MkdirTemp("", "langner-validate-*")
-	if err != nil {
-		return fmt.Errorf("temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(root) }()
-
+	family := notebook.FamilyForKind(meta.Kind)
+	nbFiles := make([]notebook.NotebookFile, 0, len(files))
 	for _, f := range files {
-		dest := filepath.Join(root, filepath.Clean("/"+f.RelPath))
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return fmt.Errorf("mkdir: %w", err)
-		}
-		if err := os.WriteFile(dest, f.Content, 0o644); err != nil {
-			return fmt.Errorf("write: %w", err)
-		}
+		nbFiles = append(nbFiles, notebook.NotebookFile{Family: family, Path: f.RelPath, Content: f.Content})
 	}
-
-	var stories, flashcards, books, definitions, etymology []string
-	switch strings.ToLower(strings.TrimSpace(meta.Kind)) {
-	case "story":
-		stories = []string{root}
-	case "book":
-		books = []string{root}
-	case "definitions", "definition":
-		definitions = []string{root}
-	case "etymology":
-		etymology = []string{root}
-	default: // flashcard / journal / grammar all parse via story/flashcard readers
-		flashcards = []string{root}
-		stories = []string{root}
+	id := meta.ID
+	content, err := notebook.ParseBundle(id, nbFiles)
+	if err != nil {
+		return fmt.Errorf("parse notebook: %w", err)
 	}
-
-	reader, err := notebook.NewReader(stories, flashcards, books, definitions, etymology, nil)
+	reader, err := notebook.NewContentReader(context.Background(), notebook.NewMemoryContent([]notebook.NotebookContent{content}), nil)
 	if err != nil {
 		return fmt.Errorf("parse notebook: %w", err)
 	}
 
-	id := meta.ID
-	switch strings.ToLower(strings.TrimSpace(meta.Kind)) {
-	case "definitions", "definition":
+	switch family {
+	case notebook.FamilyDefinitions:
 		if _, ok := reader.GetDefinitionsBook(id); !ok {
 			return fmt.Errorf("definitions book %q has no readable sessions", id)
 		}
-	case "story":
-		if _, err := reader.ReadStoryNotebooks(id); err != nil {
+	case notebook.FamilyStories, notebook.FamilyBooks, notebook.FamilyJournals:
+		if _, ok := reader.GetEtymologyIndexes()[id]; ok {
+			_, err = reader.ReadEtymologyNotebook(id)
+		} else {
+			_, err = reader.ReadStoryNotebooks(id)
+		}
+		if err != nil {
 			return fmt.Errorf("read story %q: %w", id, err)
 		}
-	case "etymology":
+	case notebook.FamilyEtymology:
 		if _, err := reader.ReadEtymologyNotebook(id); err != nil {
 			return fmt.Errorf("read etymology %q: %w", id, err)
 		}
+	case notebook.FamilyGrammars:
+		// Corrections attach to a story by entry title; parsing is the check.
 	default:
-		if _, err := reader.ReadFlashcardNotebooks(id); err != nil {
+		if _, ok := reader.GetEtymologyIndexes()[id]; ok {
+			_, err = reader.ReadEtymologyNotebook(id)
+		} else {
+			_, err = reader.ReadFlashcardNotebooks(id)
+		}
+		if err != nil {
 			return fmt.Errorf("read flashcards %q: %w", id, err)
 		}
 	}

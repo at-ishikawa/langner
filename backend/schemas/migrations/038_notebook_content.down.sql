@@ -1,0 +1,18 @@
+ALTER TABLE notebooks DROP COLUMN IF EXISTS content_bytes;
+DROP TABLE IF EXISTS content_corrections;
+DROP TABLE IF EXISTS content_relations;
+DROP TABLE IF EXISTS content_origin_concept_members;
+DROP TABLE IF EXISTS content_origin_concepts;
+DROP TABLE IF EXISTS content_definition_concepts;
+DROP TABLE IF EXISTS content_origin_forms;
+DROP TABLE IF EXISTS content_origins;
+DROP TABLE IF EXISTS content_note_references;
+DROP TABLE IF EXISTS content_note_phrases;
+DROP TABLE IF EXISTS content_note_origin_parts;
+DROP TABLE IF EXISTS content_note_examples;
+DROP TABLE IF EXISTS content_notes;
+DROP TABLE IF EXISTS content_lines;
+DROP TABLE IF EXISTS content_scenes;
+DROP TABLE IF EXISTS content_entries;
+DROP TABLE IF EXISTS content_files;
+DROP TABLE IF EXISTS content_indexes;

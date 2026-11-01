@@ -27,7 +27,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/clicmd"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
-	"github.com/at-ishikawa/langner/internal/datasync"
+	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
@@ -45,8 +45,8 @@ type fullHistoryStore struct {
 }
 
 // egressFixture is the example catalog imported into a fresh Postgres, the way
-// the server reads it: config.example.yml's notebooks in notebook_files, notes
-// created on serve, plus a seeded learning history.
+// the server reads it: config.example.yml's notebooks in the content tables
+// with their notes, plus a seeded learning history.
 type egressFixture struct {
 	cfg    *config.Config
 	db     *sqlx.DB
@@ -93,13 +93,10 @@ func setupEgressFixture(t *testing.T) egressFixture {
 }
 
 // newService builds the quiz service the way serverapp.BuildHandler does in DB
-// mode (DB history store, DB content source, ensure-on-serve, visibility ACL).
+// mode (DB history store, DB content, visibility ACL).
 func newService(t *testing.T, f egressFixture, fullHistory bool) *quiz.Service {
 	t.Helper()
 	repos := bootstrap.BuildStateRepositories(f.cfg.Notebooks, f.cfg.Quiz, f.db)
-	contentSource := notebook.NewDBContentSource(notebook.NewNotebookFileRepository(f.db))
-	dirs, err := contentSource.Dirs(context.Background())
-	require.NoError(t, err)
 
 	svc := quiz.NewService(f.cfg.Notebooks, inference.StaticResolver(mock.NewClient()),
 		map[string]rapidapi.Response{}, repos.Learning, f.cfg.Quiz)
@@ -109,14 +106,8 @@ func newService(t *testing.T, f egressFixture, fullHistory bool) *quiz.Service {
 	}
 	svc.SetHistoryStore(store)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
-	svc.SetContentSource(contentSource)
+	svc.SetContent(notebook.NewContentRepository(f.db), dictionary.NewDBDictionaryRepository(f.db))
 	svc.SetUserDefinitionsRepo(notebook.NewUserDefinitionsRepository(f.db))
-
-	ensureReader, err := notebook.NewReader(dirs.Stories, dirs.Flashcards, dirs.Books, dirs.Definitions, dirs.Etymology, nil)
-	require.NoError(t, err)
-	require.NoError(t, ensureReader.LoadJournals(dirs.Journals))
-	require.NoError(t, ensureReader.LoadGrammars(dirs.Grammars))
-	svc.SetNoteEnsurer(datasync.NewImporter(repos.Note, nil, notebook.NewYAMLNoteRepository(ensureReader), nil, nil, nil, io.Discard))
 	svc.SetNotebookACL(repos.ACL)
 	return svc
 }
@@ -282,7 +273,8 @@ func findRepoRoot(t *testing.T) string {
 // "db usage" log lines, that:
 //   - startup reads notebook content in ONE query, compressed, and backfills a
 //     compressed copy for rows written before migration 037;
-//   - the per-request content fingerprint is a single short row;
+//   - startup reads no notebook content; a request loads the notebooks it
+//     reads together, and a warm server reuses unchanged ones;
 //   - the quiz options summary reads only the scheduling logs;
 //   - a batch submit loads the quizzed notebook once, not once per answer;
 //   - starting Relearn reads no full per-notebook histories.
@@ -312,15 +304,6 @@ func TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration(t *test
 		}))
 	}
 
-	// Rows written before migration 037 have no compressed copy.
-	var totalContentBytes int64
-	require.NoError(t, f.db.Get(&totalContentBytes, `SELECT sum(byte_size) FROM notebook_files`))
-	var legacyNotebook string
-	require.NoError(t, f.db.Get(&legacyNotebook,
-		`SELECT notebook_id FROM notebook_files GROUP BY notebook_id ORDER BY sum(byte_size), notebook_id LIMIT 1`))
-	_, err = f.db.Exec(`UPDATE notebook_files SET content_gz = NULL WHERE notebook_id = $1`, legacyNotebook)
-	require.NoError(t, err)
-
 	logs := &bytes.Buffer{}
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(logs, nil)))
@@ -330,19 +313,11 @@ func TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration(t *test
 	require.NoError(t, err)
 	t.Cleanup(cleanup)
 
-	// Startup: one compressed content read; the legacy rows got their copy.
-	contentReads := usageLines(t, logs, "db usage (unattributed query)", func(l map[string]any) bool {
-		return strings.Contains(l["sql"].(string), "content_gz") && strings.Contains(l["sql"].(string), "FROM notebook_files ORDER BY")
+	// Startup reads no notebook content: readers are built per request.
+	startupReads := usageLines(t, logs, "db usage (unattributed query)", func(l map[string]any) bool {
+		return strings.Contains(l["sql"].(string), "content_")
 	})
-	require.Len(t, contentReads, 1, "startup must read every notebook's content in one query")
-	assert.Less(t, contentReads[0]["bytes_in"].(float64), float64(totalContentBytes),
-		"the content read must transfer the compressed copies, not the raw files")
-	var compressedBytes int64
-	require.NoError(t, f.db.Get(&compressedBytes, `SELECT sum(length(content_gz)) FROM notebook_files`))
-	assert.Less(t, compressedBytes, totalContentBytes*6/10, "the stored copies must be compressed")
-	var missingCopies int
-	require.NoError(t, f.db.Get(&missingCopies, `SELECT count(*) FROM notebook_files WHERE content_gz IS NULL`))
-	assert.Zero(t, missingCopies, "reading must backfill the compressed copy of older rows")
+	assert.Empty(t, startupReads, "the server must not read notebook content at startup")
 
 	call := func(h http.Handler, procedure, body string) []byte {
 		req := httptest.NewRequest(http.MethodPost, "/api.v1.QuizService/"+procedure, strings.NewReader(body))
@@ -359,10 +334,13 @@ func TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration(t *test
 			return l["endpoint"] == "/api.v1.QuizService/"+procedure
 		})
 		require.NotEmpty(t, lines, procedure)
+		if os.Getenv("EGRESS_DEBUG") != "" {
+			t.Logf("%s: %v", procedure, lines[len(lines)-1])
+		}
 		return lines[len(lines)-1]
 	}
 
-	// Quiz options: a one-row fingerprint and the scheduling-only log read.
+	// Quiz options: the scheduling-only log read.
 	var options struct {
 		Notebooks []struct {
 			NotebookID string `json:"notebookId"`
@@ -372,10 +350,22 @@ func TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration(t *test
 	require.NoError(t, json.Unmarshal(call(handler, "GetQuizOptions", `{}`), &options))
 	require.NotEmpty(t, options.Notebooks)
 	usage := requestUsage("GetQuizOptions")
-	assert.False(t, hasShape(usage, "FROM notebook_files", func(s shape) bool { return s.rows > s.calls }),
-		"the content fingerprint must be one row per call: %v", usage["top"])
 	assert.True(t, hasShape(usage, "source_notebook_id FROM ( SELECT", nil),
 		"the options summary must read the scheduling logs only: %v", usage["top"])
+	// Content: the summary reads every notebook, in one query per content
+	// table rather than one per notebook.
+	assert.Equal(t, 1, shapeCalls(usage, "note_no, sense_id, expression, definition"),
+		"the options summary must load the notebooks together: %v", usage["top"])
+	coldQueries := usage["queries"].(float64)
+
+	// The same request again is served from the content cache: only the
+	// catalog is read, not the content.
+	call(handler, "GetQuizOptions", `{}`)
+	usage = requestUsage("GetQuizOptions")
+	assert.Zero(t, shapeCalls(usage, "note_no, sense_id, expression, definition"),
+		"a warm server must not reload unchanged notebooks: %v", usage["top"])
+	assert.Less(t, usage["queries"].(float64), coldQueries-10,
+		"a warm options request skips the content queries")
 
 	// Batch reverse submit on a fresh handler (another serverless instance: no
 	// cards cached in memory), so every answer resolves from the database.
