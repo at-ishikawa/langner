@@ -32,7 +32,6 @@ type NotebookHandler struct {
 	apiv1connect.UnimplementedNotebookServiceHandler
 	notebooksConfig  config.NotebooksConfig
 	templatesConfig  config.TemplatesConfig
-	dictionaryMap    map[string]rapidapi.Response
 	dictionaryReader *dictionary.Reader
 	clientResolver   inference.ClientResolver
 	noteRepository   notebook.NoteRepository
@@ -48,14 +47,13 @@ type NotebookHandler struct {
 	// 404 that doesn't disclose the notebook exists). Nil in YAML-only / no-DB
 	// dev, where every notebook is visible.
 	aclRepo notebook.NotebookVisibility
-	// db / fileRepo / contentSource are the DB-mode per-user-notebook seams
-	// (per-user notebooks feature). db + fileRepo back PushNotebook / PullNotebook
-	// / ListMyNotebooks; contentSource contributes user-notebook content to the
-	// reader so GetNotebookDetail can serve a pushed notebook. All nil in
-	// YAML-only / no-DB dev, where those RPCs return Unimplemented/empty.
-	db            *sqlx.DB
-	fileRepo      *notebook.NotebookFileRepository
-	contentSource notebook.ContentSource
+	// db + store back PushNotebook / PullNotebook / ListMyNotebooks /
+	// DeleteNotebook / ImportBook; content is where every read RPC reads
+	// notebooks from (the Postgres content tables).
+	db         *sqlx.DB
+	store      *notebook.NotebookStore
+	content    notebook.ContentLoader
+	dictionary notebook.DictionarySource
 	// userDefsRepo is the per-user private registration store (Gutenberg books
 	// feature). RegisterDefinition/DeleteDefinition write it; GetNotebookDetail
 	// overlays the caller's rows onto the shared book's scenes; LookupWord reads
@@ -133,60 +131,37 @@ func (h *NotebookHandler) loadHistoriesForNotebooks(userID int64, notebookIDs ..
 
 // NewNotebookHandler creates a new NotebookHandler.
 // noteRepo is optional; pass nil when DB is not configured.
-func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, clientResolver inference.ClientResolver, noteRepo notebook.NoteRepository) *NotebookHandler {
+func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryReader *dictionary.Reader, clientResolver inference.ClientResolver, noteRepo notebook.NoteRepository) *NotebookHandler {
 	return &NotebookHandler{
 		notebooksConfig:  notebooksConfig,
 		templatesConfig:  templatesConfig,
-		dictionaryMap:    dictionaryMap,
 		dictionaryReader: dictionaryReader,
 		clientResolver:   clientResolver,
 		noteRepository:   noteRepo,
 	}
 }
 
-// SetPushDeps installs the DB-mode per-user-notebook dependencies: the raw DB
-// handle (to build the push-time importer over stored blobs), the notebook-file
-// repository, and the content source that surfaces user notebooks to the
-// reader. Called from bootstrap only when a database is configured.
-func (h *NotebookHandler) SetPushDeps(db *sqlx.DB, fileRepo *notebook.NotebookFileRepository, contentSource notebook.ContentSource) {
+// SetPushDeps installs the notebook store PushNotebook / PullNotebook /
+// ListMyNotebooks / DeleteNotebook / ImportBook write and read.
+func (h *NotebookHandler) SetPushDeps(db *sqlx.DB, store *notebook.NotebookStore) {
 	h.db = db
-	h.fileRepo = fileRepo
-	h.contentSource = contentSource
+	h.store = store
 }
 
+// SetContent installs where the read RPCs read notebooks from, and the stored
+// dictionary their words resolve through.
+func (h *NotebookHandler) SetContent(content notebook.ContentLoader, dictionary notebook.DictionarySource) {
+	h.content = content
+	h.dictionary = dictionary
+}
+
+// newReader returns a Reader over the stored notebooks; each notebook's content
+// is loaded only when a request reads it.
 func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
-	dirs := notebook.ContentDirs{
-		Stories:     h.notebooksConfig.StoriesDirectories,
-		Flashcards:  h.notebooksConfig.FlashcardsDirectories,
-		Books:       h.notebooksConfig.BooksDirectories,
-		Definitions: h.notebooksConfig.DefinitionsDirectories,
-		Etymology:   h.notebooksConfig.EtymologyDirectories,
-		Journals:    h.notebooksConfig.JournalsDirectories,
+	if h.content == nil {
+		return nil, fmt.Errorf("notebook content is not configured")
 	}
-	if h.contentSource != nil {
-		dbDirs, err := h.contentSource.Dirs(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("resolve user-notebook content dirs: %w", err)
-		}
-		dirs = dirs.Merge(dbDirs)
-	}
-	reader, err := notebook.NewReader(
-		dirs.Stories,
-		dirs.Flashcards,
-		dirs.Books,
-		dirs.Definitions,
-		dirs.Etymology,
-		h.dictionaryMap,
-	)
-	if err != nil {
-		return nil, err
-	}
-	// Register journals (stored in the story format) so GetNotebookDetail can
-	// load a journal's prose, mirroring the quiz service reader.
-	if err := reader.LoadJournals(dirs.Journals); err != nil {
-		return nil, fmt.Errorf("load journals: %w", err)
-	}
-	return reader, nil
+	return notebook.NewContentReader(context.Background(), h.content, h.dictionary)
 }
 
 func (h *NotebookHandler) loadLearningHistory(userID int64, notebookID string) ([]notebook.LearningHistory, error) {
@@ -278,7 +253,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 					}
 				}
 
-				_ = def.SetDetails(h.dictionaryMap, "")
+				_ = def.SetDetails(reader.Dictionary(), "")
 				info := h.findLearningInfoFull(learningHistory, nb.Event, scene.Title, def)
 				info.noteID = noteIDForDef(noteIDByExpr, def)
 
@@ -377,7 +352,7 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 				}
 			}
 
-			_ = card.SetDetails(h.dictionaryMap, "")
+			_ = card.SetDetails(reader.Dictionary(), "")
 			info := h.findLearningInfoFull(learningHistory, nb.Title, "", card)
 			info.noteID = noteIDForDef(noteIDByExpr, card)
 
@@ -454,7 +429,7 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 			var definitions []*apiv1.NotebookWord
 			for i := range scene.Expressions {
 				note := scene.Expressions[i]
-				_ = note.SetDetails(h.dictionaryMap, "")
+				_ = note.SetDetails(reader.Dictionary(), "")
 				info := h.findLearningInfoFull(learningHistory, event, scene.Metadata.Title, note)
 				info.noteID = noteIDForDef(noteIDByExpr, note)
 
@@ -681,7 +656,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 	}
 
 	preserveOrder := reader.IsBook(notebookID)
-	filtered, err := notebook.FilterStoryNotebooks(storyNotebooks, learningHistory, h.dictionaryMap, false, true, false, preserveOrder, notebook.QuizTypeNotebook, true)
+	filtered, err := notebook.FilterStoryNotebooks(storyNotebooks, learningHistory, reader.Dictionary(), false, true, false, preserveOrder, notebook.QuizTypeNotebook, true)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("filter story notebooks: %w", err))
 	}
@@ -739,10 +714,6 @@ func (h *NotebookHandler) LookupWord(
 	// never enters another user's quiz. Attached to whichever response wins
 	// below; the dictionary/AI lookup stays the primary content.
 	suggestions := h.lookupSuggestions(ctx, req.Msg.GetNotebookId(), word)
-
-	if resp, ok := h.dictionaryMap[word]; ok {
-		return connect.NewResponse(withSuggestions(rapidAPIToLookupResponse(word, resp, "dictionary"), suggestions)), nil
-	}
 
 	if h.dictionaryReader != nil {
 		resp, err := h.dictionaryReader.Lookup(ctx, word)

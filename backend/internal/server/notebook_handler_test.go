@@ -22,7 +22,7 @@ func newTestNotebookHandler(t *testing.T) *NotebookHandler {
 	storiesDir := t.TempDir()
 	learningNotesDir := t.TempDir()
 
-	return NewNotebookHandler(
+	return newDirNotebookHandler(
 		config.NotebooksConfig{
 			StoriesDirectories:     []string{storiesDir},
 			LearningNotesDirectory: learningNotesDir,
@@ -71,7 +71,7 @@ notebooks:
           meaning: "so foolish or unreasonable as to be amusing"
 `), 0644))
 
-	return NewNotebookHandler(
+	return newDirNotebookHandler(
 		config.NotebooksConfig{
 			StoriesDirectories:     []string{storiesDir},
 			LearningNotesDirectory: learningDir,
@@ -263,7 +263,7 @@ notebooks:
               language: Greek
 `), 0o644))
 
-	handler := NewNotebookHandler(
+	handler := newDirNotebookHandler(
 		config.NotebooksConfig{
 			DefinitionsDirectories: []string{filepath.Join(tmpDir, "definitions")},
 			LearningNotesDirectory: t.TempDir(),
@@ -383,7 +383,7 @@ notebooks:
 	// Place a malformed YAML file in the learning directory
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "broken.yml"), []byte("{{invalid yaml"), 0644))
 
-	handler := NewNotebookHandler(
+	handler := newDirNotebookHandler(
 		config.NotebooksConfig{
 			StoriesDirectories:     []string{storiesDir},
 			LearningNotesDirectory: learningDir,
@@ -407,39 +407,8 @@ notebooks:
 	assert.Equal(t, connect.CodeInternal, connectErr.Code())
 }
 
-func TestNotebookHandler_LookupWord_FromCache(t *testing.T) {
-	dictionaryMap := map[string]rapidapi.Response{
-		"break": {
-			Results: []rapidapi.Result{
-				{PartOfSpeech: "verb", Definition: "to separate into pieces", Examples: []string{"she broke the ice"}},
-			},
-		},
-	}
-
-	handler := NewNotebookHandler(
-		config.NotebooksConfig{},
-		config.TemplatesConfig{},
-		dictionaryMap,
-		nil,
-		nil,
-		nil,
-	)
-
-	resp, err := handler.LookupWord(
-		context.Background(),
-		connect.NewRequest(&apiv1.LookupWordRequest{Word: "break"}),
-	)
-
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	assert.Equal(t, "break", resp.Msg.GetWord())
-	assert.Equal(t, "dictionary", resp.Msg.GetSource())
-	require.Len(t, resp.Msg.GetDefinitions(), 1)
-	assert.Equal(t, "verb", resp.Msg.GetDefinitions()[0].GetPartOfSpeech())
-}
-
 func TestNotebookHandler_LookupWord_NotFound(t *testing.T) {
-	handler := NewNotebookHandler(
+	handler := newDirNotebookHandler(
 		config.NotebooksConfig{},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
@@ -462,7 +431,7 @@ func TestNotebookHandler_LookupWord_NotFound(t *testing.T) {
 func TestNotebookHandler_RegisterDefinition(t *testing.T) {
 	defsDir := t.TempDir()
 
-	handler := NewNotebookHandler(
+	handler := newDirNotebookHandler(
 		config.NotebooksConfig{
 			DefinitionsDirectories: []string{defsDir},
 		},
@@ -498,7 +467,7 @@ func TestNotebookHandler_RegisterDefinition(t *testing.T) {
 func TestNotebookHandler_RegisterDefinition_Subdirectory(t *testing.T) {
 	defsDir := t.TempDir()
 
-	handler := NewNotebookHandler(
+	handler := newDirNotebookHandler(
 		config.NotebooksConfig{
 			DefinitionsDirectories: []string{defsDir},
 		},
@@ -533,7 +502,7 @@ func TestNotebookHandler_RegisterDefinition_Subdirectory(t *testing.T) {
 func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
 	defsDir := t.TempDir()
 
-	handler := NewNotebookHandler(
+	handler := newDirNotebookHandler(
 		config.NotebooksConfig{
 			DefinitionsDirectories: []string{defsDir},
 		},
@@ -580,7 +549,7 @@ notebooks:
         - "Yesterday I go to the market."
 `), 0644))
 
-	handler := NewNotebookHandler(
+	handler := newDirNotebookHandler(
 		config.NotebooksConfig{
 			JournalsDirectories:    []string{journalsDir},
 			LearningNotesDirectory: learningDir,
@@ -647,7 +616,7 @@ notebooks:
           meaning: to send
 `), 0644))
 
-	handler := NewNotebookHandler(
+	handler := newDirNotebookHandler(
 		config.NotebooksConfig{
 			EtymologyDirectories:   []string{etymDir},
 			LearningNotesDirectory: learningDir,

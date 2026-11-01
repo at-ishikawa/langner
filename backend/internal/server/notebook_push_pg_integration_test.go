@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
@@ -29,7 +31,7 @@ import (
 
 // This test drives the WHOLE per-user-notebooks path end to end against a live
 // Postgres, through the SAME Service/NotebookHandler construction the server
-// uses (bootstrap.BuildStateRepositories + SetContentSource/SetPushDeps): push
+// uses (bootstrap.BuildStateRepositories + SetContent/SetPushDeps): push
 // the example bundle examples/user-notebooks/idioms → mint nb_ id → store blobs
 // → import notes → read via the reader/quiz → grade an attempt → prove it's
 // hidden from another user → pull round-trips. It is the mandatory real-config
@@ -91,14 +93,14 @@ func newPushFixture(t *testing.T) pushFixture {
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
 	svc.SetNotebookACL(repos.ACL)
 
-	notebookHandler := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, inference.StaticResolver(mock.NewClient()), repos.Note)
+	notebookHandler := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, nil, inference.StaticResolver(mock.NewClient()), repos.Note)
 	notebookHandler.SetHistoryStore(repos.HistoryStore)
 	notebookHandler.SetNotebookACL(repos.ACL)
 
-	fileRepo := notebook.NewNotebookFileRepository(db)
-	contentSource := notebook.NewDBContentSource(fileRepo)
-	svc.SetContentSource(contentSource)
-	notebookHandler.SetPushDeps(db, fileRepo, contentSource)
+	content := notebook.NewContentRepository(db)
+	svc.SetContent(content, nil)
+	notebookHandler.SetContent(content, nil)
+	notebookHandler.SetPushDeps(db, notebook.NewNotebookStore(db))
 
 	return pushFixture{svc: svc, notebookHandler: notebookHandler, db: db, ownerID: ownerID, nonOwnerID: nonOwnerID}
 }
@@ -134,10 +136,10 @@ func TestPushNotebook_EndToEnd_LivePostgres_Integration(t *testing.T) {
 	require.True(t, strings.HasPrefix(nbID, notebook.NotebookIDPrefix), "server must mint an nb_ id, got %q", nbID)
 	assert.Greater(t, pushResp.Msg.ImportedRows["notes"], int32(0), "push must import notes")
 
-	// --- Stored in notebook_files (2 blobs) + a private notebooks row ---
-	var blobCount int
-	require.NoError(t, f.db.Get(&blobCount, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = $1`, nbID))
-	assert.Equal(t, 2, blobCount, "both bundle files are stored as blobs")
+	// --- Stored as content rows (the five cards) + a private notebooks row ---
+	var cardRows int
+	require.NoError(t, f.db.Get(&cardRows, `SELECT COUNT(*) FROM content_notes WHERE notebook_id = $1`, nbID))
+	assert.Equal(t, 5, cardRows, "every card is stored as a content row")
 
 	var visibility, source string
 	var owner int64
@@ -185,7 +187,7 @@ func TestPushNotebook_EndToEnd_LivePostgres_Integration(t *testing.T) {
 	nonOwnerSummaries := summaryIDs(t, f.svc, f.nonOwnerID)
 	assert.False(t, nonOwnerSummaries[nbID], "the private notebook must not appear in a non-owner's quiz options")
 
-	// --- Pull round-trips the stored blobs (owner-only) ---
+	// --- Pull returns the stored notebook (owner-only) ---
 	pull, err := f.notebookHandler.PullNotebook(ownerCtx, connect.NewRequest(&apiv1.PullNotebookRequest{NotebookId: nbID}))
 	require.NoError(t, err)
 	require.Len(t, pull.Msg.Files, 2)
@@ -193,15 +195,18 @@ func TestPushNotebook_EndToEnd_LivePostgres_Integration(t *testing.T) {
 	for _, pf := range pull.Msg.Files {
 		byPath[pf.Path] = pf.Content
 	}
-	// cards.yml round-trips byte-for-byte; index.yml carries the minted nb_ id.
+	// cards.yml pulls back with the same cards; index.yml carries the minted nb_ id.
 	orig := exampleIdiomBundle(t)
 	var origCards []byte
 	for _, of := range orig {
-		if of.Path == "cards.yml" {
+		if path.Clean(of.Path) == "cards.yml" {
 			origCards = of.Content
 		}
 	}
-	assert.Equal(t, origCards, byPath["cards.yml"], "cards.yml pulls back byte-identical")
+	var wantDecks, gotDecks []notebook.FlashcardNotebook
+	require.NoError(t, yaml.Unmarshal(origCards, &wantDecks))
+	require.NoError(t, yaml.Unmarshal(byPath["cards.yml"], &gotDecks))
+	assert.Equal(t, wantDecks, gotDecks, "cards.yml pulls back with the pushed cards")
 	assert.Contains(t, string(byPath["index.yml"]), nbID, "the stored index.yml carries the minted nb_ id")
 
 	// --- A non-owner cannot pull it ---
@@ -249,10 +254,10 @@ func TestPushNotebook_Composite_LivePostgres_Integration(t *testing.T) {
 	nbID := pushResp.Msg.NotebookId
 	require.True(t, strings.HasPrefix(nbID, notebook.NotebookIDPrefix), "server mints an nb_ id, got %q", nbID)
 
-	// Blobs stored under BOTH families for the one minted id.
+	// Content stored under BOTH families for the one minted id.
 	var fams []string
 	require.NoError(t, f.db.Select(&fams,
-		`SELECT DISTINCT family FROM notebook_files WHERE notebook_id = $1 ORDER BY family`, nbID))
+		`SELECT family FROM content_indexes WHERE notebook_id = $1 ORDER BY family`, nbID))
 	assert.Equal(t, []string{"definitions", "etymology"}, fams,
 		"a composite push stores its definitions and etymology files under distinct families of one id")
 
@@ -326,14 +331,14 @@ func TestPushNotebook_UpdatesExistingOwnedId_LivePostgres_Integration(t *testing
 	require.NoError(t, f.db.Get(&source, `SELECT source FROM notebooks WHERE notebook_id = 'roots-mini'`))
 	assert.Equal(t, "shipped", source, "updating a shipped notebook must not reclassify it as user")
 
-	// Blobs were (re)written under the preserved id.
-	var blobs int
-	require.NoError(t, f.db.Get(&blobs, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = 'roots-mini'`))
-	assert.Greater(t, blobs, 0, "the push stored blobs under the preserved id")
+	// Content was (re)written under the preserved id.
+	var files int
+	require.NoError(t, f.db.Get(&files, `SELECT COUNT(*) FROM content_files WHERE notebook_id = 'roots-mini'`))
+	assert.Greater(t, files, 0, "the push stored content under the preserved id")
 
 	// "My notebooks" = everything owned: the owned source='shipped' notebook is
 	// listed by ListUserNotebooks, not filtered out for not being source='user'.
-	owned, lerr := f.notebookHandler.fileRepo.ListUserNotebooks(ctx, f.ownerID)
+	owned, lerr := f.notebookHandler.store.ListUserNotebooks(ctx, f.ownerID)
 	require.NoError(t, lerr)
 	var ownedIDs []string
 	for _, n := range owned {
@@ -385,14 +390,14 @@ func TestPushNotebook_NameMatchUpdatesExisting_LivePostgres_Integration(t *testi
 func TestPushNotebook_AmbiguousNameRefuses_LivePostgres_Integration(t *testing.T) {
 	f := newPushFixture(t)
 	ownerCtx := testutil.WithTestUser(context.Background(), f.ownerID)
-	fileRepo := notebook.NewNotebookFileRepository(f.db)
+	store := notebook.NewNotebookStore(f.db)
 
 	owner := f.ownerID
 	for _, id := range []string{"nb_dup_a", "nb_dup_b"} {
-		require.NoError(t, fileRepo.PushBundle(context.Background(), notebook.UserNotebook{
+		require.NoError(t, store.PushBundle(context.Background(), notebook.UserNotebook{
 			NotebookID: id, OwnerUserID: &owner, Visibility: notebook.VisibilityPrivate,
 			Source: "user", Kind: "Flashcard", DisplayName: "Dup Name",
-		}, []notebook.NotebookFile{{Path: "index.yml", Content: []byte("kind: Flashcard\nname: \"Dup Name\"\n")}}))
+		}, notebook.NotebookContent{ID: id}))
 	}
 
 	dupFiles := []*apiv1.NotebookFile{
@@ -406,7 +411,7 @@ func TestPushNotebook_AmbiguousNameRefuses_LivePostgres_Integration(t *testing.T
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }
 
-// TestDeleteNotebook: owner deletes a notebook (gone from list, blobs removed);
+// TestDeleteNotebook: owner deletes a notebook (gone from list, content removed);
 // a non-owner is refused; a missing id is NotFound.
 func TestDeleteNotebook_LivePostgres_Integration(t *testing.T) {
 	f := newPushFixture(t)
@@ -439,6 +444,6 @@ func TestDeleteNotebook_LivePostgres_Integration(t *testing.T) {
 	assert.Empty(t, list.Msg.Notebooks)
 
 	var files int
-	require.NoError(t, f.db.Get(&files, `SELECT COUNT(*) FROM notebook_files WHERE notebook_id = $1`, nbID))
-	assert.Zero(t, files, "notebook_files removed on delete")
+	require.NoError(t, f.db.Get(&files, `SELECT COUNT(*) FROM content_files WHERE notebook_id = $1`, nbID))
+	assert.Zero(t, files, "content removed on delete")
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/datasync"
+	"github.com/at-ishikawa/langner/internal/dbseed"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
@@ -47,9 +48,10 @@ const ensureBookID = "latin-roots-book"
 // config.example.yml (with CWD moved to the repo root so its relative notebook
 // dirs resolve exactly as the server sees them).
 type ensureFixture struct {
-	db    *sqlx.DB
-	repos bootstrap.StateRepositories
-	cfg   *config.Config
+	db     *sqlx.DB
+	repos  bootstrap.StateRepositories
+	cfg    *config.Config
+	userID int64
 }
 
 func setupEnsureFixture(t *testing.T) ensureFixture {
@@ -82,7 +84,9 @@ func setupEnsureFixture(t *testing.T) ensureFixture {
 	require.NoError(t, err)
 
 	repos := bootstrap.BuildStateRepositories(cfg.Notebooks, cfg.Quiz, db)
-	return ensureFixture{db: db, repos: repos, cfg: cfg}
+	userID, err := dbseed.SeedUser(context.Background(), db, "ensure-notes-test", "")
+	require.NoError(t, err)
+	return ensureFixture{db: db, repos: repos, cfg: cfg, userID: userID}
 }
 
 // newImporter builds the same notes-only importer main.go injects as the
@@ -103,18 +107,39 @@ func (f ensureFixture) newImporter(t *testing.T) *datasync.Importer {
 	return datasync.NewImporter(f.repos.Note, nil, noteSource, nil, nil, nil, io.Discard)
 }
 
-// newService builds the quiz.Service exactly as cmd/langner-server/main.go does
-// in DB mode. When withEnsurer is false the ensure-on-serve hook is left nil so
-// the test can observe the pre-fix behavior.
-func (f ensureFixture) newService(t *testing.T, withEnsurer bool) *quiz.Service {
+// newService builds the quiz.Service as the server does: notebooks are read
+// from the Postgres content tables.
+func (f ensureFixture) newService(t *testing.T) *quiz.Service {
 	t.Helper()
 	svc := quiz.NewService(f.cfg.Notebooks, inference.StaticResolver(mock.NewClient()), map[string]rapidapi.Response{}, f.repos.Learning, f.cfg.Quiz)
 	svc.SetHistoryStore(f.repos.HistoryStore)
 	svc.SetSkipStores(f.repos.SkipFlags, f.repos.Note, f.repos.Origin)
-	if withEnsurer {
-		svc.SetNoteEnsurer(f.newImporter(t))
-	}
+	svc.SetContent(notebook.NewContentRepository(f.db), nil)
 	return svc
+}
+
+// storeBook stores the example book's content the way an import or push does,
+// optionally creating its notes.
+func (f ensureFixture) storeBook(t *testing.T, withNotes bool) {
+	t.Helper()
+	ctx := context.Background()
+	contents, err := notebook.LoadDirectoryContent(notebook.ContentDirs{
+		Definitions: f.cfg.Notebooks.DefinitionsDirectories,
+		Etymology:   f.cfg.Notebooks.EtymologyDirectories,
+	})
+	require.NoError(t, err)
+	for _, nc := range contents {
+		if nc.ID != ensureBookID {
+			continue
+		}
+		require.NoError(t, notebook.NewNotebookStore(f.db).ImportShippedBundle(ctx, "composite", nc.ID, "", 0, nc))
+		if withNotes {
+			_, err := datasync.EnsureContentNotes(ctx, f.db, nc)
+			require.NoError(t, err)
+		}
+		return
+	}
+	t.Fatalf("example notebook %s not found", ensureBookID)
 }
 
 func (f ensureFixture) countNotebookNotes(t *testing.T, notebookID string) int {
@@ -155,53 +180,36 @@ func loadFirstCard(t *testing.T, svc *quiz.Service) quiz.Card {
 	t.Helper()
 	cards, err := svc.LoadCards(0, []string{ensureBookID}, true, nil)
 	require.NoError(t, err)
-	require.NotEmpty(t, cards, "the example definitions book must yield cards from YAML")
+	require.NotEmpty(t, cards, "the example definitions book must yield cards")
 	return cards[0]
 }
 
-// TestEnsureOnServe_ReproducesAndFixesExcludeDrift is the end-to-end regression:
-// with a DB that has NO notes for the book (pure YAML→DB drift), Exclude fails
-// without the hook and succeeds with it, and the hook is additive + idempotent.
-func TestEnsureOnServe_ReproducesAndFixesExcludeDrift(t *testing.T) {
+// TestStoredNotebook_HasNotes_ExcludeWorks: a notebook stored without its
+// notes (the drift state: words quizzed from content with no notes rows) makes
+// Exclude fail; storing it the way import/push do creates the notes, so Exclude
+// works with no separate import step.
+func TestStoredNotebook_HasNotes_ExcludeWorks(t *testing.T) {
 	f := setupEnsureFixture(t)
-	ctx := context.Background()
 
-	// The DB starts empty (fresh migration): the drift condition.
-	require.Equal(t, 0, f.countNotebookNotes(t, ensureBookID), "precondition: DB has no notes for the book")
-
-	t.Run("reproduces bug without ensure-on-serve", func(t *testing.T) {
-		svc := f.newService(t, false)
-		card := loadFirstCard(t, svc) // loads from YAML; no ensure runs
-		require.Equal(t, 0, f.countNotebookNotes(t, ensureBookID), "no hook: still no DB notes")
-
-		err := svc.SkipWord(0, quiz.CardInfoFromCard(card), "", []notebook.QuizType{notebook.QuizTypeNotebook})
-		require.Error(t, err, "Exclude must fail on the drift state (the reported bug)")
+	t.Run("without notes Exclude fails", func(t *testing.T) {
+		f.storeBook(t, false)
+		require.Equal(t, 0, f.countNotebookNotes(t, ensureBookID), "precondition: DB has no notes for the book")
+		svc := f.newService(t)
+		card := loadFirstCard(t, svc)
+		err := svc.SkipWord(f.userID, quiz.CardInfoFromCard(card), "", []notebook.QuizType{notebook.QuizTypeNotebook})
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no matching note or origin")
 	})
 
-	t.Run("ensure-on-serve creates the missing notes and Exclude succeeds", func(t *testing.T) {
-		svc := f.newService(t, true)
-		card := loadFirstCard(t, svc) // LoadCards runs ensure → creates notes
-
-		got := f.countNotebookNotes(t, ensureBookID)
-		assert.Greater(t, got, 0, "ensure-on-serve must create the book's notes")
-
-		require.NoError(t, svc.SkipWord(0, quiz.CardInfoFromCard(card), "", []notebook.QuizType{notebook.QuizTypeNotebook}),
-			"Exclude must succeed once the note exists")
-		assert.Equal(t, 1, f.countSkipFlags(t, ensureBookID), "the skip flag landed on the freshly-created note")
-
-		require.NoError(t, svc.ResumeWord(0, quiz.CardInfoFromCard(card), []notebook.QuizType{notebook.QuizTypeNotebook}),
-			"Resume must clear it")
-		assert.Equal(t, 0, f.countSkipFlags(t, ensureBookID), "resume cleared the skip flag")
-	})
-
-	t.Run("idempotent: second serve creates nothing", func(t *testing.T) {
-		imp := f.newImporter(t)
-		before := f.countNotebookNotes(t, ensureBookID)
-		created, err := imp.EnsureNotesForNotebook(ctx, ensureBookID)
-		require.NoError(t, err)
-		assert.Equal(t, 0, created, "already-synced notebook creates nothing")
-		assert.Equal(t, before, f.countNotebookNotes(t, ensureBookID), "note count unchanged")
+	t.Run("storing creates the notes and Exclude succeeds", func(t *testing.T) {
+		f.storeBook(t, true)
+		assert.Greater(t, f.countNotebookNotes(t, ensureBookID), 0, "storing must create the book's notes")
+		svc := f.newService(t)
+		card := loadFirstCard(t, svc)
+		require.NoError(t, svc.SkipWord(f.userID, quiz.CardInfoFromCard(card), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
+		assert.Equal(t, 1, f.countSkipFlags(t, ensureBookID), "the skip flag landed on the created note")
+		require.NoError(t, svc.ResumeWord(f.userID, quiz.CardInfoFromCard(card), []notebook.QuizType{notebook.QuizTypeNotebook}))
+		assert.Equal(t, 0, f.countSkipFlags(t, ensureBookID))
 	})
 }
 
@@ -221,12 +229,13 @@ func TestEnsureNotesForNotebook_AdditiveNoClobber(t *testing.T) {
 	require.Equal(t, full, total)
 
 	// Seed DB-only STATE on a note we will KEEP: a skip flag via the real path.
-	svc := f.newService(t, false)
-	cards, err := svc.LoadCards(0, []string{ensureBookID}, true, nil)
+	f.storeBook(t, false)
+	svc := f.newService(t)
+	cards, err := svc.LoadCards(f.userID, []string{ensureBookID}, true, nil)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(cards), 2)
 	keep, drop := cards[0], cards[1]
-	require.NoError(t, svc.SkipWord(0, quiz.CardInfoFromCard(keep), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, svc.SkipWord(f.userID, quiz.CardInfoFromCard(keep), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
 	require.Equal(t, 1, f.countSkipFlags(t, ensureBookID))
 
 	// Simulate drift: delete a DIFFERENT note's row (as if that unit was added
@@ -252,7 +261,7 @@ func TestEnsureNotesForNotebook_AdditiveNoClobber(t *testing.T) {
 	assert.Equal(t, 1, f.countSkipFlags(t, ensureBookID), "existing skip flag survived the ensure")
 
 	// The recreated word is now excludable end-to-end.
-	require.NoError(t, svc.SkipWord(0, quiz.CardInfoFromCard(drop), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, svc.SkipWord(f.userID, quiz.CardInfoFromCard(drop), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
 	assert.Equal(t, 2, f.countSkipFlags(t, ensureBookID))
 }
 

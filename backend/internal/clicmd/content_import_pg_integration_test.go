@@ -69,7 +69,7 @@ func TestImportShippedContent_ServesFromDB_LivePostgres_Integration(t *testing.T
 
 	ctx := context.Background()
 
-	// Import the shipped catalog into notebook_files.
+	// Import the shipped catalog into the content tables.
 	n, err := ImportShippedContent(ctx, cfg, db, io.Discard)
 	require.NoError(t, err)
 	require.Greater(t, n, 0, "expected to import at least one shipped notebook")
@@ -78,19 +78,18 @@ func TestImportShippedContent_ServesFromDB_LivePostgres_Integration(t *testing.T
 	// series per word, metadata selects the series; it must not fork two ids).
 	var fams []string
 	require.NoError(t, db.SelectContext(ctx, &fams,
-		`SELECT DISTINCT family FROM notebook_files WHERE notebook_id = $1 ORDER BY family`, "latin-roots-book"))
+		`SELECT family FROM content_indexes WHERE notebook_id = $1 ORDER BY family`, "latin-roots-book"))
 	require.ElementsMatch(t, []string{"definitions", "etymology"}, fams,
 		"a composite notebook must store its files under every family it belongs to, under one id")
 
 	// A plain single-family notebook imports under its own family.
 	var flashcardFiles int
 	require.NoError(t, db.GetContext(ctx, &flashcardFiles,
-		`SELECT count(*) FROM notebook_files WHERE notebook_id = $1 AND family = $2`, "vocabulary", "flashcards"))
+		`SELECT count(*) FROM content_files WHERE notebook_id = $1 AND family = $2`, "vocabulary", "flashcards"))
 	require.Positive(t, flashcardFiles, "the flashcard notebook must be imported under the flashcards family")
 
-	// Build the Service the way the server does, but with ALL filesystem serving
-	// directories blanked: with a DB content source installed, contentDirs()
-	// returns DB dirs only, so any notebook listed below is served from Postgres.
+	// Build the Service the way the server does, with ALL filesystem notebook
+	// directories blanked, so any notebook listed below is served from Postgres.
 	servingCfg := cfg.Notebooks
 	servingCfg.StoriesDirectories = nil
 	servingCfg.JournalsDirectories = nil
@@ -105,7 +104,7 @@ func TestImportShippedContent_ServesFromDB_LivePostgres_Integration(t *testing.T
 	svc := quiz.NewService(servingCfg, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response), repos.Learning, cfg.Quiz)
 	svc.SetHistoryStore(repos.HistoryStore)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
-	svc.SetContentSource(notebook.NewDBContentSource(notebook.NewNotebookFileRepository(db)))
+	svc.SetContent(notebook.NewContentRepository(db), nil)
 
 	userID, err := dbseed.SeedUser(ctx, db, "content-import-reader", "")
 	require.NoError(t, err)

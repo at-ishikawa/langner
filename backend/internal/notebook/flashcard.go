@@ -28,6 +28,16 @@ type Reader struct {
 	definitionsMap   DefinitionsMap
 	definitionsRaw   map[string][]Definitions
 	definitionsDates map[string]time.Time
+
+	// content is set on a Reader over stored content (NewContentReader): files
+	// are read from it instead of disk, and definitions books and grammars are
+	// loaded on first use. definitionIDs / grammarIDs list the catalog's
+	// definitions books and grammar notebooks; definitionsDone marks the books
+	// already loaded.
+	content         *contentCache
+	definitionIDs   map[string]bool
+	grammarIDs      map[string]bool
+	definitionsDone map[string]bool
 }
 
 // walkIndexFiles walks a directory and loads index.yml files into the provided map
@@ -145,6 +155,7 @@ func NewReader(
 // preserves the original session/scene titles so callers like the
 // notebook-detail RPC can render meaningful headers.
 func (r Reader) GetDefinitionsBook(bookID string) ([]Definitions, bool) {
+	r.ensureDefinitions(bookID)
 	defs, ok := r.definitionsRaw[bookID]
 	return defs, ok && len(defs) > 0
 }
@@ -155,6 +166,7 @@ func (r Reader) GetDefinitionsBook(bookID string) ([]Definitions, bool) {
 // concept_key column at import time. Returns an empty (non-nil) map when
 // the book has no concepts.
 func (r Reader) GetDefinitionsBookConcepts(bookID string) map[string]string {
+	r.ensureDefinitions(bookID)
 	result := make(map[string]string)
 	defs, ok := r.definitionsRaw[bookID]
 	if !ok {
@@ -230,6 +242,7 @@ func (r Reader) GetDefinitionsBookConceptByMember(bookID string) map[string]Defi
 // in one pass. byExpression is SR-consolidating (family) only;
 // byMember includes all kinds for display lookups.
 func (r Reader) getDefinitionsBookConceptIndex(bookID string) (byExpression map[string]string, byHead map[string]DefinitionConceptInfo, byMember map[string]DefinitionConceptInfo) {
+	r.ensureDefinitions(bookID)
 	byExpression = make(map[string]string)
 	byHead = make(map[string]DefinitionConceptInfo)
 	byMember = make(map[string]DefinitionConceptInfo)
@@ -351,7 +364,7 @@ func (f Reader) ReadFlashcardNotebooks(flashcardID string) ([]FlashcardNotebook,
 	for _, notebookPath := range index.NotebookPaths {
 		path := filepath.Join(index.Path, notebookPath)
 
-		notebooks, err := readYamlFile[[]FlashcardNotebook](path)
+		notebooks, err := readContent[[]FlashcardNotebook](&f, path)
 		if err != nil {
 			return nil, fmt.Errorf("readYamlFile(%s) > %w", path, err)
 		}

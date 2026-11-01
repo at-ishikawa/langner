@@ -64,7 +64,7 @@ func (h *NotebookHandler) ImportBook(
 	if _, err := requireUserID(ctx); err != nil {
 		return nil, err
 	}
-	if h.db == nil || h.fileRepo == nil {
+	if h.db == nil || h.store == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("importing books requires a configured database"))
 	}
 
@@ -79,11 +79,14 @@ func (h *NotebookHandler) ImportBook(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parse book %s: %w", sourceID, err))
 	}
 
-	// kind "book" → familyDir "books", so blobs are stored under the books
-	// family and the reader classifies the notebook as a readable book
-	// (walkIndexFiles(books, …, isBook=true)); preserveOrder then keeps chapter
-	// order instead of sorting by the (zero) entry date.
-	if err := h.fileRepo.ImportShippedBundle(ctx, notebookID, "book", displayName, notebook.HashBundle(files), files); err != nil {
+	// The files are in the books family, so the reader treats the notebook as a
+	// readable book (IsBook); preserveOrder then keeps chapter order instead of
+	// sorting by the (zero) entry date.
+	content, err := notebook.ParseBundle(notebookID, files)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse book %s: %w", sourceID, err))
+	}
+	if err := h.store.ImportShippedBundle(ctx, "book", displayName, notebook.HashBundle(files), notebook.BundleBytes(files), content); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("store book: %w", err))
 	}
 	return connect.NewResponse(&apiv1.ImportBookResponse{NotebookId: notebookID}), nil
@@ -116,7 +119,7 @@ func buildBookBundle(sourceID, title, author, raw string) (notebookID string, fi
 		}
 		files = append(files, notebook.NotebookFile{
 			NotebookID: notebookID,
-			Family:     "books",
+			Family:     notebook.FamilyBooks,
 			Path:       f.Path,
 			Content:    content,
 		})

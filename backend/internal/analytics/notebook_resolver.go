@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,6 +28,48 @@ func NewNotebookMetadataResolver(reader *notebook.Reader) MetadataResolver {
 		return NoMetadataResolver()
 	}
 	return &NotebookMetadataResolver{reader: reader}
+}
+
+// requestResolver is implemented by resolvers that do better resolving a whole
+// request's words through one shared lookup.
+type requestResolver interface {
+	ForRequest(ctx context.Context) MetadataResolver
+}
+
+// forRequest returns the resolver to use for one request.
+func forRequest(ctx context.Context, m MetadataResolver) MetadataResolver {
+	if rr, ok := m.(requestResolver); ok {
+		return rr.ForRequest(ctx)
+	}
+	return m
+}
+
+// contentMetadataResolver resolves through a Reader over stored notebook
+// content, built once per request so a day's wrong words share the notebooks
+// it loads.
+type contentMetadataResolver struct {
+	newReader func(ctx context.Context) (*notebook.Reader, error)
+}
+
+// NewContentMetadataResolver returns a resolver that builds a Reader per
+// request with newReader.
+func NewContentMetadataResolver(newReader func(ctx context.Context) (*notebook.Reader, error)) MetadataResolver {
+	return &contentMetadataResolver{newReader: newReader}
+}
+
+// ForRequest implements requestResolver.
+func (c *contentMetadataResolver) ForRequest(ctx context.Context) MetadataResolver {
+	reader, err := c.newReader(ctx)
+	if err != nil {
+		slog.Warn("analytics meaning lookup unavailable", "error", err)
+		return NoMetadataResolver()
+	}
+	return &NotebookMetadataResolver{reader: reader}
+}
+
+// Resolve implements MetadataResolver for a single lookup.
+func (c *contentMetadataResolver) Resolve(ctx context.Context, notebookID, id, expression, expressionType, quizType string) WordMetadata {
+	return c.ForRequest(ctx).Resolve(ctx, notebookID, id, expression, expressionType, quizType)
 }
 
 // Resolve looks up the meaning and one example for the given expression.

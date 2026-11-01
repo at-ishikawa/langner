@@ -17,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
+	"github.com/at-ishikawa/langner/internal/datasync"
 	"github.com/at-ishikawa/langner/schemas"
 )
 
@@ -63,15 +64,18 @@ func PrepareE2EDatabase(ctx context.Context, cfg *config.Config, db *sqlx.DB, co
 	if err := seedE2EHistory(ctx, db, ownerID); err != nil {
 		return fmt.Errorf("seed e2e history: %w", err)
 	}
+	if err := datasync.EnsureAllContentNotes(ctx, db); err != nil {
+		return fmt.Errorf("restore notes: %w", err)
+	}
 	// On the initial seed, verify content landed: without it there is nothing to
 	// quiz, so fail with an actionable message instead of opaque e2e failures.
 	if content != nil {
 		var files int
-		if err := db.GetContext(ctx, &files, "SELECT COUNT(*) FROM notebook_files"); err != nil {
+		if err := db.GetContext(ctx, &files, "SELECT COUNT(*) FROM content_files"); err != nil {
 			return fmt.Errorf("check notebook content: %w", err)
 		}
 		if files == 0 {
-			return fmt.Errorf("notebook_files is empty — upload the fixture content archive with the seed request (CI does this), or import it once with `langner-admin migrate seed-e2e`")
+			return fmt.Errorf("no notebook content is stored — upload the fixture content archive with the seed request (CI does this), or import it once with `langner-admin migrate seed-e2e`")
 		}
 	}
 	return nil

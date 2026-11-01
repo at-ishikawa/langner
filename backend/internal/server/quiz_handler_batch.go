@@ -33,6 +33,20 @@ func skippedGradeResult() quiz.GradeResult {
 // preloadHistories loads the distinct notebooks' histories once and returns a
 // context carrying them, so the per-card SaveResultInfo calls in a batch reuse
 // one scoped read per notebook instead of issuing one per graded card.
+// batchNoteRefs returns each answer's note id and originating notebook.
+func batchNoteRefs[A interface {
+	GetNoteId() int64
+	GetNotebookName() string
+}](answers []A) ([]int64, []string) {
+	noteIDs := make([]int64, len(answers))
+	origins := make([]string, len(answers))
+	for i, a := range answers {
+		noteIDs[i] = a.GetNoteId()
+		origins[i] = a.GetNotebookName()
+	}
+	return noteIDs, origins
+}
+
 func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []string) context.Context {
 	userID, _ := auth.UserIDFromContext(ctx)
 	seen := make(map[string]struct{}, len(notebookNames))
@@ -60,15 +74,15 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	answers := req.Msg.GetAnswers()
 	userID, _ := auth.UserIDFromContext(ctx)
 
-	cards := make([]quiz.Card, len(answers))
-	resolved := make([]bool, len(answers))
-	for i, a := range answers {
-		if card, ok := h.resolveCard(ctx, userID, a.GetNoteId(), a.GetNotebookName()); ok {
-			cards[i] = card
-			resolved[i] = true
-		} else {
+	noteIDs, origins := batchNoteRefs(answers)
+	cards, resolved := resolveBatch(ctx, h, h.noteStore, noteIDs, origins,
+		func(notes []*notebook.NoteRecord, origins []string) ([]quiz.Card, []bool) {
+			return h.svc.ResolveCardsByNotes(userID, notes, origins)
+		})
+	for i, ok := range resolved {
+		if !ok {
 			// Non-fatal: skip the unresolvable item instead of aborting the batch.
-			slog.Warn("batch submit: card not resolved; skipping item", "note_id", a.GetNoteId())
+			slog.Warn("batch submit: card not resolved; skipping item", "note_id", noteIDs[i])
 		}
 	}
 
@@ -146,17 +160,17 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	answers := req.Msg.GetAnswers()
 	userID, _ := auth.UserIDFromContext(ctx)
 
-	cards := make([]quiz.ReverseCard, len(answers))
-	resolved := make([]bool, len(answers))
-	for i, a := range answers {
-		if card, ok := h.resolveReverseCard(ctx, userID, a.GetNoteId(), a.GetNotebookName()); ok {
-			cards[i] = card
-			resolved[i] = true
-		} else {
+	noteIDs, origins := batchNoteRefs(answers)
+	cards, resolved := resolveBatch(ctx, h, h.reverseStore, noteIDs, origins,
+		func(notes []*notebook.NoteRecord, origins []string) ([]quiz.ReverseCard, []bool) {
+			return h.svc.ResolveReverseCardsByNotes(userID, notes, origins)
+		})
+	for i, ok := range resolved {
+		if !ok {
 			// Non-fatal: a single unresolvable item must NOT abort the batch and
 			// drop the other graded answers. Skip it (no grade, no save) and
 			// return a placeholder response for it.
-			slog.Warn("reverse batch submit: card not resolved; skipping item", "note_id", a.GetNoteId())
+			slog.Warn("reverse batch submit: card not resolved; skipping item", "note_id", noteIDs[i])
 		}
 	}
 

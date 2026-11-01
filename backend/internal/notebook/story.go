@@ -63,7 +63,7 @@ func (reader *Reader) ReadStoryNotebooksWithPaths(storyID string) ([]StoryNotebo
 	for _, notebookPath := range index.NotebookPaths {
 		path := filepath.Join(index.Path, notebookPath)
 
-		notebooks, err := readYamlFile[[]StoryNotebook](path)
+		notebooks, err := readContent[[]StoryNotebook](reader, path)
 		if err != nil {
 			// Skip files that can't be parsed as story notebooks
 			// (e.g., definition-only files with origin_parts)
@@ -80,6 +80,7 @@ func (reader *Reader) ReadStoryNotebooksWithPaths(storyID string) ([]StoryNotebo
 	reader.indexes[storyID] = index
 
 	// Merge definitions from separate definitions files
+	reader.ensureDefinitions(storyID)
 	result = MergeDefinitionsIntoNotebooks(storyID, result, notebookPaths, reader.definitionsMap)
 
 	return result, notebookPaths, nil

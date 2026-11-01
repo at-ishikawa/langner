@@ -3,11 +3,8 @@ package notebook
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // yamlEtymologySession is the unified view of one etymology session, parsed
@@ -25,13 +22,8 @@ type yamlEtymologySession struct {
 // one yamlEtymologySession per logical session. Tries the new event/scenes
 // shape first (which can contain multiple sessions in one file) and falls
 // back to the legacy single-session metadata layout.
-func parseEtymologySessionAnyShape(path string) ([]yamlEtymologySession, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read etymology session %s: %w", path, err)
-	}
-	var entries []EtymologyNotebookEntry
-	if err := yaml.Unmarshal(data, &entries); err == nil && hasNewShape(entries) {
+func parseEtymologySessionAnyShape(r *Reader, path string) ([]yamlEtymologySession, error) {
+	if entries, err := readContent[[]EtymologyNotebookEntry](r, path); err == nil && hasNewShape(entries) {
 		out := make([]yamlEtymologySession, 0, len(entries))
 		for _, e := range entries {
 			title := strings.TrimSpace(e.Event)
@@ -51,8 +43,8 @@ func parseEtymologySessionAnyShape(path string) ([]yamlEtymologySession, error) 
 		}
 		return out, nil
 	}
-	var sf etymologySessionFile
-	if err := yaml.Unmarshal(data, &sf); err != nil {
+	sf, err := readContent[etymologySessionFile](r, path)
+	if err != nil {
 		return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
 	}
 	return []yamlEtymologySession{{
@@ -90,7 +82,7 @@ func (s *YAMLEtymologyOriginSource) FindAll(_ context.Context) ([]EtymologyOrigi
 	for nbID, idx := range indexes {
 		for _, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			sessions, err := parseEtymologySessionAnyShape(path)
+			sessions, err := parseEtymologySessionAnyShape(s.reader, path)
 			if err != nil {
 				return nil, err
 			}
@@ -161,7 +153,7 @@ func (s *YAMLEtymologyOriginFormSource) FindAll(_ context.Context) ([]EtymologyO
 	for nbID, idx := range indexes {
 		for _, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			sessions, err := parseEtymologySessionAnyShape(path)
+			sessions, err := parseEtymologySessionAnyShape(s.reader, path)
 			if err != nil {
 				return nil, err
 			}
@@ -250,7 +242,7 @@ func (s *YAMLSemanticConceptSource) FindAll(_ context.Context) ([]SemanticConcep
 	for nbID, idx := range indexes {
 		for _, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			sessions, err := parseEtymologySessionAnyShape(path)
+			sessions, err := parseEtymologySessionAnyShape(s.reader, path)
 			if err != nil {
 				return nil, err
 			}
@@ -311,7 +303,7 @@ func (s *YAMLConceptRelationSource) FindAll(_ context.Context) ([]ConceptRelatio
 	for nbID, idx := range indexes {
 		for _, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			sessions, err := parseEtymologySessionAnyShape(path)
+			sessions, err := parseEtymologySessionAnyShape(s.reader, path)
 			if err != nil {
 				return nil, err
 			}

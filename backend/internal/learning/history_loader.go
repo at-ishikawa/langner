@@ -209,6 +209,40 @@ func filterLogsByUser(logs []LearningLog, userID int64) []LearningLog {
 // pulling the whole dataset over the wire. Repos that don't implement the
 // scoped queries fall back to FindAll (correct, no egress win).
 func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []string, userID int64) (map[string][]notebook.LearningHistory, error) {
+	return s.loadForNotebooks(ctx, notebookIDs, userID, allLogs)
+}
+
+// LoadSummaryForNotebooks is LoadForNotebooks with only the logs review
+// scheduling reads (see DBLearningRepository.FindSummaryByTargets): the same
+// due / unstudied / ever-correct answers, from far fewer rows. Use it only for
+// count-only views; anything that shows or writes a word's log series needs
+// LoadForNotebooks.
+func (s *DBHistoryStore) LoadSummaryForNotebooks(ctx context.Context, notebookIDs []string, userID int64) (map[string][]notebook.LearningHistory, error) {
+	return s.loadForNotebooks(ctx, notebookIDs, userID, summaryLogs)
+}
+
+// LoadSkipStateForNotebooks is LoadForNotebooks without any learning logs: the
+// same expressions with their skip (exclude-from-quiz) state, for callers that
+// only ask whether a word is excluded.
+func (s *DBHistoryStore) LoadSkipStateForNotebooks(ctx context.Context, notebookIDs []string, userID int64) (map[string][]notebook.LearningHistory, error) {
+	return s.loadForNotebooks(ctx, notebookIDs, userID, noLogs)
+}
+
+// logScope selects which learning logs loadForNotebooks reads.
+type logScope int
+
+const (
+	allLogs logScope = iota
+	summaryLogs
+	noLogs
+)
+
+// summaryScopedLogs is the optional repository capability behind summaryLogs.
+type summaryScopedLogs interface {
+	FindSummaryByTargets(ctx context.Context, noteIDs, originIDs, correctionIDs []int64, userID int64) ([]LearningLog, error)
+}
+
+func (s *DBHistoryStore) loadForNotebooks(ctx context.Context, notebookIDs []string, userID int64, scope logScope) (map[string][]notebook.LearningHistory, error) {
 	if len(notebookIDs) == 0 {
 		return map[string][]notebook.LearningHistory{}, nil
 	}
@@ -269,7 +303,11 @@ func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []str
 	}
 
 	var logs []LearningLog
-	if lr, ok := s.learningRepo.(targetScopedLogs); ok {
+	summaryRepo, hasSummary := s.learningRepo.(summaryScopedLogs)
+	lr, hasTargets := s.learningRepo.(targetScopedLogs)
+	switch {
+	case scope == noLogs:
+	case hasTargets:
 		noteIDs := make([]int64, 0, len(notes))
 		for _, n := range notes {
 			noteIDs = append(noteIDs, n.ID)
@@ -282,8 +320,12 @@ func (s *DBHistoryStore) LoadForNotebooks(ctx context.Context, notebookIDs []str
 		for _, c := range corrections {
 			correctionIDs = append(correctionIDs, c.ID)
 		}
-		logs, err = lr.FindByTargets(ctx, noteIDs, originIDs, correctionIDs, userID)
-	} else {
+		if scope == summaryLogs && hasSummary {
+			logs, err = summaryRepo.FindSummaryByTargets(ctx, noteIDs, originIDs, correctionIDs, userID)
+		} else {
+			logs, err = lr.FindByTargets(ctx, noteIDs, originIDs, correctionIDs, userID)
+		}
+	default:
 		var all []LearningLog
 		all, err = s.learningRepo.FindAll(ctx)
 		logs = filterLogsByUser(all, userID)

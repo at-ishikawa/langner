@@ -259,3 +259,24 @@ func BuildMultiRowInsert(table string, columns []string, rowCount int) string {
 	}
 	return b.String()
 }
+
+// MigrateTo migrates db up or down to exactly version. Used by tests that
+// recreate a database as an older release left it.
+func MigrateTo(db *sqlx.DB, migrationsFS fs.FS, dir string, version uint) error {
+	src, err := iofs.New(migrationsFS, dir)
+	if err != nil {
+		return fmt.Errorf("init migration source: %w", err)
+	}
+	driver, err := migratepgx.WithInstance(db.DB, &migratepgx.Config{})
+	if err != nil {
+		return fmt.Errorf("init migration driver: %w", err)
+	}
+	m, err := migrate.NewWithInstance("iofs", src, "pgx5", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+	if err := m.Migrate(version); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migrate to %d: %w", version, err)
+	}
+	return nil
+}

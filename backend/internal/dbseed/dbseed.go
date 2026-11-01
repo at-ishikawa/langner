@@ -162,7 +162,7 @@ func SeedLearningLog(ctx context.Context, db *sqlx.DB, spec LearningLogSpec) err
 	// etymology carries an OriginID, so neither creates a note membership. A
 	// vocab note MAY still carry a SenseID: the note's content-derived stable id
 	// (e.g. a flashcard's `id:`). It must be seeded so the seeded note is the
-	// SAME row the runtime ensure-on-serve resolves to (ON CONFLICT (sense_id)),
+	// SAME row the content import resolves to (ON CONFLICT (sense_id)),
 	// not a membership-less duplicate.
 	if spec.Expression != "" && spec.OriginID == 0 {
 		if err := ensureNotebookMembership(ctx, db, spec.NotebookID, spec.NotebookType, spec.Group, spec.SenseID, spec.Expression); err != nil {

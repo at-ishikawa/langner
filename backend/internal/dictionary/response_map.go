@@ -37,3 +37,29 @@ func (r *DBDictionaryRepository) LoadResponseMap(ctx context.Context) (map[strin
 	}
 	return m, nil
 }
+
+// Responses returns the stored dictionary entries for the given words, keyed
+// by word, in the same shape as LoadResponseMap. Words without an entry are
+// absent.
+func (r *DBDictionaryRepository) Responses(ctx context.Context, words []string) (map[string]rapidapi.Response, error) {
+	m := make(map[string]rapidapi.Response)
+	if len(words) == 0 {
+		return m, nil
+	}
+	var entries []DictionaryEntry
+	if err := r.db.SelectContext(ctx, &entries,
+		`SELECT word, source_type, response FROM dictionary_entries WHERE word = ANY($1)`, words); err != nil {
+		return nil, fmt.Errorf("load dictionary entries: %w", err)
+	}
+	for _, e := range entries {
+		var resp rapidapi.Response
+		if err := json.Unmarshal(e.Response, &resp); err != nil {
+			continue // skip a malformed stored response
+		}
+		if resp.Word == "" {
+			resp.Word = e.Word
+		}
+		m[e.Word] = resp
+	}
+	return m, nil
+}

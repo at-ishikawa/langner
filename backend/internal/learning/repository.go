@@ -147,6 +147,60 @@ func (r *DBLearningRepository) DistinctNotebookIDs(ctx context.Context, userID i
 // origins / corrections of the requested notebooks are read, not every log.
 // Empty sets are skipped; if all are empty it returns nil.
 func (r *DBLearningRepository) FindByTargets(ctx context.Context, noteIDs, originIDs, correctionIDs []int64, userID int64) ([]LearningLog, error) {
+	where, inArgs := targetsWhere(noteIDs, originIDs, correctionIDs, userID)
+	if where == "" {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(selectScopedLearningLogColumns+" WHERE "+where+" ORDER BY id", inArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("build logs-by-targets query: %w", err)
+	}
+	var logs []LearningLog
+	if err := r.db.SelectContext(ctx, &logs, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("load logs by targets: %w", err)
+	}
+	return logs, nil
+}
+
+// FindSummaryByTargets returns the subset of FindByTargets' logs that review
+// scheduling reads, for count-only views (the quiz options summary) that would
+// otherwise download a learner's entire history. For each target, quiz type and
+// source notebook it keeps the newest log and the newest correct log (enough
+// for "is it due" and "ever answered correctly"); when any of the target's logs
+// for that quiz type has no stored interval, every log is kept, because the
+// legacy fallback counts correct answers.
+func (r *DBLearningRepository) FindSummaryByTargets(ctx context.Context, noteIDs, originIDs, correctionIDs []int64, userID int64) ([]LearningLog, error) {
+	where, inArgs := targetsWhere(noteIDs, originIDs, correctionIDs, userID)
+	if where == "" {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(`SELECT id, user_id, note_id, origin_id, correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id
+		FROM (
+		  SELECT l.*,
+		    row_number() OVER (PARTITION BY note_id, origin_id, correction_id, quiz_type, source_notebook_id
+		                       ORDER BY learned_at DESC, id DESC) AS newest,
+		    row_number() OVER (PARTITION BY note_id, origin_id, correction_id, quiz_type, source_notebook_id, status IN ('understood', 'usable', 'intuitive')
+		                       ORDER BY learned_at DESC, id DESC) AS newest_of_kind,
+		    bool_or(interval_days = 0) OVER (PARTITION BY note_id, origin_id, correction_id, quiz_type) AS has_legacy_interval
+		  FROM (`+selectScopedLearningLogColumns+" WHERE "+where+`) l
+		) ranked
+		WHERE newest = 1
+		   OR (newest_of_kind = 1 AND status IN ('understood', 'usable', 'intuitive'))
+		   OR has_legacy_interval
+		ORDER BY id`, inArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("build summary-logs-by-targets query: %w", err)
+	}
+	var logs []LearningLog
+	if err := r.db.SelectContext(ctx, &logs, r.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("load summary logs by targets: %w", err)
+	}
+	return logs, nil
+}
+
+// targetsWhere builds the WHERE clause (sqlx.In placeholders) selecting this
+// user's logs for the given targets, or "" when there are no targets.
+func targetsWhere(noteIDs, originIDs, correctionIDs []int64, userID int64) (string, []interface{}) {
 	var clauses []string
 	var inArgs []interface{}
 	if len(noteIDs) > 0 {
@@ -162,23 +216,12 @@ func (r *DBLearningRepository) FindByTargets(ctx context.Context, noteIDs, origi
 		inArgs = append(inArgs, correctionIDs)
 	}
 	if len(clauses) == 0 {
-		return nil, nil
+		return "", nil
 	}
 	// Scope to this user's logs (auth Phase 2): COALESCE(user_id, 0) = userID,
 	// so userID 0 (single-tenant dev) matches pre-auth NULL rows.
 	inArgs = append(inArgs, userID)
-	query, args, err := sqlx.In(
-		selectScopedLearningLogColumns+" WHERE ("+strings.Join(clauses, " OR ")+") AND COALESCE(user_id, 0) = ? ORDER BY id",
-		inArgs...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build logs-by-targets query: %w", err)
-	}
-	var logs []LearningLog
-	if err := r.db.SelectContext(ctx, &logs, r.db.Rebind(query), args...); err != nil {
-		return nil, fmt.Errorf("load logs by targets: %w", err)
-	}
-	return logs, nil
+	return "(" + strings.Join(clauses, " OR ") + ") AND COALESCE(user_id, 0) = ?", inArgs
 }
 
 // FindByDateRange returns the logs with learned_at in [from, to). It is the

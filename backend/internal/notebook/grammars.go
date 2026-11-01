@@ -323,17 +323,7 @@ func (f Reader) LoadGrammars(grammarsDirectories []string) error {
 				if err != nil {
 					return fmt.Errorf("readYamlFile(%s) > %w", full, err)
 				}
-				for _, e := range entries {
-					byScene := byTitle[e.Metadata.Title]
-					if byScene == nil {
-						byScene = make(map[int][]Correction)
-						byTitle[e.Metadata.Title] = byScene
-					}
-					for _, gs := range e.Scenes {
-						idx := gs.Metadata.GetIndex()
-						byScene[idx] = append(byScene[idx], gs.Corrections...)
-					}
-				}
+				addGrammarEntries(byTitle, entries)
 			}
 			ensureUniqueCorrectionIDs(index.ID, byTitle)
 			f.grammarsMap[index.ID] = byTitle
@@ -346,8 +336,31 @@ func (f Reader) LoadGrammars(grammarsDirectories []string) error {
 	return nil
 }
 
+// addGrammarEntries adds one grammars file's corrections, keyed by entry title
+// then scene index.
+func addGrammarEntries(byTitle map[string]map[int][]Correction, entries []GrammarEntry) {
+	for _, e := range entries {
+		byScene := byTitle[e.Metadata.Title]
+		if byScene == nil {
+			byScene = make(map[int][]Correction)
+			byTitle[e.Metadata.Title] = byScene
+		}
+		for _, gs := range e.Scenes {
+			idx := gs.Metadata.GetIndex()
+			byScene[idx] = append(byScene[idx], gs.Corrections...)
+		}
+	}
+}
+
 // GrammarStoryIDs returns the story ids that have a grammars notebook.
 func (f Reader) GrammarStoryIDs() []string {
+	if f.content != nil {
+		ids := make([]string, 0, len(f.grammarIDs))
+		for id := range f.grammarIDs {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	ids := make([]string, 0, len(f.grammarsMap))
 	for id := range f.grammarsMap {
 		ids = append(ids, id)
@@ -358,6 +371,7 @@ func (f Reader) GrammarStoryIDs() []string {
 // CorrectionsForScene returns the corrections annotated for one scene of a
 // story entry (by title + scene index), or nil if none.
 func (f Reader) CorrectionsForScene(storyID, title string, sceneIndex int) []Correction {
+	f.ensureGrammars(storyID)
 	byTitle, ok := f.grammarsMap[storyID]
 	if !ok {
 		return nil

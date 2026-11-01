@@ -309,7 +309,7 @@ func (v *Validator) loadEtymologyOriginExpressions() map[string]bool {
 	}
 	for _, idx := range indexMap {
 		for _, nbPath := range idx.NotebookPaths {
-			wrapped, err := loadEtymologySessionAnyShape(filepath.Join(idx.Path, nbPath))
+			wrapped, err := loadEtymologySessionAnyShape(nil, filepath.Join(idx.Path, nbPath))
 			if err != nil {
 				continue
 			}
@@ -2286,7 +2286,7 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 	for etymID, idx := range etymIndexes {
 		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			wrapped, err := loadEtymologySessionAnyShape(path)
+			wrapped, err := loadEtymologySessionAnyShape(nil, path)
 			if err != nil {
 				continue
 			}

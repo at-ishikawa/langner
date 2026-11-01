@@ -140,7 +140,7 @@ func (v *Validator) loadEtymologyBookView(indexPath, bookID string, sessionPaths
 
 	for _, nbPath := range sessionPaths {
 		path := filepath.Join(indexPath, nbPath)
-		wrapped, err := loadEtymologySessionAnyShape(path)
+		wrapped, err := loadEtymologySessionAnyShape(nil, path)
 		if err != nil {
 			return nil, fmt.Errorf("read etymology session %s: %w", path, err)
 		}
@@ -421,7 +421,7 @@ func (v *Validator) validateFromForm(result *ValidationResult) {
 			}
 			for _, nbPath := range idx.NotebookPaths {
 				path := filepath.Join(idx.Path, nbPath)
-				wrapped, err := loadEtymologySessionAnyShape(path)
+				wrapped, err := loadEtymologySessionAnyShape(nil, path)
 				if err != nil {
 					continue
 				}
