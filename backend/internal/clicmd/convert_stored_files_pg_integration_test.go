@@ -121,16 +121,16 @@ func TestConvertStoredFiles_LivePostgres_Integration(t *testing.T) {
 	assert.Equal(t, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", row.Hash)
 	assert.Equal(t, notebook.BundleBytes(private), row.Bytes)
 
-	// Converted notebooks have their notes; their files are gone; the broken
-	// one keeps its files for a retry.
+	// Converted notebooks have their notes; the stored files stay as a backup.
 	var notes int
 	require.NoError(t, db.GetContext(ctx, &notes, `SELECT count(*) FROM notebook_notes WHERE notebook_id = 'nb_private'`))
 	assert.Equal(t, 1, notes)
-	var left []string
-	require.NoError(t, db.SelectContext(ctx, &left, `SELECT DISTINCT notebook_id FROM notebook_files`))
-	assert.Equal(t, []string{"nb_broken"}, left)
+	var kept int
+	require.NoError(t, db.GetContext(ctx, &kept, `SELECT count(DISTINCT notebook_id) FROM notebook_files`))
+	assert.Equal(t, len(want)+1, kept)
 
-	// Running the upgrade again converts nothing more.
+	// Running the upgrade again converts nothing more (only the broken one is
+	// retried, and fails again).
 	n, err = ConvertStoredFiles(ctx, db, io.Discard)
 	require.Error(t, err)
 	assert.Zero(t, n)

@@ -86,10 +86,11 @@ func storeShippedNotebook(ctx context.Context, db *sqlx.DB, store *notebook.Note
 	return nil
 }
 
-// ConvertStoredFiles moves notebooks stored as raw YAML files (notebook_files,
-// before migration 038) into the content tables, keeping each notebook's
-// registry row as it is, and removes the converted files. A notebook that
-// fails to parse keeps its files and is reported. Returns the number converted.
+// ConvertStoredFiles stores notebooks kept as raw YAML files (notebook_files,
+// before migration 038) in the content tables, keeping each notebook's
+// registry row as it is. Notebooks that already have content rows are skipped,
+// and the files are left in place as a backup. A notebook that fails to parse
+// is reported. Returns the number converted.
 func ConvertStoredFiles(ctx context.Context, db *sqlx.DB, out io.Writer) (int, error) {
 	bundles, err := notebook.StoredFileBundles(ctx, db)
 	if err != nil {
@@ -112,9 +113,6 @@ func ConvertStoredFiles(ctx context.Context, db *sqlx.DB, out io.Writer) (int, e
 		}
 		if err == nil {
 			_, err = datasync.EnsureContentNotes(ctx, db, content)
-		}
-		if err == nil {
-			err = notebook.DeleteStoredFiles(ctx, db, id)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("notebook %q: %w", id, err))
