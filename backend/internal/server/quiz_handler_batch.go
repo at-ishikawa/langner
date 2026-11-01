@@ -30,9 +30,6 @@ func skippedGradeResult() quiz.GradeResult {
 	}
 }
 
-// preloadHistories loads the distinct notebooks' histories once and returns a
-// context carrying them, so the per-card SaveResultInfo calls in a batch reuse
-// one scoped read per notebook instead of issuing one per graded card.
 // batchNoteRefs returns each answer's note id and originating notebook.
 func batchNoteRefs[A interface {
 	GetNoteId() int64
@@ -47,8 +44,17 @@ func batchNoteRefs[A interface {
 	return noteIDs, origins
 }
 
-func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []string) context.Context {
+// preloadHistories returns a context carrying the distinct notebooks'
+// histories, so the per-card SaveResultInfo calls in a batch reuse one scoped
+// read per notebook instead of issuing one per graded card. loaded holds the
+// histories already read while resolving the cards; only the other notebooks
+// are read here.
+func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []string, loaded map[string][]notebook.LearningHistory) context.Context {
 	userID, _ := auth.UserIDFromContext(ctx)
+	histories := make(map[string][]notebook.LearningHistory, len(loaded))
+	for id, hs := range loaded {
+		histories[id] = hs
+	}
 	seen := make(map[string]struct{}, len(notebookNames))
 	ids := make([]string, 0, len(notebookNames))
 	for _, n := range notebookNames {
@@ -56,9 +62,16 @@ func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []stri
 			continue
 		}
 		seen[n] = struct{}{}
-		ids = append(ids, n)
+		if _, ok := histories[n]; !ok {
+			ids = append(ids, n)
+		}
 	}
-	return quiz.WithPreloadedHistories(ctx, h.svc.PreloadHistoriesForNotebooks(userID, ids...))
+	if len(ids) > 0 {
+		for id, hs := range h.svc.PreloadHistoriesForNotebooks(userID, ids...) {
+			histories[id] = hs
+		}
+	}
+	return quiz.WithPreloadedHistories(ctx, histories)
 }
 
 // BatchSubmitAnswers grades a batch of standard quiz answers.
@@ -75,9 +88,12 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	userID, _ := auth.UserIDFromContext(ctx)
 
 	noteIDs, origins := batchNoteRefs(answers)
+	var loaded map[string][]notebook.LearningHistory
 	cards, resolved := resolveBatch(ctx, h, h.noteStore, noteIDs, origins,
 		func(notes []*notebook.NoteRecord, origins []string) ([]quiz.Card, []bool) {
-			return h.svc.ResolveCardsByNotes(userID, notes, origins)
+			cards, found, histories := h.svc.ResolveCardsForBatch(userID, notes, origins)
+			loaded = histories
+			return cards, found
 		})
 	for i, ok := range resolved {
 		if !ok {
@@ -113,7 +129,7 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	for i := range cards {
 		nbNames[i] = cards[i].NotebookName
 	}
-	ctx = h.preloadHistories(ctx, nbNames)
+	ctx = h.preloadHistories(ctx, nbNames, loaded)
 
 	responses := make([]*apiv1.SubmitAnswerResponse, len(answers))
 	for i := range answers {
@@ -161,9 +177,12 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	userID, _ := auth.UserIDFromContext(ctx)
 
 	noteIDs, origins := batchNoteRefs(answers)
+	var loaded map[string][]notebook.LearningHistory
 	cards, resolved := resolveBatch(ctx, h, h.reverseStore, noteIDs, origins,
 		func(notes []*notebook.NoteRecord, origins []string) ([]quiz.ReverseCard, []bool) {
-			return h.svc.ResolveReverseCardsByNotes(userID, notes, origins)
+			cards, found, histories := h.svc.ResolveReverseCardsForBatch(userID, notes, origins)
+			loaded = histories
+			return cards, found
 		})
 	for i, ok := range resolved {
 		if !ok {
@@ -200,7 +219,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	for i := range cards {
 		nbNames[i] = cards[i].NotebookName
 	}
-	ctx = h.preloadHistories(ctx, nbNames)
+	ctx = h.preloadHistories(ctx, nbNames, loaded)
 
 	responses := make([]*apiv1.SubmitReverseAnswerResponse, len(answers))
 	for i := range answers {

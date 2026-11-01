@@ -44,6 +44,8 @@ type contentLoad struct {
 	ctx context.Context
 	db  *sqlx.DB
 	ids []string
+	// outline skips the text of story lines (see OutlineLoader).
+	outline bool
 }
 
 type keyCols struct {
@@ -125,9 +127,17 @@ func (l contentLoad) run() ([]NotebookContent, error) {
 		Type        string        `db:"type"`
 		SceneIndex  int           `db:"scene_index"`
 		SceneNumber sql.NullInt64 `db:"scene_number"`
+		HasLines    bool          `db:"has_lines"`
 	}
-	if err := l.selectRows(&scenes, "content_scenes",
-		"notebook_id, family, file_no, entry_no, scene_no, title, type, scene_index, scene_number", sceneOrder); err != nil {
+	sceneColumns := "notebook_id, family, file_no, entry_no, scene_no, title, type, scene_index, scene_number, false AS has_lines"
+	if l.outline {
+		sceneColumns = `notebook_id, family, file_no, entry_no, scene_no, title, type, scene_index, scene_number,
+			EXISTS (SELECT 1 FROM content_lines l
+				WHERE l.notebook_id = content_scenes.notebook_id AND l.family = content_scenes.family
+				AND l.file_no = content_scenes.file_no AND l.entry_no = content_scenes.entry_no
+				AND l.scene_no = content_scenes.scene_no) AS has_lines`
+	}
+	if err := l.selectRows(&scenes, "content_scenes", sceneColumns, sceneOrder); err != nil {
 		return nil, err
 	}
 	var lines []struct {
@@ -135,9 +145,11 @@ func (l contentLoad) run() ([]NotebookContent, error) {
 		Speaker sql.NullString `db:"speaker"`
 		Text    string         `db:"text"`
 	}
-	if err := l.selectRows(&lines, "content_lines",
-		"notebook_id, family, file_no, entry_no, scene_no, speaker, text", sceneOrder+", line_no"); err != nil {
-		return nil, err
+	if !l.outline {
+		if err := l.selectRows(&lines, "content_lines",
+			"notebook_id, family, file_no, entry_no, scene_no, speaker, text", sceneOrder+", line_no"); err != nil {
+			return nil, err
+		}
 	}
 	notes, err := l.loadNotes()
 	if err != nil {
@@ -180,6 +192,9 @@ func (l contentLoad) run() ([]NotebookContent, error) {
 	sceneByKey := make(map[sceneKey]*sceneRows)
 	for _, s := range scenes {
 		sr := &sceneRows{title: s.Title, typ: s.Type, index: s.SceneIndex}
+		if s.HasLines {
+			sr.statements = []string{""} // outline: the scene has text, not loaded
+		}
 		if s.SceneNumber.Valid {
 			n := int(s.SceneNumber.Int64)
 			sr.number = &n

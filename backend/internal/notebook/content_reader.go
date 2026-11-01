@@ -32,6 +32,14 @@ type ContentLoader interface {
 	Load(ctx context.Context, ids []string) ([]NotebookContent, error)
 }
 
+// OutlineLoader is an optional ContentLoader capability: LoadOutline returns
+// the notebooks without the text of their story lines. A scene that has lines
+// keeps one empty statement, so code that only asks whether a scene has text
+// still gets the same answer. Loaders without it serve outlines with Load.
+type OutlineLoader interface {
+	LoadOutline(ctx context.Context, ids []string) ([]NotebookContent, error)
+}
+
 // DictionarySource returns the stored dictionary entries for words. A note
 // whose meaning comes from the dictionary (dictionary_number set) resolves
 // through it.
@@ -46,6 +54,8 @@ type contentCache struct {
 	ctx        context.Context
 	loader     ContentLoader
 	dictionary DictionarySource
+	// outline loads notebooks without their story line text (OutlineLoader).
+	outline bool
 
 	mu     sync.Mutex
 	loaded map[string]*NotebookContent
@@ -82,7 +92,11 @@ func (c *contentCache) preload(ids []string) error {
 }
 
 func (c *contentCache) loadLocked(ids []string) error {
-	contents, err := c.loader.Load(c.ctx, ids)
+	load := c.loader.Load
+	if ol, ok := c.loader.(OutlineLoader); ok && c.outline {
+		load = ol.LoadOutline
+	}
+	contents, err := load(c.ctx, ids)
 	if err != nil {
 		return fmt.Errorf("load notebook content %v: %w", ids, err)
 	}
@@ -204,6 +218,18 @@ func readContent[T any](r *Reader, p string) (T, error) {
 // read (or by Preload), with the dictionary entries its words need from
 // dictionary (nil: none), so a request touches only the notebooks it uses.
 func NewContentReader(ctx context.Context, loader ContentLoader, dictionary DictionarySource) (*Reader, error) {
+	return newContentReader(ctx, loader, dictionary, false)
+}
+
+// NewContentSummaryReader is a content Reader for views that only count words:
+// it loads notebooks without their story line text (see OutlineLoader) and
+// without dictionary entries, so a note's meaning is only what the notebook
+// itself stores. Never build quiz cards or render pages from it.
+func NewContentSummaryReader(ctx context.Context, loader ContentLoader) (*Reader, error) {
+	return newContentReader(ctx, loader, nil, true)
+}
+
+func newContentReader(ctx context.Context, loader ContentLoader, dictionary DictionarySource, outline bool) (*Reader, error) {
 	catalog, err := loader.Catalog(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read notebook catalog: %w", err)
@@ -223,6 +249,7 @@ func NewContentReader(ctx context.Context, loader ContentLoader, dictionary Dict
 			ctx:        ctx,
 			loader:     loader,
 			dictionary: dictionary,
+			outline:    outline,
 			loaded:     make(map[string]*NotebookContent),
 			words:      dictionaryMap,
 		},

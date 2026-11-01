@@ -20,6 +20,8 @@ type CachedContent struct {
 type cachedNotebook struct {
 	version string
 	content NotebookContent
+	// outline is set when content was loaded without its line text.
+	outline bool
 }
 
 // NewCachedContent wraps a loader with the cache.
@@ -51,13 +53,23 @@ func (c *CachedContent) Catalog(ctx context.Context) ([]CatalogEntry, error) {
 // Load implements ContentLoader: cached notebooks at the current version are
 // returned from memory; the rest are loaded in one call.
 func (c *CachedContent) Load(ctx context.Context, ids []string) ([]NotebookContent, error) {
+	return c.load(ctx, ids, false)
+}
+
+// LoadOutline implements OutlineLoader. A notebook cached in full serves an
+// outline request too.
+func (c *CachedContent) LoadOutline(ctx context.Context, ids []string) ([]NotebookContent, error) {
+	return c.load(ctx, ids, true)
+}
+
+func (c *CachedContent) load(ctx context.Context, ids []string, outline bool) ([]NotebookContent, error) {
 	var out []NotebookContent
 	var missing []string
 	versions := make(map[string]string)
 	c.mu.Lock()
 	for _, id := range ids {
 		versions[id] = c.versions[id]
-		if nb, ok := c.cached[id]; ok && nb.version == c.versions[id] {
+		if nb, ok := c.cached[id]; ok && nb.version == c.versions[id] && (outline || !nb.outline) {
 			out = append(out, nb.content)
 		} else {
 			missing = append(missing, id)
@@ -67,7 +79,13 @@ func (c *CachedContent) Load(ctx context.Context, ids []string) ([]NotebookConte
 	if len(missing) == 0 {
 		return out, nil
 	}
-	loaded, err := c.inner.Load(ctx, missing)
+	load := c.inner.Load
+	loadsOutline := false
+	if ol, ok := c.inner.(OutlineLoader); ok && outline {
+		load = ol.LoadOutline
+		loadsOutline = true
+	}
+	loaded, err := load(ctx, missing)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +93,10 @@ func (c *CachedContent) Load(ctx context.Context, ids []string) ([]NotebookConte
 	for _, nc := range loaded {
 		// The version seen before loading: if the notebook changed meanwhile,
 		// the next catalog read no longer matches and it is loaded again.
-		c.cached[nc.ID] = cachedNotebook{version: versions[nc.ID], content: nc}
+		if prev, ok := c.cached[nc.ID]; ok && loadsOutline && !prev.outline && prev.version == versions[nc.ID] {
+			continue // keep the full copy another request stored meanwhile
+		}
+		c.cached[nc.ID] = cachedNotebook{version: versions[nc.ID], content: nc, outline: loadsOutline}
 	}
 	c.mu.Unlock()
 	return append(out, loaded...), nil
