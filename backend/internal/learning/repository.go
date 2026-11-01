@@ -169,12 +169,19 @@ func (r *DBLearningRepository) FindByTargets(ctx context.Context, noteIDs, origi
 // for "is it due" and "ever answered correctly"); when any of the target's logs
 // for that quiz type has no stored interval, every log is kept, because the
 // legacy fallback counts correct answers.
+//
+// To keep the rows small it leaves out id and user_id, and the source notebook
+// of a note that belongs to one notebook only: such a log is attributed to that
+// notebook whatever its source (see attributeLogNotebook).
 func (r *DBLearningRepository) FindSummaryByTargets(ctx context.Context, noteIDs, originIDs, correctionIDs []int64, userID int64) ([]LearningLog, error) {
 	where, inArgs := targetsWhere(noteIDs, originIDs, correctionIDs, userID)
 	if where == "" {
 		return nil, nil
 	}
-	query, args, err := sqlx.In(`SELECT id, user_id, note_id, origin_id, correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id
+	query, args, err := sqlx.In(`SELECT note_id, origin_id, correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days,
+		  CASE WHEN EXISTS (SELECT 1 FROM notebook_notes other
+		    WHERE other.note_id = ranked.note_id AND other.notebook_id <> ranked.source_notebook_id)
+		  THEN source_notebook_id ELSE '' END AS source_notebook_id
 		FROM (
 		  SELECT l.*,
 		    row_number() OVER (PARTITION BY note_id, origin_id, correction_id, quiz_type, source_notebook_id

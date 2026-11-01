@@ -140,19 +140,35 @@ func (s *Service) SetUserDefinitionsRepo(repo *notebook.UserDefinitionsRepositor
 // isn't signed in. This is the quiz side of the notes→content bridge (the
 // reader side lives in server.NotebookHandler).
 func (s *Service) readStoryNotebooksOverlaid(reader *notebook.Reader, userID int64, notebookID string) ([]notebook.StoryNotebook, error) {
+	return s.overlaidStories(reader, s.userDefinitions(userID, notebookID), notebookID)
+}
+
+// userDefinitions reads the user's registered highlights for notebookIDs in
+// one query, keyed by notebook id; nil when there is no user or repository, or
+// the read failed (the overlay is best-effort).
+func (s *Service) userDefinitions(userID int64, notebookIDs ...string) map[string][]notebook.UserDefinition {
+	if s.userDefsRepo == nil || userID <= 0 {
+		return nil
+	}
+	defs, err := s.userDefsRepo.ListForUserNotebooks(context.Background(), userID, notebookIDs)
+	if err != nil {
+		slog.Warn("load user definitions overlay failed (quiz)", "notebooks", notebookIDs, "error", err)
+		return nil
+	}
+	return defs
+}
+
+// overlaidStories is readStoryNotebooksOverlaid with the highlights already
+// read (userDefinitions).
+func (s *Service) overlaidStories(reader *notebook.Reader, defs map[string][]notebook.UserDefinition, notebookID string) ([]notebook.StoryNotebook, error) {
 	stories, paths, err := reader.ReadStoryNotebooksWithPaths(notebookID)
 	if err != nil {
 		return nil, err
 	}
-	if s.userDefsRepo == nil || userID <= 0 {
+	if defs == nil {
 		return stories, nil
 	}
-	rows, rerr := s.userDefsRepo.ListForUser(context.Background(), userID, notebookID)
-	if rerr != nil {
-		slog.Warn("load user definitions overlay failed (quiz)", "notebook", notebookID, "error", rerr)
-		return stories, nil
-	}
-	return notebook.ApplyUserDefinitionsOverlay(notebookID, stories, paths, rows), nil
+	return notebook.ApplyUserDefinitionsOverlay(notebookID, stories, paths, defs[notebookID]), nil
 }
 
 // visibleNotebooks returns a predicate reporting whether a notebook is visible
@@ -311,7 +327,9 @@ func (s *Service) PreloadHistoriesForNotebooks(userID int64, notebookIDs ...stri
 
 func (s *Service) newReader() (*notebook.Reader, error) {
 	if s.content != nil {
-		return notebook.NewContentReader(context.Background(), s.content, s.dictionary)
+		// Only story and flashcard cards show dictionary meanings: their loaders
+		// fetch the entries of the notebook they quiz (Reader.LoadDictionary).
+		return notebook.NewContentReaderDictionaryOnDemand(context.Background(), s.content, s.dictionary)
 	}
 	dirs := notebook.ContentDirs{
 		Stories:     s.notebooksConfig.StoriesDirectories,
@@ -413,6 +431,13 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 
 	var summaries []NotebookSummary
 
+	var storyIDs []string
+	for id := range reader.GetStoryIndexes() {
+		if visible(id) {
+			storyIDs = append(storyIDs, id)
+		}
+	}
+	userDefs := s.userDefinitions(userID, storyIDs...)
 	for id, index := range reader.GetStoryIndexes() {
 		if !visible(id) {
 			continue
@@ -421,7 +446,7 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		// ONLY words are the ones this user saved still shows up in the quiz hub
 		// with a word/review count (otherwise an imported book with no authored
 		// definitions counts as 0 words and is filtered out of the list).
-		stories, err := s.readStoryNotebooksOverlaid(reader, userID, id)
+		stories, err := s.overlaidStories(reader, userDefs, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read story notebook %q: %w", id, err)
 		}
@@ -928,6 +953,9 @@ func (s *Service) loadStoryCards(
 	if err != nil {
 		return nil, fmt.Errorf("failed to read story notebook %q: %w", notebookID, err)
 	}
+	if err := reader.LoadDictionary(notebook.StoryNotes(stories)); err != nil {
+		return nil, err
+	}
 
 	filtered, err := notebook.FilterStoryNotebooks(
 		stories, learningHistories[notebookID], reader.Dictionary(),
@@ -986,6 +1014,9 @@ func (s *Service) loadFlashcardCards(
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", notebookID, err)
+	}
+	if err := reader.LoadDictionary(notebook.FlashcardNotes(notebooks)); err != nil {
+		return nil, err
 	}
 
 	filtered, err := notebook.FilterFlashcardNotebooks(

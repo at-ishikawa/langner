@@ -27,6 +27,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/clicmd"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
+	"github.com/at-ishikawa/langner/internal/datasync"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -71,15 +72,54 @@ func (r *recordingContent) LoadOutline(ctx context.Context, ids []string) ([]not
 	return r.inner.LoadOutline(ctx, ids)
 }
 
-// recordingDictionary counts dictionary lookups.
+// recordingDictionary records dictionary lookups.
 type recordingDictionary struct {
 	notebook.DictionarySource
 	calls int
+	words []string
 }
 
 func (r *recordingDictionary) Responses(ctx context.Context, words []string) (map[string]rapidapi.Response, error) {
 	r.calls++
+	r.words = append(r.words, words...)
 	return r.DictionarySource.Responses(ctx, words)
+}
+
+// A word whose meaning comes from the dictionary shows that meaning on its
+// quiz card, and the quiz fetches dictionary entries only for the notebook it
+// quizzes: not for the other notebooks it reads (etymology origins), and not
+// for the all-words list behind Relearn, which shows no dictionary meanings.
+func TestDBEgress_DictionaryFetchedForQuizzedNotebookOnly_LivePostgres_Integration(t *testing.T) {
+	f := setupEgressFixture(t)
+	ctx := context.Background()
+	files := []notebook.NotebookFile{
+		{Family: notebook.FamilyFlashcards, Path: "index.yml", Content: []byte("id: dictionary-words\nname: Dictionary words\nnotebooks:\n  - ./cards.yml\n")},
+		{Family: notebook.FamilyFlashcards, Path: "cards.yml", Content: []byte("- title: Words\n  cards:\n    - id: nothing\n      expression: nothing\n      dictionary_number: 1\n")},
+	}
+	nc, err := notebook.ParseBundle("dictionary-words", files)
+	require.NoError(t, err)
+	require.NoError(t, notebook.NewNotebookStore(f.db).ImportShippedBundle(ctx, "Flashcard", "Dictionary words",
+		notebook.HashBundle(files), notebook.BundleBytes(files), nc))
+	_, err = datasync.EnsureContentNotes(ctx, f.db, nc)
+	require.NoError(t, err)
+	_, err = f.db.Exec(`INSERT INTO dictionary_entries (word, source_type, response) VALUES ('nothing', 'rapidapi', $1), ('unrelated', 'rapidapi', $1)`,
+		`{"word":"nothing","results":[{"definition":"Something that has no existence","partOfSpeech":"noun"}]}`)
+	require.NoError(t, err)
+
+	svc := newService(t, f, false)
+	dict := &recordingDictionary{DictionarySource: dictionary.NewDBDictionaryRepository(f.db)}
+	svc.SetContent(notebook.NewContentRepository(f.db), dict)
+
+	cards, err := svc.LoadCards(f.userID, []string{"dictionary-words"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "Something that has no existence", cards[0].Meaning)
+	assert.Equal(t, []string{"nothing"}, dict.words)
+
+	dict.calls, dict.words = 0, nil
+	_, err = svc.LoadAllWords(f.userID)
+	require.NoError(t, err)
+	assert.Zero(t, dict.calls, "the all-words list must not read the dictionary")
 }
 
 // egressFixture is the example catalog imported into a fresh Postgres, the way
@@ -398,7 +438,7 @@ func TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration(t *test
 	require.NoError(t, json.Unmarshal(call(handler, "GetQuizOptions", `{}`), &options))
 	require.NotEmpty(t, options.Notebooks)
 	usage := requestUsage("GetQuizOptions")
-	assert.True(t, hasShape(usage, "source_notebook_id FROM ( SELECT", nil),
+	assert.True(t, hasShape(usage, "interval_days, CASE WHEN EXISTS (SELECT 1 FROM notebook_note", nil),
 		"the options summary must read the scheduling logs only: %v", usage["top"])
 	// Content: the summary reads every notebook, in one query per content
 	// table rather than one per notebook.

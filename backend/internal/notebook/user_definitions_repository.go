@@ -102,7 +102,25 @@ func (r *UserDefinitionsRepository) DeleteForUserByExpression(ctx context.Contex
 // global notes row for the word's surface (usage, falling back to entry) and
 // sense id. Ordered for deterministic overlay output.
 func (r *UserDefinitionsRepository) ListForUser(ctx context.Context, userID int64, notebookID string) ([]UserDefinition, error) {
+	byNotebook, err := r.ListForUserNotebooks(ctx, userID, []string{notebookID})
+	if err != nil {
+		return nil, err
+	}
+	if byNotebook[notebookID] == nil {
+		return []UserDefinition{}, nil
+	}
+	return byNotebook[notebookID], nil
+}
+
+// ListForUserNotebooks is ListForUser for several notebooks in one query,
+// keyed by notebook id.
+func (r *UserDefinitionsRepository) ListForUserNotebooks(ctx context.Context, userID int64, notebookIDs []string) (map[string][]UserDefinition, error) {
+	out := make(map[string][]UserDefinition)
+	if len(notebookIDs) == 0 {
+		return out, nil
+	}
 	type row struct {
+		NotebookID   string    `db:"notebook_id"`
 		NoteID       int64     `db:"note_id"`
 		Event        string    `db:"event"`
 		SceneIndex   int       `db:"scene_index"`
@@ -116,19 +134,18 @@ func (r *UserDefinitionsRepository) ListForUser(ctx context.Context, userID int6
 	}
 	var rows []row
 	if err := r.db.SelectContext(ctx, &rows,
-		`SELECT d.note_id, d.event, d.scene_index,
+		`SELECT d.notebook_id, d.note_id, d.event, d.scene_index,
 		        n."usage" AS "usage", n.entry AS entry, COALESCE(n.sense_id, '') AS sense_id,
 		        d.meaning, d.part_of_speech, d.examples, d.created_at
 		 FROM user_notebook_definitions d
 		 JOIN notes n ON n.id = d.note_id
-		 WHERE d.user_id = $1 AND d.notebook_id = $2
-		 ORDER BY d.event, d.scene_index, d.id`,
-		userID, notebookID,
+		 WHERE d.user_id = $1 AND d.notebook_id = ANY($2)
+		 ORDER BY d.notebook_id, d.event, d.scene_index, d.id`,
+		userID, notebookIDs,
 	); err != nil {
 		return nil, fmt.Errorf("list user definitions: %w", err)
 	}
 
-	out := make([]UserDefinition, 0, len(rows))
 	for _, rr := range rows {
 		expr := rr.Usage
 		if expr == "" {
@@ -140,7 +157,7 @@ func (r *UserDefinitionsRepository) ListForUser(ctx context.Context, userID int6
 			// than failing the whole serve path.
 			_ = json.Unmarshal([]byte(rr.Examples), &examples)
 		}
-		out = append(out, UserDefinition{
+		out[rr.NotebookID] = append(out[rr.NotebookID], UserDefinition{
 			NoteID:       rr.NoteID,
 			Event:        rr.Event,
 			SceneIndex:   rr.SceneIndex,

@@ -187,4 +187,17 @@ func TestContentReader_DictionaryWords_LivePostgres_Integration(t *testing.T) {
 	require.NoError(t, card.SetDetails(r.Dictionary(), ""))
 	assert.Equal(t, "Something that has no existence", card.Meaning)
 	assert.Equal(t, []string{"nothing"}, sortedKeys(r.Dictionary()), "only the notebook's dictionary words are read")
+
+	// On demand: reading the notebook fetches nothing; LoadDictionary fetches
+	// the entries of the notes passed.
+	r, err = notebook.NewContentReaderDictionaryOnDemand(ctx, notebook.NewContentRepository(db), dictionary.NewDBDictionaryRepository(db))
+	require.NoError(t, err)
+	decks, err = r.ReadFlashcardNotebooks("dictionary-words")
+	require.NoError(t, err)
+	assert.Empty(t, r.Dictionary(), "reading a notebook fetches no dictionary entries")
+	require.NoError(t, r.LoadDictionary(notebook.FlashcardNotes(decks)))
+	assert.Equal(t, []string{"nothing"}, sortedKeys(r.Dictionary()))
+	card = decks[0].Cards[0]
+	require.NoError(t, card.SetDetails(r.Dictionary(), ""))
+	assert.Equal(t, "Something that has no existence", card.Meaning)
 }
