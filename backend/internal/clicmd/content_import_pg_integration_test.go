@@ -24,7 +24,7 @@ import (
 // TestImportShippedContent_ServesFromDB_LivePostgres_Integration is the
 // mandatory real-config integration test for DB-served notebook content (see
 // .claude/rules/verify-data-features-with-example-notebooks.md). It loads the
-// REAL example catalog through config.example.yml, imports it into notebook_files
+// REAL example catalog through config.example.yml, imports it into the content tables
 // with ImportShippedContent (the step reset-db / seed-e2e run), then builds the
 // quiz Service the SAME way the server does — but with every filesystem serving
 // directory BLANKED — so a notebook that appears in the listing can ONLY have
@@ -32,7 +32,7 @@ import (
 // content from the DB with no filesystem read.
 //
 // It also pins the awkward condition the importer must get right: a COMPOSITE
-// notebook (the same id under two family dirs) folds into ONE notebook_files
+// notebook (the same id under two family dirs) folds into ONE notebook
 // entry carrying files under BOTH families — latin-roots-book is both a
 // definitions notebook and an etymology notebook in the example catalog.
 //

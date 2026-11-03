@@ -13,8 +13,9 @@ package datasync
 // database that never had them.
 //
 // relearn_clears: created by migration 017, dropped by 018.
+// notebook_files: created by migration 031, dropped by 040.
 func LegacyManagedTables() []string {
-	return []string{"relearn_clears"}
+	return []string{"relearn_clears", "notebook_files"}
 }
 
 // ManagedTablesForRebuild returns every langner-owned table to DROP before a

@@ -129,20 +129,12 @@ func (f contentSyncFixture) noteIDs(t *testing.T) []int64 {
 	return ids
 }
 
-// writeLegacyFiles stores files the way servers before migration 038 did: the
-// raw files in notebook_files and their hash on the notebooks row, leaving the
-// content rows alone.
-func (f contentSyncFixture) writeLegacyFiles(t *testing.T, files []notebook.NotebookFile) {
+// writeLegacyHash records a bundle's hash on the notebooks row without
+// rebuilding its content rows, as servers before migration 038 did when they
+// stored a push as raw files only.
+func (f contentSyncFixture) writeLegacyHash(t *testing.T, files []notebook.NotebookFile) {
 	t.Helper()
-	_, err := f.db.Exec(`DELETE FROM notebook_files WHERE notebook_id = $1`, vocabularyID)
-	require.NoError(t, err)
-	for _, file := range files {
-		_, err := f.db.Exec(
-			`INSERT INTO notebook_files (notebook_id, family, path, content, content_sha256, byte_size)
-			 VALUES ($1, $2, $3, $4, 'sha', $5)`, vocabularyID, file.Family, file.Path, file.Content, len(file.Content))
-		require.NoError(t, err)
-	}
-	_, err = f.db.Exec(`UPDATE notebooks SET content_hash = $2 WHERE notebook_id = $1`, vocabularyID, notebook.HashBundle(files))
+	_, err := f.db.Exec(`UPDATE notebooks SET content_hash = $2 WHERE notebook_id = $1`, vocabularyID, notebook.HashBundle(files))
 	require.NoError(t, err)
 }
 
@@ -191,98 +183,11 @@ func TestImportShippedContent_RebuildsRowsBehindLegacyFileWrite_LivePostgres_Int
 
 	f.writeEdition(t, f.v1)
 	assert.Equal(t, 1, f.sync(t))
-	f.writeLegacyFiles(t, f.v2)
+	f.writeLegacyHash(t, f.v2)
 	assert.Empty(t, f.origins(t), "precondition: rows are still v1")
 
 	f.writeEdition(t, f.v2)
 	assert.Equal(t, 1, f.sync(t))
 	assert.Equal(t, wantOrigins, f.origins(t))
 	assert.Equal(t, 0, f.sync(t))
-}
-
-// The same legacy write repaired from the stored files alone (what
-// `migrate schema` and `migrate import-content` run first).
-func TestConvertStoredFiles_RebuildsRowsBehindLegacyFileWrite_LivePostgres_Integration(t *testing.T) {
-	f := newContentSyncFixture(t, 0)
-	ctx := context.Background()
-
-	f.writeEdition(t, f.v1)
-	assert.Equal(t, 1, f.sync(t))
-	notes := f.noteIDs(t)
-	f.writeLegacyFiles(t, f.v2)
-
-	n, err := ConvertStoredFiles(ctx, f.db, io.Discard)
-	require.NoError(t, err)
-	assert.Equal(t, 1, n)
-	assert.Equal(t, wantOrigins, f.origins(t))
-	assert.Equal(t, notes, f.noteIDs(t))
-
-	n, err = ConvertStoredFiles(ctx, f.db, io.Discard)
-	require.NoError(t, err)
-	assert.Zero(t, n, "repaired rows are current")
-	f.writeEdition(t, f.v2)
-	assert.Equal(t, 0, f.sync(t), "the repaired notebook is current for the sync too")
-}
-
-// A database as it is before migration 039: content rows converted from v1,
-// then notebook_files and the hash overwritten with v2, and no record of what
-// the rows were built from. Upgrading repairs it without hand-written SQL.
-func TestMigrateSchema_RepairsRowsBuiltFromOlderFiles_LivePostgres_Integration(t *testing.T) {
-	f := newContentSyncFixture(t, 38)
-	ctx := context.Background()
-
-	// Rows converted from v1 (ContentRepository.Store, as 038's conversion did).
-	_, err := f.db.Exec(`INSERT INTO notebooks (notebook_id, source, kind, display_name) VALUES ($1, 'shipped', 'flashcard', 'Vocabulary Examples')`, vocabularyID)
-	require.NoError(t, err)
-	v1, err := notebook.ParseBundle(vocabularyID, f.v1)
-	require.NoError(t, err)
-	require.NoError(t, database.RunInTx(ctx, f.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		return notebook.NewContentRepository(f.db).Store(ctx, tx, v1)
-	}))
-	f.writeLegacyFiles(t, f.v2)
-	assert.Empty(t, f.origins(t), "precondition: rows are still v1")
-
-	// A second notebook pushed as rows only after its files were stored: its
-	// files are an older copy (hash differs from content_hash) and must not
-	// replace its newer rows.
-	const pushedID = "nb_pushed"
-	pushed := []notebook.NotebookFile{
-		{NotebookID: pushedID, Family: notebook.FamilyFlashcards, Path: "index.yml", Content: []byte("id: nb_pushed\nname: Idioms\nnotebooks:\n  - ./cards.yml\n")},
-		{NotebookID: pushedID, Family: notebook.FamilyFlashcards, Path: "cards.yml", Content: []byte("- title: Idioms\n  cards:\n    - expression: break the ice\n      meaning: to start a conversation\n      origin: from ships breaking ice for others\n")},
-	}
-	pushedOld := []notebook.NotebookFile{pushed[0],
-		{NotebookID: pushedID, Family: notebook.FamilyFlashcards, Path: "cards.yml", Content: []byte("- title: Idioms\n  cards:\n    - expression: break the ice\n      meaning: to start a conversation\n")},
-	}
-	_, err = f.db.Exec(`INSERT INTO notebooks (notebook_id, kind, display_name, content_hash) VALUES ($1, 'flashcard', 'Idioms', $2)`, pushedID, notebook.HashBundle(pushed))
-	require.NoError(t, err)
-	pushedContent, err := notebook.ParseBundle(pushedID, pushed)
-	require.NoError(t, err)
-	require.NoError(t, database.RunInTx(ctx, f.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		return notebook.NewContentRepository(f.db).Store(ctx, tx, pushedContent)
-	}))
-	for _, file := range pushedOld {
-		_, err := f.db.Exec(
-			`INSERT INTO notebook_files (notebook_id, family, path, content, content_sha256, byte_size)
-			 VALUES ($1, $2, $3, $4, 'sha', $5)`, pushedID, file.Family, file.Path, file.Content, len(file.Content))
-		require.NoError(t, err)
-	}
-
-	// The upgrade: what `migrate schema` runs.
-	require.NoError(t, database.Migrate(f.db, schemas.Migrations, "migrations"))
-	n, err := ConvertStoredFiles(ctx, f.db, io.Discard)
-	require.NoError(t, err)
-	assert.Equal(t, 1, n, "only the notebook whose rows are behind its files is rebuilt")
-	assert.Equal(t, wantOrigins, f.origins(t))
-
-	var pushedOrigin string
-	require.NoError(t, f.db.Get(&pushedOrigin, `SELECT origin FROM content_notes WHERE notebook_id = $1`, pushedID))
-	assert.Equal(t, "from ships breaking ice for others", pushedOrigin, "newer rows are kept over older files")
-
-	var built string
-	require.NoError(t, f.db.Get(&built, `SELECT content_built_hash FROM notebooks WHERE notebook_id = $1`, vocabularyID))
-	assert.Equal(t, notebook.HashBundle(f.v2), built)
-
-	n, err = ConvertStoredFiles(ctx, f.db, io.Discard)
-	require.NoError(t, err)
-	assert.Zero(t, n)
 }
