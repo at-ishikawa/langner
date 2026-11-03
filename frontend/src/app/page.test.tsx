@@ -1,11 +1,17 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
-import TodayPage from "./page";
+import RootPage from "./page";
 import * as client from "@/lib/client";
+import { useSession } from "@/components/SessionProvider";
+import type { AuthUser } from "@/lib/auth";
 
 vi.mock("@/lib/client", () => ({
   quizClient: { getQuizOptions: vi.fn() },
+}));
+
+vi.mock("@/components/SessionProvider", () => ({
+  useSession: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -13,6 +19,22 @@ vi.mock("next/link", () => ({
     <a {...props}>{children}</a>
   ),
 }));
+
+const signedIn: AuthUser = {
+  username: "reader-1",
+  hasApiKey: true,
+  credentials: [{ provider: "openai", model: "", primary: true }],
+  availableProviders: [],
+};
+
+function mockSession(state: Partial<ReturnType<typeof useSession>>) {
+  vi.mocked(useSession).mockReturnValue({
+    user: null,
+    loading: false,
+    refresh: async () => {},
+    ...state,
+  });
+}
 
 function nb(partial: Partial<client.NotebookSummary> & { notebookId: string; name: string }) {
   return {
@@ -32,15 +54,50 @@ function nb(partial: Partial<client.NotebookSummary> & { notebookId: string; nam
 function renderPage() {
   return render(
     <ChakraProvider value={defaultSystem}>
-      <TodayPage />
+      <RootPage />
     </ChakraProvider>,
   );
 }
 
-describe("TodayPage", () => {
+describe("RootPage — public vs. signed-in branching", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows the public landing page to a logged-out visitor and does NOT load the dashboard", () => {
+    mockSession({ user: null, loading: false });
+    renderPage();
+
+    // Marketing hero + both entry points, no Today dashboard chrome.
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    const getStarted = screen.getByRole("link", { name: "Get started" });
+    expect(getStarted).toHaveAttribute("href", "/login");
+    expect(screen.getAllByRole("link", { name: "Sign in" })[0]).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    expect(screen.queryByText("Today")).not.toBeInTheDocument();
+    // The dashboard data is never fetched for a logged-out visitor.
+    expect(client.quizClient.getQuizOptions).not.toHaveBeenCalled();
+  });
+
+  it("shows a spinner while the session probe is in flight", () => {
+    mockSession({ user: null, loading: true });
+    renderPage();
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+    expect(client.quizClient.getQuizOptions).not.toHaveBeenCalled();
+  });
+});
+
+describe("TodayDashboard (signed in)", () => {
+  beforeEach(() => {
+    mockSession({ user: signedIn, loading: false });
+  });
+
   afterEach(() => {
     document.documentElement.classList.remove("dark");
     document.documentElement.removeAttribute("data-theme");
+    localStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -117,6 +174,34 @@ describe("TodayPage", () => {
     expect(screen.getByText("4")).toBeInTheDocument();
     // Exactly one "Reading Journal" plan row (one link), not a duplicate.
     expect(screen.getAllByRole("link", { name: /Reading Journal/ })).toHaveLength(1);
+  });
+
+  it("nudges a keyless user toward Settings, and the nudge is dismissible", async () => {
+    mockSession({ user: { ...signedIn, hasApiKey: false, credentials: [] }, loading: false });
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [nb({ notebookId: "a", name: "Word Power", reviewCount: 3, vocabularyCount: 10 })],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
+    renderPage();
+
+    expect(await screen.findByText("Add an API key to get started")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Add a key in Settings/i });
+    expect(link).toHaveAttribute("href", "/settings");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("Add an API key to get started")).not.toBeInTheDocument();
+    expect(localStorage.getItem("langner:apiKeyNudgeDismissed")).toBe("1");
+  });
+
+  it("shows no key nudge once a provider key is registered", async () => {
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [nb({ notebookId: "a", name: "Word Power", reviewCount: 3, vocabularyCount: 10 })],
+    } as Awaited<ReturnType<typeof client.quizClient.getQuizOptions>>);
+
+    renderPage();
+
+    expect(await screen.findByText("Today")).toBeInTheDocument();
+    expect(screen.queryByText("Add an API key to get started")).not.toBeInTheDocument();
   });
 
   it("renders in dark mode without errors", async () => {
