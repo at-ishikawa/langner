@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 
 	"github.com/jmoiron/sqlx"
@@ -43,15 +44,27 @@ func configContentDirs(cfg *config.Config) notebook.ContentDirs {
 // ImportShippedContent reads every notebook under the configured notebook
 // directories (the shipped example catalog) and stores it in Postgres under its
 // EXISTING id, with the notes its words need. The directories are only an
-// import source; the server reads content from Postgres. Returns the number of
-// notebooks imported.
-func ImportShippedContent(ctx context.Context, cfg *config.Config, db *sqlx.DB, out io.Writer) (int, error) {
+// import source; the server reads content from Postgres. A notebook is skipped
+// when it is stored at the same bundle hash AND its content rows were built
+// from that hash, unless its id is in force. Returns the number of notebooks
+// stored (updated).
+func ImportShippedContent(ctx context.Context, cfg *config.Config, db *sqlx.DB, out io.Writer, force ...string) (int, error) {
 	bundles, err := notebook.CollectBundles(configContentDirs(cfg))
 	if err != nil {
 		return 0, err
 	}
 	store := notebook.NewNotebookStore(db)
+	updated := 0
 	for _, b := range bundles {
+		if !slices.Contains(force, b.ID) {
+			current, err := store.ContentCurrent(ctx, b.ID, notebook.HashBundle(b.Files))
+			if err != nil {
+				return updated, err
+			}
+			if current {
+				continue
+			}
+		}
 		kind := familyKinds[b.Families[0]]
 		if len(b.Families) > 1 {
 			kind = "composite"
@@ -61,13 +74,14 @@ func ImportShippedContent(ctx context.Context, cfg *config.Config, db *sqlx.DB, 
 			name = b.ID
 		}
 		if err := storeShippedNotebook(ctx, db, store, kind, name, b.ID, b.Files); err != nil {
-			return 0, err
+			return updated, err
 		}
+		updated++
 		if out != nil {
 			_, _ = fmt.Fprintf(out, "imported %s (%d file(s) across %d family/-ies)\n", b.ID, len(b.Files), len(b.Families))
 		}
 	}
-	return len(bundles), nil
+	return updated, nil
 }
 
 // storeShippedNotebook parses a catalog notebook's files and stores them, with
@@ -88,9 +102,11 @@ func storeShippedNotebook(ctx context.Context, db *sqlx.DB, store *notebook.Note
 
 // ConvertStoredFiles stores notebooks kept as raw YAML files (notebook_files,
 // before migration 038) in the content tables, keeping each notebook's
-// registry row as it is. Notebooks that already have content rows are skipped,
-// and the files are left in place as a backup. A notebook that fails to parse
-// is reported. Returns the number converted.
+// registry row as it is. It also rebuilds a notebook whose rows were not built
+// from its current stored files (see notebook.StoredFileBundles); notebooks
+// whose rows are current are skipped, and the files are left in place as a
+// backup. A notebook that fails to parse is reported. Returns the number
+// converted.
 func ConvertStoredFiles(ctx context.Context, db *sqlx.DB, out io.Writer) (int, error) {
 	bundles, err := notebook.StoredFileBundles(ctx, db)
 	if err != nil {
@@ -109,7 +125,7 @@ func ConvertStoredFiles(ctx context.Context, db *sqlx.DB, out io.Writer) (int, e
 		files := bundles[id]
 		content, err := notebook.ParseBundle(id, files)
 		if err == nil {
-			err = store.ConvertBundle(ctx, notebook.BundleBytes(files), content)
+			err = store.ConvertBundle(ctx, notebook.HashBundle(files), notebook.BundleBytes(files), content)
 		}
 		if err == nil {
 			_, err = datasync.EnsureContentNotes(ctx, db, content)
@@ -128,9 +144,11 @@ func ConvertStoredFiles(ctx context.Context, db *sqlx.DB, out io.Writer) (int, e
 
 // newMigrateImportContentCommand imports the shipped notebook catalog into
 // Postgres. It is the standalone form of the step reset-db and seed-e2e run as
-// part of their seed.
+// part of their seed. It first rebuilds rows that don't match their stored
+// files (ConvertStoredFiles), then stores every catalog notebook that changed.
 func newMigrateImportContentCommand() *cobra.Command {
-	return &cobra.Command{
+	var force []string
+	cmd := &cobra.Command{
 		Use:   "import-content",
 		Short: "Import shipped notebook content (configured example dirs) into Postgres",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -141,12 +159,17 @@ func newMigrateImportContentCommand() *cobra.Command {
 			}
 			defer func() { _ = db.Close() }()
 
-			n, err := ImportShippedContent(ctx, cfg, db, cmd.OutOrStdout())
+			if _, err := ConvertStoredFiles(ctx, db, cmd.OutOrStdout()); err != nil {
+				return fmt.Errorf("convert stored notebook files: %w", err)
+			}
+			n, err := ImportShippedContent(ctx, cfg, db, cmd.OutOrStdout(), force...)
 			if err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Imported %d shipped notebook(s).\n", n)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%d notebook(s) updated.\n", n)
 			return nil
 		},
 	}
+	cmd.Flags().StringSliceVar(&force, "force", nil, "notebook ids to rebuild even when unchanged")
+	return cmd
 }

@@ -99,16 +99,17 @@ func (r *NotebookStore) PushBundle(ctx context.Context, nb UserNotebook, content
 	}
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO notebooks (notebook_id, owner_user_id, visibility, source, kind, display_name, content_hash, content_bytes)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			`INSERT INTO notebooks (notebook_id, owner_user_id, visibility, source, kind, display_name, content_hash, content_built_hash, content_bytes)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8)
 			 ON CONFLICT (notebook_id) DO UPDATE SET
-			   owner_user_id = EXCLUDED.owner_user_id,
-			   visibility    = EXCLUDED.visibility,
-			   source        = EXCLUDED.source,
-			   kind          = EXCLUDED.kind,
-			   display_name  = EXCLUDED.display_name,
-			   content_hash  = EXCLUDED.content_hash,
-			   content_bytes = EXCLUDED.content_bytes`,
+			   owner_user_id      = EXCLUDED.owner_user_id,
+			   visibility         = EXCLUDED.visibility,
+			   source             = EXCLUDED.source,
+			   kind               = EXCLUDED.kind,
+			   display_name       = EXCLUDED.display_name,
+			   content_hash       = EXCLUDED.content_hash,
+			   content_built_hash = EXCLUDED.content_built_hash,
+			   content_bytes      = EXCLUDED.content_bytes`,
 			nb.NotebookID, nb.OwnerUserID, nb.Visibility, source, nb.Kind, nb.DisplayName, nb.ContentHash, nb.ByteSize,
 		); err != nil {
 			return fmt.Errorf("upsert notebooks row: %w", err)
@@ -126,14 +127,15 @@ func (r *NotebookStore) PushBundle(ctx context.Context, nb UserNotebook, content
 func (r *NotebookStore) ImportShippedBundle(ctx context.Context, kind, displayName, contentHash string, contentBytes int, content NotebookContent) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO notebooks (notebook_id, owner_user_id, visibility, source, kind, display_name, content_hash, content_bytes)
-			 VALUES ($1, NULL, 'public', 'shipped', $2, $3, $4, $5)
+			`INSERT INTO notebooks (notebook_id, owner_user_id, visibility, source, kind, display_name, content_hash, content_built_hash, content_bytes)
+			 VALUES ($1, NULL, 'public', 'shipped', $2, $3, $4, $4, $5)
 			 ON CONFLICT (notebook_id) DO UPDATE SET
-			   source        = 'shipped',
-			   kind          = EXCLUDED.kind,
-			   display_name  = EXCLUDED.display_name,
-			   content_hash  = EXCLUDED.content_hash,
-			   content_bytes = EXCLUDED.content_bytes`,
+			   source             = 'shipped',
+			   kind               = EXCLUDED.kind,
+			   display_name       = EXCLUDED.display_name,
+			   content_hash       = EXCLUDED.content_hash,
+			   content_built_hash = EXCLUDED.content_built_hash,
+			   content_bytes      = EXCLUDED.content_bytes`,
 			content.ID, kind, displayName, contentHash, contentBytes,
 		); err != nil {
 			return fmt.Errorf("upsert shipped notebooks row: %w", err)
@@ -144,18 +146,39 @@ func (r *NotebookStore) ImportShippedBundle(ctx context.Context, kind, displayNa
 
 // ConvertBundle stores the content of a notebook that was stored as raw files,
 // keeping its registry row (owner, visibility, source, kind, name, hash) as it
-// is. A missing row is created as a public catalog notebook.
-func (r *NotebookStore) ConvertBundle(ctx context.Context, contentBytes int, content NotebookContent) error {
+// is and recording builtHash (the stored files' hash) as the hash its rows were
+// built from. A missing row is created as a public catalog notebook.
+func (r *NotebookStore) ConvertBundle(ctx context.Context, builtHash string, contentBytes int, content NotebookContent) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO notebooks (notebook_id, content_bytes) VALUES ($1, $2)
-			 ON CONFLICT (notebook_id) DO UPDATE SET content_bytes = EXCLUDED.content_bytes`,
-			content.ID, contentBytes,
+			`INSERT INTO notebooks (notebook_id, content_built_hash, content_bytes) VALUES ($1, $2, $3)
+			 ON CONFLICT (notebook_id) DO UPDATE SET
+			   content_built_hash = EXCLUDED.content_built_hash,
+			   content_bytes      = EXCLUDED.content_bytes`,
+			content.ID, builtHash, contentBytes,
 		); err != nil {
 			return fmt.Errorf("upsert notebooks row: %w", err)
 		}
 		return r.content.Store(ctx, tx, content)
 	})
+}
+
+// ContentCurrent reports whether a notebook is stored at bundle hash `hash`
+// with content rows built from that same hash, i.e. importing the bundle again
+// would change nothing.
+func (r *NotebookStore) ContentCurrent(ctx context.Context, notebookID, hash string) (bool, error) {
+	var current bool
+	err := r.db.GetContext(ctx, &current,
+		`SELECT COALESCE(n.content_hash = $2 AND n.content_built_hash = $2, false)
+		        AND EXISTS (SELECT 1 FROM content_indexes i WHERE i.notebook_id = n.notebook_id)
+		 FROM notebooks n WHERE n.notebook_id = $1`, notebookID, hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check content of %s: %w", notebookID, err)
+	}
+	return current, nil
 }
 
 // LoadContent returns a notebook's stored content, or ok=false when it has
