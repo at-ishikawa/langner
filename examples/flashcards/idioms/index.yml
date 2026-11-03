@@ -1,0 +1,4 @@
+id: idioms
+name: "Idiom Examples"
+notebooks:
+  - ./decks.yml

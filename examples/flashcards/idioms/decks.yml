@@ -1,0 +1,27 @@
+# Two decks of common English idioms. A deck title only groups cards for
+# display: renaming or regrouping decks keeps each card's learning history.
+- title: "Level 1"
+  description: "Everyday idioms"
+  date: 2025-02-01T00:00:00Z
+  cards:
+    - expression: "call it a day"
+      meaning: "to stop working on something for the rest of the day"
+      examples:
+        - "We've done enough for now, so let's call it a day."
+    - expression: "bite the bullet"
+      meaning: "to make yourself do something unpleasant that you have been avoiding"
+      examples:
+        - "I finally bit the bullet and booked the dentist appointment."
+
+- title: "Level 2"
+  description: "Idioms for conversation"
+  date: 2025-02-08T00:00:00Z
+  cards:
+    - expression: "once in a blue moon"
+      meaning: "very rarely"
+      examples:
+        - "My brother lives abroad, so I only see him once in a blue moon."
+    - expression: "cost an arm and a leg"
+      meaning: "to be very expensive"
+      examples:
+        - "That new phone costs an arm and a leg."

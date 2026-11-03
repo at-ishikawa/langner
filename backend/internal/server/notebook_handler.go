@@ -597,7 +597,7 @@ func (h *NotebookHandler) findLearningInfoFull(
 	}
 
 	for _, hist := range learningHistory {
-		if hist.Metadata.Title != event {
+		if !hist.CoversTitle(event) {
 			continue
 		}
 		for _, scene := range hist.Scenes {

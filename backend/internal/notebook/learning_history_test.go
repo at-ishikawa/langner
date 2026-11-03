@@ -215,6 +215,29 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			},
 		},
 		{
+			name: "flashcard type - deck renamed since the logs were grouped",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{
+					NotebookID: "test-id",
+					Title:      "Group A",
+					Type:       "flashcard",
+				},
+				Expressions: []LearningHistoryExpression{
+					{
+						Expression: "break the ice",
+						LearnedLogs: []LearningRecord{
+							{Status: "understood", LearnedAt: NewDate(fixedTime)},
+						},
+					},
+				},
+			},
+			notebookTitle: "Level 1",
+			definition:    Note{Expression: "break the ice"},
+			expected: []LearningRecord{
+				{Status: "understood", LearnedAt: NewDate(fixedTime)},
+			},
+		},
+		{
 			name: "flashcard type - expression not found",
 			history: LearningHistory{
 				Metadata: LearningHistoryMetadata{
@@ -304,6 +327,18 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestIsExpressionSkipped_FlashcardDeckRenamed(t *testing.T) {
+	histories := []LearningHistory{{
+		Metadata: LearningHistoryMetadata{NotebookID: "test-id", Title: "Group A", Type: "flashcard"},
+		Expressions: []LearningHistoryExpression{{
+			Expression: "lose one's temper",
+			SkippedAt:  SkippedAtMap{string(QuizTypeNotebook): "2025-01-01T00:00:00Z"},
+		}},
+	}}
+	assert.True(t, IsExpressionSkipped(histories, "Level 1", "", "lose one's temper", "", "", QuizTypeNotebook))
+	assert.False(t, IsExpressionSkipped(histories, "Level 1", "", "break the ice", "", "", QuizTypeNotebook))
 }
 
 func TestNewLearningHistories(t *testing.T) {
