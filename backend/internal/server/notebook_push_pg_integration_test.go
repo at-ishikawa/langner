@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -446,4 +447,54 @@ func TestDeleteNotebook_LivePostgres_Integration(t *testing.T) {
 	var files int
 	require.NoError(t, f.db.Get(&files, `SELECT COUNT(*) FROM content_files WHERE notebook_id = $1`, nbID))
 	assert.Zero(t, files, "content removed on delete")
+}
+
+// TestPushNotebook_RebuildsContentAfterEdit_LivePostgres_Integration pins that a
+// re-push of an edited bundle replaces the notebook's content rows and records
+// the bundle hash they were built from, even when the stored hash already
+// matches the edited bundle (files re-uploaded by a server that wrote only the
+// raw files and the hash). The example vocabulary notebook is pushed first
+// without its `origin:` lines, then as shipped.
+func TestPushNotebook_RebuildsContentAfterEdit_LivePostgres_Integration(t *testing.T) {
+	f := newPushFixture(t)
+	ctx := context.Background()
+	ownerCtx := testutil.WithTestUser(ctx, f.ownerID)
+	require.NoError(t, dbseed.SetNotebookOwner(ctx, f.db, "vocabulary", &f.ownerID, "private", "shipped"))
+
+	root := repoRootForVisibilityTest(t)
+	var v1, v2 []*apiv1.NotebookFile
+	var hashFiles []notebook.NotebookFile
+	for _, rel := range []string{"index.yml", "cards.yml"} {
+		content, err := os.ReadFile(filepath.Join(root, "examples", "flashcards", "vocabulary", rel))
+		require.NoError(t, err)
+		v2 = append(v2, &apiv1.NotebookFile{Path: rel, Content: content})
+		v1 = append(v1, &apiv1.NotebookFile{Path: rel, Content: regexp.MustCompile(`(?m)^\s*origin:.*\n`).ReplaceAll(content, nil)})
+		hashFiles = append(hashFiles, notebook.NotebookFile{Family: notebook.FamilyFlashcards, Path: rel, Content: content})
+	}
+	push := func(files []*apiv1.NotebookFile) {
+		resp, err := f.notebookHandler.PushNotebook(ownerCtx, connect.NewRequest(&apiv1.PushNotebookRequest{Kind: "flashcard", Files: files}))
+		require.NoError(t, err)
+		require.Equal(t, "vocabulary", resp.Msg.NotebookId)
+	}
+	origins := func() int {
+		var n int
+		require.NoError(t, f.db.Get(&n, `SELECT count(*) FROM content_notes WHERE notebook_id = 'vocabulary' AND origin <> ''`))
+		return n
+	}
+
+	push(v1)
+	require.Zero(t, origins())
+	// A server without content tables stores v2 as its hash only.
+	_, err := f.db.Exec(`UPDATE notebooks SET content_hash = $1 WHERE notebook_id = 'vocabulary'`, notebook.HashBundle(hashFiles))
+	require.NoError(t, err)
+
+	push(v2)
+	assert.Equal(t, 2, origins(), "the cards with an origin read it back")
+	var row struct {
+		Hash  string `db:"content_hash"`
+		Built string `db:"content_built_hash"`
+	}
+	require.NoError(t, f.db.Get(&row, `SELECT content_hash, COALESCE(content_built_hash, '') AS content_built_hash FROM notebooks WHERE notebook_id = 'vocabulary'`))
+	assert.Equal(t, notebook.HashBundle(hashFiles), row.Hash)
+	assert.Equal(t, row.Hash, row.Built, "the rows are recorded as built from the pushed bundle")
 }
