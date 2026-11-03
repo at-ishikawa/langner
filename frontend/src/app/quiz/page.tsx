@@ -27,9 +27,9 @@ type Tab = "vocabulary" | "relearn" | "grammar";
 type VocabMode = "standard" | "reverse" | "freeform";
 
 const vocabularyModes: { key: VocabMode; title: string; description: string }[] = [
-  { key: "standard", title: "Standard", description: "See a word, type its meaning" },
-  { key: "reverse", title: "Reverse", description: "See a meaning, type the word" },
-  { key: "freeform", title: "Freeform", description: "Type any word and its meaning" },
+  { key: "standard", title: "What does it mean?", description: "See a word, type its meaning" },
+  { key: "reverse", title: "Which word is it?", description: "See a meaning, type the word" },
+  { key: "freeform", title: "Free practice", description: "Type any word and its meaning" },
 ];
 
 export default function QuizHubPage() {

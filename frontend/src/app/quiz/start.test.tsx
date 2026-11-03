@@ -74,13 +74,13 @@ describe("QuizHubPage inline start", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("Standard")).toBeInTheDocument();
+      expect(screen.getByText("What does it mean?")).toBeInTheDocument();
     });
 
     const user = userEvent.setup();
 
     // Select Standard mode
-    await user.click(screen.getByText("Standard"));
+    await user.click(screen.getByText("What does it mean?"));
 
     // Select notebook
     await waitFor(() => {

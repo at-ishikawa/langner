@@ -203,7 +203,7 @@ export function QuizResultCard({
           data, so the origin of the word is surfaced in feedback. */}
       {item.originBreakdown && item.originBreakdown.length > 0 && (
         <Box mb={2}>
-          <Text fontSize="xs" color="fg.muted" mb={1}>Etymology</Text>
+          <Text fontSize="xs" color="fg.muted" mb={1}>Word roots</Text>
           <OriginBreakdown parts={item.originBreakdown} />
         </Box>
       )}

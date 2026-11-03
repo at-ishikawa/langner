@@ -597,7 +597,7 @@ function EtymologyNotebookPage() {
           </Link>
         </Box>
         <Box px={4} pb={3} textAlign="center">
-          <Heading size="md">Etymology</Heading>
+          <Heading size="md">Word roots</Heading>
         </Box>
       </Box>
 

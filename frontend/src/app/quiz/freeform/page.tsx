@@ -132,7 +132,7 @@ export default function FreeformQuizPage() {
   };
 
   return (
-    <PageShell title="Freeform Quiz" maxW="xl">
+    <PageShell title="Free practice" maxW="xl">
       <Text mb={4} color="fg.muted">
         Type any word you&apos;re learning and its meaning
       </Text>
