@@ -349,3 +349,12 @@ func (r *ContentRepository) Load(ctx context.Context, ids []string) ([]NotebookC
 	l := contentLoad{ctx: ctx, db: r.db, ids: ids}
 	return l.run()
 }
+
+// LoadOutline implements OutlineLoader: Load without the text of story lines.
+func (r *ContentRepository) LoadOutline(ctx context.Context, ids []string) ([]NotebookContent, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	l := contentLoad{ctx: ctx, db: r.db, ids: ids, outline: true}
+	return l.run()
+}

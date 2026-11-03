@@ -83,29 +83,36 @@ func (r *DBNoteRepository) CountNotebookNotes(ctx context.Context, notebookID st
 // its notebook_notes links (so a note shared across notebooks still attributes
 // its logs correctly). It is the scoped counterpart to FindAll used by
 // HistoryStore.LoadForNotebooks so a per-notebook read doesn't pull every note.
-// note_images / note_references are NOT loaded: the history reconstruction never
-// reads them, so fetching them here was pure egress. Id-less legacy "orphan"
-// notes are NOT included here — the store fetches just the ones an origin
-// actually needs via FindOrphanNotesByUsage. Empty notebookIDs returns nil.
+// It reads only what the history reconstruction uses: a note's id, usage and
+// entry, and each link's notebook, type, group and subgroup. Every other field
+// is left zero, and note_images / note_references are not loaded. Id-less
+// legacy "orphan" notes are NOT included here — the store fetches just the ones
+// an origin actually needs via FindOrphanNotesByUsage. Empty notebookIDs
+// returns nil.
 func (r *DBNoteRepository) FindByNotebooks(ctx context.Context, notebookIDs []string) ([]NoteRecord, error) {
 	if len(notebookIDs) == 0 {
 		return nil, nil
 	}
-	query, args, err := sqlx.In(
-		`SELECT `+noteColumns+` FROM notes
-		 WHERE id IN (SELECT note_id FROM notebook_notes WHERE notebook_id IN (?))
-		 ORDER BY id`,
-		notebookIDs,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build notes-by-notebooks query: %w", err)
-	}
+	const linked = `SELECT note_id FROM notebook_notes WHERE notebook_id = ANY($1)`
 	var notes []NoteRecord
-	if err := r.db.SelectContext(ctx, &notes, r.db.Rebind(query), args...); err != nil {
+	if err := r.db.SelectContext(ctx, &notes,
+		`SELECT id, "usage", entry FROM notes WHERE id IN (`+linked+`) ORDER BY id`, notebookIDs); err != nil {
 		return nil, fmt.Errorf("load notes by notebooks: %w", err)
 	}
-	if err := r.loadRelations(ctx, notes, false); err != nil {
-		return nil, err
+	var links []NotebookNote
+	if err := r.db.SelectContext(ctx, &links,
+		`SELECT note_id, notebook_type, notebook_id, "group", subgroup FROM notebook_notes
+		 WHERE note_id IN (`+linked+`) ORDER BY id`, notebookIDs); err != nil {
+		return nil, fmt.Errorf("load notebook notes by notebooks: %w", err)
+	}
+	byID := make(map[int64]*NoteRecord, len(notes))
+	for i := range notes {
+		byID[notes[i].ID] = &notes[i]
+	}
+	for _, nn := range links {
+		if n := byID[nn.NoteID]; n != nil {
+			n.NotebookNotes = append(n.NotebookNotes, nn)
+		}
 	}
 	return notes, nil
 }

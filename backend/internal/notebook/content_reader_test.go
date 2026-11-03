@@ -288,3 +288,55 @@ func TestCachedContent_ReloadsOnlyChangedNotebooks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{id, id}, inner.loaded, "reloaded after the notebook changed")
 }
+
+// outlineLoader is a versionedLoader that also serves outlines, recording
+// which kind each load was.
+type outlineLoader struct {
+	versionedLoader
+	outlines []string
+}
+
+func (o *outlineLoader) LoadOutline(ctx context.Context, ids []string) ([]notebook.NotebookContent, error) {
+	o.outlines = append(o.outlines, ids...)
+	return o.inner.Load(ctx, ids)
+}
+
+// The cache serves an outline request from a notebook it holds in full, but
+// not a full request from an outline.
+func TestCachedContent_OutlinesAndFullContent(t *testing.T) {
+	contents, err := notebook.LoadDirectoryContent(exampleDirs(t))
+	require.NoError(t, err)
+	inner := &outlineLoader{versionedLoader: versionedLoader{countingLoader: countingLoader{inner: notebook.NewMemoryContent(contents)}, version: "v1"}}
+	cache := notebook.NewCachedContent(inner)
+	ctx := context.Background()
+	a, b := contents[0].ID, contents[1].ID
+	_, err = cache.Catalog(ctx)
+	require.NoError(t, err)
+
+	_, err = cache.LoadOutline(ctx, []string{a})
+	require.NoError(t, err)
+	_, err = cache.LoadOutline(ctx, []string{a})
+	require.NoError(t, err)
+	assert.Equal(t, []string{a}, inner.outlines, "an outline is cached")
+	assert.Empty(t, inner.loaded)
+
+	_, err = cache.Load(ctx, []string{a, b})
+	require.NoError(t, err)
+	assert.Equal(t, []string{a, b}, inner.loaded, "an outline does not serve a full request")
+
+	_, err = cache.LoadOutline(ctx, []string{a, b})
+	require.NoError(t, err)
+	assert.Equal(t, []string{a}, inner.outlines, "full content serves an outline request")
+}
+
+// A summary reader loads outlines and no dictionary entries.
+func TestContentSummaryReader_LoadsOutlines(t *testing.T) {
+	contents, err := notebook.LoadDirectoryContent(exampleDirs(t))
+	require.NoError(t, err)
+	inner := &outlineLoader{versionedLoader: versionedLoader{countingLoader: countingLoader{inner: notebook.NewMemoryContent(contents)}}}
+	r, err := notebook.NewContentSummaryReader(context.Background(), inner)
+	require.NoError(t, err)
+	require.NoError(t, r.PreloadMatching(func(string) bool { return true }))
+	assert.NotEmpty(t, inner.outlines)
+	assert.Empty(t, inner.loaded)
+}

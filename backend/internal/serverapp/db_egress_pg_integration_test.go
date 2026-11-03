@@ -27,6 +27,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/clicmd"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
+	"github.com/at-ishikawa/langner/internal/datasync"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -42,6 +43,83 @@ import (
 // so a Service built on it reads every learning log, as before those loaders.
 type fullHistoryStore struct {
 	learning.HistoryStore
+}
+
+// fullContent hides ContentRepository's outline loads, so a Service built on
+// it reads notebooks in full, story lines included.
+type fullContent struct {
+	notebook.ContentLoader
+}
+
+// recordingContent records which notebooks were loaded in full and which as
+// outlines.
+type recordingContent struct {
+	inner          *notebook.ContentRepository
+	full, outlines []string
+}
+
+func (r *recordingContent) Catalog(ctx context.Context) ([]notebook.CatalogEntry, error) {
+	return r.inner.Catalog(ctx)
+}
+
+func (r *recordingContent) Load(ctx context.Context, ids []string) ([]notebook.NotebookContent, error) {
+	r.full = append(r.full, ids...)
+	return r.inner.Load(ctx, ids)
+}
+
+func (r *recordingContent) LoadOutline(ctx context.Context, ids []string) ([]notebook.NotebookContent, error) {
+	r.outlines = append(r.outlines, ids...)
+	return r.inner.LoadOutline(ctx, ids)
+}
+
+// recordingDictionary records dictionary lookups.
+type recordingDictionary struct {
+	notebook.DictionarySource
+	calls int
+	words []string
+}
+
+func (r *recordingDictionary) Responses(ctx context.Context, words []string) (map[string]rapidapi.Response, error) {
+	r.calls++
+	r.words = append(r.words, words...)
+	return r.DictionarySource.Responses(ctx, words)
+}
+
+// A word whose meaning comes from the dictionary shows that meaning on its
+// quiz card, and the quiz fetches dictionary entries only for the notebook it
+// quizzes: not for the other notebooks it reads (etymology origins), and not
+// for the all-words list behind Relearn, which shows no dictionary meanings.
+func TestDBEgress_DictionaryFetchedForQuizzedNotebookOnly_LivePostgres_Integration(t *testing.T) {
+	f := setupEgressFixture(t)
+	ctx := context.Background()
+	files := []notebook.NotebookFile{
+		{Family: notebook.FamilyFlashcards, Path: "index.yml", Content: []byte("id: dictionary-words\nname: Dictionary words\nnotebooks:\n  - ./cards.yml\n")},
+		{Family: notebook.FamilyFlashcards, Path: "cards.yml", Content: []byte("- title: Words\n  cards:\n    - id: nothing\n      expression: nothing\n      dictionary_number: 1\n")},
+	}
+	nc, err := notebook.ParseBundle("dictionary-words", files)
+	require.NoError(t, err)
+	require.NoError(t, notebook.NewNotebookStore(f.db).ImportShippedBundle(ctx, "Flashcard", "Dictionary words",
+		notebook.HashBundle(files), notebook.BundleBytes(files), nc))
+	_, err = datasync.EnsureContentNotes(ctx, f.db, nc)
+	require.NoError(t, err)
+	_, err = f.db.Exec(`INSERT INTO dictionary_entries (word, source_type, response) VALUES ('nothing', 'rapidapi', $1), ('unrelated', 'rapidapi', $1)`,
+		`{"word":"nothing","results":[{"definition":"Something that has no existence","partOfSpeech":"noun"}]}`)
+	require.NoError(t, err)
+
+	svc := newService(t, f, false)
+	dict := &recordingDictionary{DictionarySource: dictionary.NewDBDictionaryRepository(f.db)}
+	svc.SetContent(notebook.NewContentRepository(f.db), dict)
+
+	cards, err := svc.LoadCards(f.userID, []string{"dictionary-words"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "Something that has no existence", cards[0].Meaning)
+	assert.Equal(t, []string{"nothing"}, dict.words)
+
+	dict.calls, dict.words = 0, nil
+	_, err = svc.LoadAllWords(f.userID)
+	require.NoError(t, err)
+	assert.Zero(t, dict.calls, "the all-words list must not read the dictionary")
 }
 
 // egressFixture is the example catalog imported into a fresh Postgres, the way
@@ -93,20 +171,23 @@ func setupEgressFixture(t *testing.T) egressFixture {
 }
 
 // newService builds the quiz service the way serverapp.BuildHandler does in DB
-// mode (DB history store, DB content, visibility ACL).
-func newService(t *testing.T, f egressFixture, fullHistory bool) *quiz.Service {
+// mode (DB history store, DB content, visibility ACL). full makes it read the
+// way it did before the reduced reads: every learning log, whole notebooks.
+func newService(t *testing.T, f egressFixture, full bool) *quiz.Service {
 	t.Helper()
 	repos := bootstrap.BuildStateRepositories(f.cfg.Notebooks, f.cfg.Quiz, f.db)
 
 	svc := quiz.NewService(f.cfg.Notebooks, inference.StaticResolver(mock.NewClient()),
 		map[string]rapidapi.Response{}, repos.Learning, f.cfg.Quiz)
 	var store learning.HistoryStore = repos.HistoryStore
-	if fullHistory {
+	var content notebook.ContentLoader = notebook.NewContentRepository(f.db)
+	if full {
 		store = fullHistoryStore{repos.HistoryStore}
+		content = fullContent{content}
 	}
 	svc.SetHistoryStore(store)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
-	svc.SetContent(notebook.NewContentRepository(f.db), dictionary.NewDBDictionaryRepository(f.db))
+	svc.SetContent(content, dictionary.NewDBDictionaryRepository(f.db))
 	svc.SetUserDefinitionsRepo(notebook.NewUserDefinitionsRepository(f.db))
 	svc.SetNotebookACL(repos.ACL)
 	return svc
@@ -185,15 +266,20 @@ func seedHistory(t *testing.T, f egressFixture, svc *quiz.Service) {
 }
 
 // TestDBEgress_ScopedLoadsMatchFullHistory_LivePostgres_Integration pins that
-// the reduced reads give the SAME answers as reading the full history: the
-// quiz options summary (newest + newest-correct logs only) and the all-words
-// list behind the freeform quiz and Relearn (skip state only, no logs).
+// the reduced reads give the SAME answers as reading the full history and
+// whole notebooks: the quiz options summary (newest + newest-correct logs
+// only, notebook outlines without story text or dictionary entries) and the
+// all-words list behind the freeform quiz and Relearn (skip state only, no
+// logs).
 func TestDBEgress_ScopedLoadsMatchFullHistory_LivePostgres_Integration(t *testing.T) {
 	f := setupEgressFixture(t)
 	scoped := newService(t, f, false)
 	full := newService(t, f, true)
 	seedHistory(t, f, scoped)
 
+	content := &recordingContent{inner: notebook.NewContentRepository(f.db)}
+	dict := &recordingDictionary{DictionarySource: dictionary.NewDBDictionaryRepository(f.db)}
+	scoped.SetContent(content, dict)
 	for _, includeUnstudied := range []bool{false, true} {
 		want, err := full.LoadNotebookSummaries(f.userID, includeUnstudied)
 		require.NoError(t, err)
@@ -202,6 +288,9 @@ func TestDBEgress_ScopedLoadsMatchFullHistory_LivePostgres_Integration(t *testin
 		require.NotEmpty(t, want)
 		assert.Equal(t, sortedSummaries(want), sortedSummaries(got), "includeUnstudied=%v", includeUnstudied)
 	}
+	assert.NotEmpty(t, content.outlines)
+	assert.Empty(t, content.full, "the summary must not load story text")
+	assert.Zero(t, dict.calls, "the summary must not read the dictionary")
 
 	wantWords, err := full.LoadAllWords(f.userID)
 	require.NoError(t, err)
@@ -271,12 +360,11 @@ func findRepoRoot(t *testing.T) string {
 // TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration drives
 // the real server (BuildHandler from config.example.yml) and checks, from its
 // "db usage" log lines, that:
-//   - startup reads notebook content in ONE query, compressed, and backfills a
-//     compressed copy for rows written before migration 037;
 //   - startup reads no notebook content; a request loads the notebooks it
 //     reads together, and a warm server reuses unchanged ones;
 //   - the quiz options summary reads only the scheduling logs;
-//   - a batch submit loads the quizzed notebook once, not once per answer;
+//   - a batch submit reads the quizzed notebook's history once, not once per
+//     answer nor again for scheduling;
 //   - starting Relearn reads no full per-notebook histories.
 func TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration(t *testing.T) {
 	f := setupEgressFixture(t)
@@ -350,7 +438,7 @@ func TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration(t *test
 	require.NoError(t, json.Unmarshal(call(handler, "GetQuizOptions", `{}`), &options))
 	require.NotEmpty(t, options.Notebooks)
 	usage := requestUsage("GetQuizOptions")
-	assert.True(t, hasShape(usage, "source_notebook_id FROM ( SELECT", nil),
+	assert.True(t, hasShape(usage, "interval_days, CASE WHEN EXISTS (SELECT 1 FROM notebook_note", nil),
 		"the options summary must read the scheduling logs only: %v", usage["top"])
 	// Content: the summary reads every notebook, in one query per content
 	// table rather than one per notebook.
@@ -408,8 +496,8 @@ func TestDBEgress_ServerReadsLittleFromPostgres_LivePostgres_Integration(t *test
 		assert.NotEmpty(t, r.SenseID, "answer %d must resolve to its card", i)
 	}
 	usage = requestUsage("BatchSubmitReverseAnswers")
-	assert.LessOrEqual(t, shapeCalls(usage, "COALESCE(note_id, 0) AS note_id, COALESCE(origin_id, 0)"), 2,
-		"a %d-answer batch must load the notebook's history once (plus the save preload), not once per answer: %v", len(answers), usage["top"])
+	assert.Equal(t, 1, shapeCalls(usage, "COALESCE(note_id, 0) AS note_id, COALESCE(origin_id, 0)"),
+		"a %d-answer batch must load the notebook's history once, for resolving and scheduling the answers alike: %v", len(answers), usage["top"])
 
 	// Relearn: its one recent-window log read, and no per-notebook history
 	// reads (the word list only needs skip state, which has no logs).

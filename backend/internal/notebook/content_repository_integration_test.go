@@ -121,6 +121,49 @@ func TestContentRepository_StoreAndLoad_LivePostgres_Integration(t *testing.T) {
 	assert.Zero(t, n)
 }
 
+// An outline load is the full load without story line text: each scene that
+// has lines keeps one empty statement, everything else is identical.
+func TestContentRepository_LoadOutline_LivePostgres_Integration(t *testing.T) {
+	db := openContentTestDB(t)
+	ctx := context.Background()
+	contents, err := notebook.LoadDirectoryContent(exampleDirs(t))
+	require.NoError(t, err)
+	storeContent(t, db, contents)
+
+	repo := notebook.NewContentRepository(db)
+	ids := make([]string, len(contents))
+	for i, nc := range contents {
+		ids[i] = nc.ID
+	}
+	full, err := repo.Load(ctx, ids)
+	require.NoError(t, err)
+	outline, err := repo.LoadOutline(ctx, ids)
+	require.NoError(t, err)
+
+	scenesWithLines := 0
+	for i := range full {
+		for _, fc := range full[i].Families {
+			for _, f := range fc.Files {
+				for _, nb := range f.Stories {
+					for j := range nb.Scenes {
+						sc := &nb.Scenes[j]
+						if len(sc.Statements) > 0 || len(sc.Conversations) > 0 {
+							scenesWithLines++
+							sc.Statements, sc.Conversations = []string{""}, nil
+						}
+					}
+				}
+			}
+		}
+	}
+	require.Positive(t, scenesWithLines, "the examples must have story lines")
+	assert.Equal(t, full, outline)
+
+	var lines int
+	require.NoError(t, db.Get(&lines, `SELECT count(*) FROM content_lines`))
+	assert.Greater(t, lines, scenesWithLines, "the examples must have scenes with several lines")
+}
+
 // A word whose meaning comes from the dictionary (dictionary_number) resolves
 // through the stored dictionary entries fetched with its notebook.
 func TestContentReader_DictionaryWords_LivePostgres_Integration(t *testing.T) {
@@ -144,4 +187,17 @@ func TestContentReader_DictionaryWords_LivePostgres_Integration(t *testing.T) {
 	require.NoError(t, card.SetDetails(r.Dictionary(), ""))
 	assert.Equal(t, "Something that has no existence", card.Meaning)
 	assert.Equal(t, []string{"nothing"}, sortedKeys(r.Dictionary()), "only the notebook's dictionary words are read")
+
+	// On demand: reading the notebook fetches nothing; LoadDictionary fetches
+	// the entries of the notes passed.
+	r, err = notebook.NewContentReaderDictionaryOnDemand(ctx, notebook.NewContentRepository(db), dictionary.NewDBDictionaryRepository(db))
+	require.NoError(t, err)
+	decks, err = r.ReadFlashcardNotebooks("dictionary-words")
+	require.NoError(t, err)
+	assert.Empty(t, r.Dictionary(), "reading a notebook fetches no dictionary entries")
+	require.NoError(t, r.LoadDictionary(notebook.FlashcardNotes(decks)))
+	assert.Equal(t, []string{"nothing"}, sortedKeys(r.Dictionary()))
+	card = decks[0].Cards[0]
+	require.NoError(t, card.SetDetails(r.Dictionary(), ""))
+	assert.Equal(t, "Something that has no existence", card.Meaning)
 }

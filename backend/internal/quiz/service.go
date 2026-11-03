@@ -140,19 +140,35 @@ func (s *Service) SetUserDefinitionsRepo(repo *notebook.UserDefinitionsRepositor
 // isn't signed in. This is the quiz side of the notes→content bridge (the
 // reader side lives in server.NotebookHandler).
 func (s *Service) readStoryNotebooksOverlaid(reader *notebook.Reader, userID int64, notebookID string) ([]notebook.StoryNotebook, error) {
+	return s.overlaidStories(reader, s.userDefinitions(userID, notebookID), notebookID)
+}
+
+// userDefinitions reads the user's registered highlights for notebookIDs in
+// one query, keyed by notebook id; nil when there is no user or repository, or
+// the read failed (the overlay is best-effort).
+func (s *Service) userDefinitions(userID int64, notebookIDs ...string) map[string][]notebook.UserDefinition {
+	if s.userDefsRepo == nil || userID <= 0 {
+		return nil
+	}
+	defs, err := s.userDefsRepo.ListForUserNotebooks(context.Background(), userID, notebookIDs)
+	if err != nil {
+		slog.Warn("load user definitions overlay failed (quiz)", "notebooks", notebookIDs, "error", err)
+		return nil
+	}
+	return defs
+}
+
+// overlaidStories is readStoryNotebooksOverlaid with the highlights already
+// read (userDefinitions).
+func (s *Service) overlaidStories(reader *notebook.Reader, defs map[string][]notebook.UserDefinition, notebookID string) ([]notebook.StoryNotebook, error) {
 	stories, paths, err := reader.ReadStoryNotebooksWithPaths(notebookID)
 	if err != nil {
 		return nil, err
 	}
-	if s.userDefsRepo == nil || userID <= 0 {
+	if defs == nil {
 		return stories, nil
 	}
-	rows, rerr := s.userDefsRepo.ListForUser(context.Background(), userID, notebookID)
-	if rerr != nil {
-		slog.Warn("load user definitions overlay failed (quiz)", "notebook", notebookID, "error", rerr)
-		return stories, nil
-	}
-	return notebook.ApplyUserDefinitionsOverlay(notebookID, stories, paths, rows), nil
+	return notebook.ApplyUserDefinitionsOverlay(notebookID, stories, paths, defs[notebookID]), nil
 }
 
 // visibleNotebooks returns a predicate reporting whether a notebook is visible
@@ -311,7 +327,9 @@ func (s *Service) PreloadHistoriesForNotebooks(userID int64, notebookIDs ...stri
 
 func (s *Service) newReader() (*notebook.Reader, error) {
 	if s.content != nil {
-		return notebook.NewContentReader(context.Background(), s.content, s.dictionary)
+		// Only story and flashcard cards show dictionary meanings: their loaders
+		// fetch the entries of the notebook they quiz (Reader.LoadDictionary).
+		return notebook.NewContentReaderDictionaryOnDemand(context.Background(), s.content, s.dictionary)
 	}
 	dirs := notebook.ContentDirs{
 		Stories:     s.notebooksConfig.StoriesDirectories,
@@ -345,6 +363,15 @@ func (s *Service) newReader() (*notebook.Reader, error) {
 	return reader, nil
 }
 
+// newSummaryReader is newReader for count-only views: on stored content it
+// skips story line text and dictionary entries (notebook.NewContentSummaryReader).
+func (s *Service) newSummaryReader() (*notebook.Reader, error) {
+	if s.content != nil {
+		return notebook.NewContentSummaryReader(context.Background(), s.content)
+	}
+	return s.newReader()
+}
+
 // NewReader creates a new notebook reader. Exported for use by handlers
 // that need to pass a reader to multiple service methods.
 func (s *Service) NewReader() (*notebook.Reader, error) {
@@ -360,7 +387,7 @@ func (s *Service) NewReader() (*notebook.Reader, error) {
 // due-only, matching the conservative default the quiz uses without
 // the toggle.
 func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]NotebookSummary, error) {
-	reader, err := s.newReader()
+	reader, err := s.newSummaryReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
@@ -404,6 +431,13 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 
 	var summaries []NotebookSummary
 
+	var storyIDs []string
+	for id := range reader.GetStoryIndexes() {
+		if visible(id) {
+			storyIDs = append(storyIDs, id)
+		}
+	}
+	userDefs := s.userDefinitions(userID, storyIDs...)
 	for id, index := range reader.GetStoryIndexes() {
 		if !visible(id) {
 			continue
@@ -412,7 +446,7 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		// ONLY words are the ones this user saved still shows up in the quiz hub
 		// with a word/review count (otherwise an imported book with no authored
 		// definitions counts as 0 words and is filtered out of the list).
-		stories, err := s.readStoryNotebooksOverlaid(reader, userID, id)
+		stories, err := s.overlaidStories(reader, userDefs, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read story notebook %q: %w", id, err)
 		}
@@ -567,7 +601,7 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 	}
 
 	// Add stories that have grammar annotations (grammar quiz)
-	grammarSummaries, err := s.LoadGrammarStorySummaries(userID)
+	grammarSummaries, err := s.grammarStorySummaries(reader, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load grammar story summaries: %w", err)
 	}
@@ -704,9 +738,26 @@ func (s *Service) ResolveCardByNote(userID int64, note *notebook.NoteRecord, ori
 // against the same notebooks share ONE card load, instead of reloading the
 // notebook (and its learning history) for every answer.
 func (s *Service) ResolveCardsByNotes(userID int64, notes []*notebook.NoteRecord, originNotebookIDs []string) ([]Card, []bool) {
-	return resolveByNotes(notes, originNotebookIDs,
-		func(nbIDs []string) ([]Card, error) { return s.LoadCards(userID, nbIDs, true, nil) },
+	cards, found, _ := s.ResolveCardsForBatch(userID, notes, originNotebookIDs)
+	return cards, found
+}
+
+// ResolveCardsForBatch is ResolveCardsByNotes that also returns the learning
+// histories its card loads read, keyed by notebook id. A batch submit passes
+// them to WithPreloadedHistories so scheduling the answers does not read them
+// again.
+func (s *Service) ResolveCardsForBatch(userID int64, notes []*notebook.NoteRecord, originNotebookIDs []string) ([]Card, []bool, map[string][]notebook.LearningHistory) {
+	histories := make(map[string][]notebook.LearningHistory)
+	cards, found := resolveByNotes(notes, originNotebookIDs,
+		func(nbIDs []string) ([]Card, error) {
+			cards, loaded, err := s.loadCards(userID, nbIDs, true, nil)
+			for id, h := range loaded {
+				histories[id] = h
+			}
+			return cards, err
+		},
 		func(c Card) string { return c.ID })
+	return cards, found, histories
 }
 
 // resolveByNotes finds each note's card (by sense id) among the cards of the
@@ -770,27 +821,29 @@ func resolveNoteNotebooks(note *notebook.NoteRecord, originNotebookID string) []
 // matching the listed titles are returned. A nil or empty list for a
 // notebook means "all sections".
 func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]Card, error) {
-	// DB mode: additively create any notes these notebooks' YAML declares but
-	// the DB is missing, so a later exclude/SkipWord (or SRS write) on a word
-	// from a freshly-added unit lands on a real note instead of erroring.
+	cards, _, err := s.loadCards(userID, notebookIDs, includeUnstudied, sectionTitlesByID)
+	return cards, err
+}
 
+// loadCards is LoadCards that also returns the learning histories it read.
+func (s *Service) loadCards(userID int64, notebookIDs []string, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]Card, map[string][]notebook.LearningHistory, error) {
 	reader, err := s.newReader()
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
+		return nil, nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
 	// Scoped to the notebooks being quizzed — not the whole learning history.
 	learningHistories, err := s.loadHistoriesForNotebooks(userID, notebookIDs...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load learning histories: %w", err)
+		return nil, nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
 	visible, err := s.visibleNotebooks(userID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+		return nil, nil, fmt.Errorf("resolve notebook visibility: %w", err)
 	}
 	if err := reader.Preload(visibleIDs(notebookIDs, visible)...); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	storyIndexes := reader.GetStoryIndexes()
@@ -804,7 +857,7 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 		// non-existent one (NotFound) so quizzing it by id can't leak its words
 		// and existence isn't disclosed (auth Phase 3).
 		if !visible(notebookID) {
-			return nil, &NotFoundError{NotebookID: notebookID}
+			return nil, nil, &NotFoundError{NotebookID: notebookID}
 		}
 		_, isStory := storyIndexes[notebookID]
 		_, isFlashcard := flashcardIndexes[notebookID]
@@ -821,13 +874,13 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 				cards = append(cards, defCards...)
 				continue
 			}
-			return nil, &NotFoundError{NotebookID: notebookID}
+			return nil, nil, &NotFoundError{NotebookID: notebookID}
 		}
 
 		if isStory {
 			storyCards, err := s.loadStoryCards(reader, userID, notebookID, learningHistories, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load story cards for notebook %q: %w", notebookID, err)
+				return nil, nil, fmt.Errorf("failed to load story cards for notebook %q: %w", notebookID, err)
 			}
 			cards = append(cards, storyCards...)
 		}
@@ -835,7 +888,7 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 		if isFlashcard {
 			flashCards, err := s.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load flashcard cards for notebook %q: %w", notebookID, err)
+				return nil, nil, fmt.Errorf("failed to load flashcard cards for notebook %q: %w", notebookID, err)
 			}
 			cards = append(cards, flashCards...)
 		}
@@ -852,7 +905,7 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 			cards[i], cards[j] = cards[j], cards[i]
 		})
 	}
-	return cards, nil
+	return cards, learningHistories, nil
 }
 
 // inSectionFilter reports whether title is allowed by filter. An empty
@@ -899,6 +952,9 @@ func (s *Service) loadStoryCards(
 	stories, err := s.readStoryNotebooksOverlaid(reader, userID, notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read story notebook %q: %w", notebookID, err)
+	}
+	if err := reader.LoadDictionary(notebook.StoryNotes(stories)); err != nil {
+		return nil, err
 	}
 
 	filtered, err := notebook.FilterStoryNotebooks(
@@ -958,6 +1014,9 @@ func (s *Service) loadFlashcardCards(
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", notebookID, err)
+	}
+	if err := reader.LoadDictionary(notebook.FlashcardNotes(notebooks)); err != nil {
+		return nil, err
 	}
 
 	filtered, err := notebook.FilterFlashcardNotebooks(
@@ -1603,34 +1662,51 @@ func (s *Service) ResolveReverseCardByNote(userID int64, note *notebook.NoteReco
 // ResolveReverseCardsByNotes is ResolveReverseCardByNote for a batch (see
 // ResolveCardsByNotes).
 func (s *Service) ResolveReverseCardsByNotes(userID int64, notes []*notebook.NoteRecord, originNotebookIDs []string) ([]ReverseCard, []bool) {
-	return resolveByNotes(notes, originNotebookIDs,
+	cards, found, _ := s.ResolveReverseCardsForBatch(userID, notes, originNotebookIDs)
+	return cards, found
+}
+
+// ResolveReverseCardsForBatch is ResolveCardsForBatch for reverse cards.
+func (s *Service) ResolveReverseCardsForBatch(userID int64, notes []*notebook.NoteRecord, originNotebookIDs []string) ([]ReverseCard, []bool, map[string][]notebook.LearningHistory) {
+	histories := make(map[string][]notebook.LearningHistory)
+	cards, found := resolveByNotes(notes, originNotebookIDs,
 		func(nbIDs []string) ([]ReverseCard, error) {
-			return s.LoadReverseCards(userID, nbIDs, false, true, nil)
+			cards, loaded, err := s.loadReverseCards(userID, nbIDs, false, true, nil)
+			for id, h := range loaded {
+				histories[id] = h
+			}
+			return cards, err
 		},
 		func(c ReverseCard) string { return c.ID })
+	return cards, found, histories
 }
 
 func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
-	// DB mode: self-heal missing notes before serving (see LoadCards).
+	cards, _, err := s.loadReverseCards(userID, notebookIDs, listMissingContext, includeUnstudied, sectionTitlesByID)
+	return cards, err
+}
 
+// loadReverseCards is LoadReverseCards that also returns the learning
+// histories it read.
+func (s *Service) loadReverseCards(userID int64, notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, map[string][]notebook.LearningHistory, error) {
 	reader, err := s.newReader()
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
+		return nil, nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
 	// Scoped to the notebooks being quizzed — not the whole learning history.
 	learningHistories, err := s.loadHistoriesForNotebooks(userID, notebookIDs...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load learning histories: %w", err)
+		return nil, nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
 	visible, err := s.visibleNotebooks(userID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+		return nil, nil, fmt.Errorf("resolve notebook visibility: %w", err)
 	}
 
 	if err := reader.Preload(visibleIDs(notebookIDs, visible)...); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	storyIndexes := reader.GetStoryIndexes()
@@ -1642,7 +1718,7 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 	for _, notebookID := range notebookIDs {
 		// See LoadCards: a private notebook the user doesn't own is NotFound.
 		if !visible(notebookID) {
-			return nil, &NotFoundError{NotebookID: notebookID}
+			return nil, nil, &NotFoundError{NotebookID: notebookID}
 		}
 		_, isStory := storyIndexes[notebookID]
 		_, isFlashcard := flashcardIndexes[notebookID]
@@ -1660,13 +1736,13 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 				cards = append(cards, defCards...)
 				continue
 			}
-			return nil, &NotFoundError{NotebookID: notebookID}
+			return nil, nil, &NotFoundError{NotebookID: notebookID}
 		}
 
 		if isStory {
 			reverseCards, err := s.loadStoryReverseCards(reader, userID, notebookID, learningHistories, listMissingContext, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load story reverse cards for notebook %q: %w", notebookID, err)
+				return nil, nil, fmt.Errorf("failed to load story reverse cards for notebook %q: %w", notebookID, err)
 			}
 			cards = append(cards, reverseCards...)
 		}
@@ -1674,7 +1750,7 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 		if isFlashcard {
 			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load flashcard reverse cards for notebook %q: %w", notebookID, err)
+				return nil, nil, fmt.Errorf("failed to load flashcard reverse cards for notebook %q: %w", notebookID, err)
 			}
 			cards = append(cards, reverseCards...)
 		}
@@ -1690,7 +1766,7 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 		})
 	}
 	applyForwardMask(cards)
-	return cards, nil
+	return cards, learningHistories, nil
 }
 
 // applyForwardMask updates each card's MaskedContext to also hide the

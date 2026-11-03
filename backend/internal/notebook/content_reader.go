@@ -32,6 +32,14 @@ type ContentLoader interface {
 	Load(ctx context.Context, ids []string) ([]NotebookContent, error)
 }
 
+// OutlineLoader is an optional ContentLoader capability: LoadOutline returns
+// the notebooks without the text of their story lines. A scene that has lines
+// keeps one empty statement, so code that only asks whether a scene has text
+// still gets the same answer. Loaders without it serve outlines with Load.
+type OutlineLoader interface {
+	LoadOutline(ctx context.Context, ids []string) ([]NotebookContent, error)
+}
+
 // DictionarySource returns the stored dictionary entries for words. A note
 // whose meaning comes from the dictionary (dictionary_number set) resolves
 // through it.
@@ -46,6 +54,11 @@ type contentCache struct {
 	ctx        context.Context
 	loader     ContentLoader
 	dictionary DictionarySource
+	// outline loads notebooks without their story line text (OutlineLoader).
+	outline bool
+	// dictionaryOnDemand fetches dictionary entries only through
+	// Reader.LoadDictionary, not with each notebook.
+	dictionaryOnDemand bool
 
 	mu     sync.Mutex
 	loaded map[string]*NotebookContent
@@ -82,14 +95,18 @@ func (c *contentCache) preload(ids []string) error {
 }
 
 func (c *contentCache) loadLocked(ids []string) error {
-	contents, err := c.loader.Load(c.ctx, ids)
+	load := c.loader.Load
+	if ol, ok := c.loader.(OutlineLoader); ok && c.outline {
+		load = ol.LoadOutline
+	}
+	contents, err := load(c.ctx, ids)
 	if err != nil {
 		return fmt.Errorf("load notebook content %v: %w", ids, err)
 	}
 	for i := range contents {
 		c.loaded[contents[i].ID] = &contents[i]
 	}
-	if c.dictionary != nil {
+	if c.dictionary != nil && !c.dictionaryOnDemand {
 		if err := c.loadDictionaryLocked(contents); err != nil {
 			return err
 		}
@@ -105,10 +122,30 @@ func (c *contentCache) loadLocked(ids []string) error {
 // loadDictionaryLocked fetches the dictionary entries the loaded notebooks'
 // dictionary-backed words need.
 func (c *contentCache) loadDictionaryLocked(contents []NotebookContent) error {
+	var notes []Note
+	for _, nc := range contents {
+		for _, fc := range nc.Families {
+			for _, f := range fc.Files {
+				notes = append(notes, StoryNotes(f.Stories)...)
+				notes = append(notes, FlashcardNotes(f.Flashcards)...)
+				for _, def := range f.Definitions {
+					for _, scene := range def.Scenes {
+						notes = append(notes, scene.Expressions...)
+					}
+				}
+			}
+		}
+	}
+	return c.fetchWordsLocked(notes)
+}
+
+// fetchWordsLocked fetches the dictionary entries of the dictionary-backed
+// notes that are not fetched yet.
+func (c *contentCache) fetchWordsLocked(notes []Note) error {
 	var words []string
-	add := func(n Note) {
+	for _, n := range notes {
 		if n.DictionaryNumber <= 0 {
-			return
+			continue
 		}
 		w := n.Definition
 		if w == "" {
@@ -116,31 +153,6 @@ func (c *contentCache) loadDictionaryLocked(contents []NotebookContent) error {
 		}
 		if _, ok := c.words[w]; !ok {
 			words = append(words, w)
-		}
-	}
-	for _, nc := range contents {
-		for _, fc := range nc.Families {
-			for _, f := range fc.Files {
-				for _, nb := range f.Stories {
-					for _, scene := range nb.Scenes {
-						for _, n := range scene.Definitions {
-							add(n)
-						}
-					}
-				}
-				for _, deck := range f.Flashcards {
-					for _, n := range deck.Cards {
-						add(n)
-					}
-				}
-				for _, def := range f.Definitions {
-					for _, scene := range def.Scenes {
-						for _, n := range scene.Expressions {
-							add(n)
-						}
-					}
-				}
-			}
 		}
 	}
 	if len(words) == 0 {
@@ -154,6 +166,39 @@ func (c *contentCache) loadDictionaryLocked(contents []NotebookContent) error {
 		c.words[w] = resp
 	}
 	return nil
+}
+
+// StoryNotes returns the definitions of every scene of stories.
+func StoryNotes(stories []StoryNotebook) []Note {
+	var notes []Note
+	for _, nb := range stories {
+		for _, scene := range nb.Scenes {
+			notes = append(notes, scene.Definitions...)
+		}
+	}
+	return notes
+}
+
+// FlashcardNotes returns the cards of every deck.
+func FlashcardNotes(decks []FlashcardNotebook) []Note {
+	var notes []Note
+	for _, deck := range decks {
+		notes = append(notes, deck.Cards...)
+	}
+	return notes
+}
+
+// LoadDictionary fetches the dictionary entries the given notes need that the
+// Reader has not fetched yet, so Dictionary() resolves them. It only fetches
+// for a Reader built with NewContentReaderDictionaryOnDemand; the others
+// already have their entries.
+func (r *Reader) LoadDictionary(notes []Note) error {
+	if r.content == nil || r.content.dictionary == nil || !r.content.dictionaryOnDemand {
+		return nil
+	}
+	r.content.mu.Lock()
+	defer r.content.mu.Unlock()
+	return r.content.fetchWordsLocked(notes)
 }
 
 // file returns the parsed file at a content path: <family>/<notebook id>/<file>.
@@ -204,6 +249,30 @@ func readContent[T any](r *Reader, p string) (T, error) {
 // read (or by Preload), with the dictionary entries its words need from
 // dictionary (nil: none), so a request touches only the notebooks it uses.
 func NewContentReader(ctx context.Context, loader ContentLoader, dictionary DictionarySource) (*Reader, error) {
+	return newContentReader(ctx, loader, dictionary, false)
+}
+
+// NewContentReaderDictionaryOnDemand is NewContentReader that fetches
+// dictionary entries only for the notes passed to LoadDictionary, for callers
+// that read many notebooks but show dictionary meanings for few of their words.
+func NewContentReaderDictionaryOnDemand(ctx context.Context, loader ContentLoader, dictionary DictionarySource) (*Reader, error) {
+	r, err := newContentReader(ctx, loader, dictionary, false)
+	if err != nil {
+		return nil, err
+	}
+	r.content.dictionaryOnDemand = true
+	return r, nil
+}
+
+// NewContentSummaryReader is a content Reader for views that only count words:
+// it loads notebooks without their story line text (see OutlineLoader) and
+// without dictionary entries, so a note's meaning is only what the notebook
+// itself stores. Never build quiz cards or render pages from it.
+func NewContentSummaryReader(ctx context.Context, loader ContentLoader) (*Reader, error) {
+	return newContentReader(ctx, loader, nil, true)
+}
+
+func newContentReader(ctx context.Context, loader ContentLoader, dictionary DictionarySource, outline bool) (*Reader, error) {
 	catalog, err := loader.Catalog(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read notebook catalog: %w", err)
@@ -223,6 +292,7 @@ func NewContentReader(ctx context.Context, loader ContentLoader, dictionary Dict
 			ctx:        ctx,
 			loader:     loader,
 			dictionary: dictionary,
+			outline:    outline,
 			loaded:     make(map[string]*NotebookContent),
 			words:      dictionaryMap,
 		},

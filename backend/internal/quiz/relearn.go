@@ -281,9 +281,15 @@ func (s *Service) LoadRelearnPool(userID int64, windowStart time.Time) ([]Relear
 	// word family as post-answer reference. Excluded words (skipped_at) are left
 	// out (fix #1: Relearn never surfaces excluded words).
 	originFamilies := buildRelearnOriginFamilies(words)
-	grammarByID, err := s.relearnGrammarIndex(userID)
-	if err != nil {
-		return nil, err
+	// Grammar posts are only needed to show a missed grammar correction.
+	var grammarByID map[string][]relearnGrammarEntry
+	for _, c := range candidates {
+		if c.format == notebook.QuizTypeGrammar {
+			if grammarByID, err = s.relearnGrammarIndex(userID); err != nil {
+				return nil, err
+			}
+			break
+		}
 	}
 
 	// resolveWord maps a wrong-word candidate to its vocabulary card, mirroring
@@ -743,16 +749,14 @@ func (s *Service) relearnGrammarIndex(userID int64) (map[string][]relearnGrammar
 	if err != nil {
 		return nil, fmt.Errorf("init reader for relearn grammar pool: %w", err)
 	}
+	posts, err := s.grammarPosts(reader, userID, reader.GrammarStoryIDs(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("load grammar posts for relearn pool: %w", err)
+	}
 	byID := make(map[string][]relearnGrammarEntry)
-	for _, storyID := range reader.GrammarStoryIDs() {
-		posts, err := s.LoadGrammarPosts(userID, storyID, nil)
-		if err != nil {
-			return nil, fmt.Errorf("load grammar posts for relearn pool (%s): %w", storyID, err)
-		}
-		for _, post := range posts {
-			for _, blank := range post.Blanks {
-				byID[blank.SenseID] = append(byID[blank.SenseID], relearnGrammarEntry{post: post, blank: blank})
-			}
+	for _, post := range posts {
+		for _, blank := range post.Blanks {
+			byID[blank.SenseID] = append(byID[blank.SenseID], relearnGrammarEntry{post: post, blank: blank})
 		}
 	}
 	return byID, nil

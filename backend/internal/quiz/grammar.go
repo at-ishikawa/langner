@@ -43,15 +43,7 @@ func (s *Service) LoadAllGrammarPosts(userID int64) ([]GrammarPost, error) {
 	if err != nil {
 		return nil, fmt.Errorf("new reader: %w", err)
 	}
-	var posts []GrammarPost
-	for _, id := range reader.GrammarStoryIDs() {
-		loaded, err := s.LoadGrammarPosts(userID, id, nil)
-		if err != nil {
-			return nil, err
-		}
-		posts = append(posts, loaded...)
-	}
-	return posts, nil
+	return s.grammarPosts(reader, userID, reader.GrammarStoryIDs(), nil)
 }
 
 // LoadGrammarPosts loads the story entries that have at least one due mistake,
@@ -79,13 +71,13 @@ func (s *Service) AllGrammarMistakeRefs(userID int64) ([]GrammarMistakeRef, erro
 	if err != nil {
 		return nil, fmt.Errorf("new reader: %w", err)
 	}
+	byNotebook, err := s.grammarMistakes(reader, userID, reader.GrammarStoryIDs(), nil)
+	if err != nil {
+		return nil, err
+	}
 	var refs []GrammarMistakeRef
 	for _, id := range reader.GrammarStoryIDs() {
-		mistakes, err := s.LoadGrammarMistakes(userID, id, nil)
-		if err != nil {
-			return nil, err
-		}
-		for _, m := range mistakes {
+		for _, m := range byNotebook[id] {
 			refs = append(refs, GrammarMistakeRef{
 				NotebookID: id,
 				EntryID:    m.EntryID,
@@ -98,90 +90,121 @@ func (s *Service) AllGrammarMistakeRefs(userID int64) ([]GrammarMistakeRef, erro
 }
 
 func (s *Service) LoadGrammarPosts(userID int64, notebookID string, entryTitles []string) ([]GrammarPost, error) {
-	var entryFilter map[string]struct{}
-	if len(entryTitles) > 0 {
-		entryFilter = make(map[string]struct{}, len(entryTitles))
-		for _, t := range entryTitles {
-			entryFilter[t] = struct{}{}
-		}
-	}
-	// A grammar notebook the user can't see yields no posts (auth Phase 3).
-	// Gating here covers both the direct grammar-quiz call and the Relearn
-	// enumeration in relearnGrammarIndex, so neither leaks a private notebook.
-	visible, err := s.visibleNotebooks(userID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
-	}
-	if !visible(notebookID) {
-		return []GrammarPost{}, nil
-	}
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
-	stories, err := reader.ReadStoryNotebooks(notebookID)
+	return s.grammarPosts(reader, userID, []string{notebookID}, entryTitles)
+}
+
+// entryTitleFilter returns the set of entryTitles, or nil (every entry) when
+// there are none.
+func entryTitleFilter(entryTitles []string) map[string]struct{} {
+	if len(entryTitles) == 0 {
+		return nil
+	}
+	filter := make(map[string]struct{}, len(entryTitles))
+	for _, t := range entryTitles {
+		filter[t] = struct{}{}
+	}
+	return filter
+}
+
+// visibleGrammarStories returns the notebooks of notebookIDs the user can see,
+// with their story entries and learning histories, read together: one
+// visibility lookup, one content load and one history read however many
+// notebooks there are.
+func (s *Service) visibleGrammarStories(reader *notebook.Reader, userID int64, notebookIDs []string) ([]string, map[string][]notebook.StoryNotebook, map[string][]notebook.LearningHistory, error) {
+	// A grammar notebook the user can't see yields nothing (auth Phase 3).
+	// Gating here covers the grammar quiz and the Relearn enumeration in
+	// relearnGrammarIndex, so neither leaks a private notebook.
+	visible, err := s.visibleNotebooks(userID)
 	if err != nil {
-		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookID, err)
+		return nil, nil, nil, fmt.Errorf("resolve notebook visibility: %w", err)
 	}
-
-	name := notebookID
-	if index, ok := reader.GetStoryIndexes()[notebookID]; ok && index.Name != "" {
-		name = index.Name
+	ids := visibleIDs(notebookIDs, visible)
+	if len(ids) == 0 {
+		return nil, nil, nil, nil
 	}
-
-	learningHistories, err := s.loadHistoriesForNotebooks(userID, notebookID)
-	if err != nil {
-		return nil, fmt.Errorf("loadHistories() > %w", err)
+	if err := reader.Preload(ids...); err != nil {
+		return nil, nil, nil, err
 	}
-	expByMistake := grammarExpressionsByID(learningHistories[notebookID])
-
-	posts := make([]GrammarPost, 0)
-	for _, sn := range stories {
-		if entryFilter != nil {
-			if _, ok := entryFilter[sn.Event]; !ok {
-				continue
-			}
+	stories := make(map[string][]notebook.StoryNotebook, len(ids))
+	for _, id := range ids {
+		sn, err := reader.ReadStoryNotebooks(id)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", id, err)
 		}
-		for sceneIdx, scene := range sn.Scenes {
-			corrections := reader.CorrectionsForScene(notebookID, sn.Event, sceneIdx)
-			if len(corrections) == 0 {
-				continue
-			}
-			blanks := make([]GrammarBlank, 0, len(corrections))
-			for seq, c := range corrections {
-				id := notebook.CorrectionID(notebookID, sn.Event, sceneIdx, seq+1, c)
-				exp, seen := expByMistake[id]
-				if !grammarMistakeDue(exp, seen) {
+		stories[id] = sn
+	}
+	histories, err := s.loadHistoriesForNotebooks(userID, ids...)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("loadHistories() > %w", err)
+	}
+	return ids, stories, histories, nil
+}
+
+// grammarPosts is LoadGrammarPosts for several notebooks at once.
+func (s *Service) grammarPosts(reader *notebook.Reader, userID int64, notebookIDs []string, entryTitles []string) ([]GrammarPost, error) {
+	entryFilter := entryTitleFilter(entryTitles)
+	ids, storiesByID, learningHistories, err := s.visibleGrammarStories(reader, userID, notebookIDs)
+	if err != nil {
+		return nil, err
+	}
+	posts := make([]GrammarPost, 0)
+	for _, notebookID := range ids {
+		name := notebookID
+		if index, ok := reader.GetStoryIndexes()[notebookID]; ok && index.Name != "" {
+			name = index.Name
+		}
+		expByMistake := grammarExpressionsByID(learningHistories[notebookID])
+		for _, sn := range storiesByID[notebookID] {
+			if entryFilter != nil {
+				if _, ok := entryFilter[sn.Event]; !ok {
 					continue
 				}
-				status := string(notebook.LearnedStatusLearning)
-				if seen {
-					status = string(exp.GetLatestStatus())
+			}
+			for sceneIdx, scene := range sn.Scenes {
+				corrections := reader.CorrectionsForScene(notebookID, sn.Event, sceneIdx)
+				if len(corrections) == 0 {
+					continue
 				}
-				blanks = append(blanks, GrammarBlank{
-					SenseID:   id,
-					Incorrect: c.Incorrect,
-					Correct:   c.Correct,
-					Category:  c.Category,
-					Reason:    c.Reason,
-					Status:    status,
+				blanks := make([]GrammarBlank, 0, len(corrections))
+				for seq, c := range corrections {
+					id := notebook.CorrectionID(notebookID, sn.Event, sceneIdx, seq+1, c)
+					exp, seen := expByMistake[id]
+					if !grammarMistakeDue(exp, seen) {
+						continue
+					}
+					status := string(notebook.LearnedStatusLearning)
+					if seen {
+						status = string(exp.GetLatestStatus())
+					}
+					blanks = append(blanks, GrammarBlank{
+						SenseID:   id,
+						Incorrect: c.Incorrect,
+						Correct:   c.Correct,
+						Category:  c.Category,
+						Reason:    c.Reason,
+						Status:    status,
+					})
+				}
+				if len(blanks) == 0 {
+					continue
+				}
+				title := sn.Event
+				if scene.Title != "" {
+					title = fmt.Sprintf("%s · %s", sn.Event, scene.Title)
+				}
+				posts = append(posts, GrammarPost{
+					NotebookID:   notebookID,
+					NotebookName: name,
+					EntryID:      fmt.Sprintf("%s#%d", sn.Event, sceneIdx),
+					Title:        title,
+					Content:      notebook.StorySceneText(scene),
+					Blanks:       blanks,
 				})
 			}
-			if len(blanks) == 0 {
-				continue
-			}
-			title := sn.Event
-			if scene.Title != "" {
-				title = fmt.Sprintf("%s · %s", sn.Event, scene.Title)
-			}
-			posts = append(posts, GrammarPost{
-				NotebookID:   notebookID,
-				NotebookName: name,
-				EntryID:      fmt.Sprintf("%s#%d", sn.Event, sceneIdx),
-				Title:        title,
-				Content:      notebook.StorySceneText(scene),
-				Blanks:       blanks,
-			})
 		}
 	}
 	return posts, nil
@@ -213,66 +236,64 @@ type GrammarMistake struct {
 // Relearn pool and reappears on Resume. When entryTitles is non-empty only
 // those entries (by title) are included; empty means every entry.
 func (s *Service) LoadGrammarMistakes(userID int64, notebookID string, entryTitles []string) ([]GrammarMistake, error) {
-	var entryFilter map[string]struct{}
-	if len(entryTitles) > 0 {
-		entryFilter = make(map[string]struct{}, len(entryTitles))
-		for _, t := range entryTitles {
-			entryFilter[t] = struct{}{}
-		}
-	}
-	// A grammar notebook the user can't see yields no mistakes (auth Phase 3).
-	visible, err := s.visibleNotebooks(userID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
-	}
-	if !visible(notebookID) {
-		return []GrammarMistake{}, nil
-	}
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
-	stories, err := reader.ReadStoryNotebooks(notebookID)
+	byNotebook, err := s.grammarMistakes(reader, userID, []string{notebookID}, entryTitles)
 	if err != nil {
-		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookID, err)
+		return nil, err
 	}
-	learningHistories, err := s.loadHistoriesForNotebooks(userID, notebookID)
-	if err != nil {
-		return nil, fmt.Errorf("loadHistories() > %w", err)
+	if byNotebook[notebookID] == nil {
+		return []GrammarMistake{}, nil
 	}
-	expByMistake := grammarExpressionsByID(learningHistories[notebookID])
+	return byNotebook[notebookID], nil
+}
 
-	mistakes := make([]GrammarMistake, 0)
-	for _, sn := range stories {
-		if entryFilter != nil {
-			if _, ok := entryFilter[sn.Event]; !ok {
-				continue
-			}
-		}
-		for sceneIdx := range sn.Scenes {
-			corrections := reader.CorrectionsForScene(notebookID, sn.Event, sceneIdx)
-			for seq, c := range corrections {
-				id := notebook.CorrectionID(notebookID, sn.Event, sceneIdx, seq+1, c)
-				exp, seen := expByMistake[id]
-				status := string(notebook.LearnedStatusLearning)
-				if seen {
-					status = string(exp.GetLatestStatus())
-				}
-				mistakes = append(mistakes, GrammarMistake{
-					SenseID:    id,
-					EntryID:    fmt.Sprintf("%s#%d", sn.Event, sceneIdx),
-					Title:      sn.Event,
-					Incorrect:  c.Incorrect,
-					Correct:    c.Correct,
-					Category:   c.Category,
-					Reason:     c.Reason,
-					Status:     status,
-					IsExcluded: seen && exp.SkippedAt.IsSkipped(notebook.QuizTypeGrammar),
-				})
-			}
-		}
+// grammarMistakes is LoadGrammarMistakes for several notebooks at once, keyed
+// by notebook id.
+func (s *Service) grammarMistakes(reader *notebook.Reader, userID int64, notebookIDs []string, entryTitles []string) (map[string][]GrammarMistake, error) {
+	entryFilter := entryTitleFilter(entryTitles)
+	ids, storiesByID, learningHistories, err := s.visibleGrammarStories(reader, userID, notebookIDs)
+	if err != nil {
+		return nil, err
 	}
-	return mistakes, nil
+	out := make(map[string][]GrammarMistake, len(ids))
+	for _, notebookID := range ids {
+		expByMistake := grammarExpressionsByID(learningHistories[notebookID])
+		mistakes := make([]GrammarMistake, 0)
+		for _, sn := range storiesByID[notebookID] {
+			if entryFilter != nil {
+				if _, ok := entryFilter[sn.Event]; !ok {
+					continue
+				}
+			}
+			for sceneIdx := range sn.Scenes {
+				corrections := reader.CorrectionsForScene(notebookID, sn.Event, sceneIdx)
+				for seq, c := range corrections {
+					id := notebook.CorrectionID(notebookID, sn.Event, sceneIdx, seq+1, c)
+					exp, seen := expByMistake[id]
+					status := string(notebook.LearnedStatusLearning)
+					if seen {
+						status = string(exp.GetLatestStatus())
+					}
+					mistakes = append(mistakes, GrammarMistake{
+						SenseID:    id,
+						EntryID:    fmt.Sprintf("%s#%d", sn.Event, sceneIdx),
+						Title:      sn.Event,
+						Incorrect:  c.Incorrect,
+						Correct:    c.Correct,
+						Category:   c.Category,
+						Reason:     c.Reason,
+						Status:     status,
+						IsExcluded: seen && exp.SkippedAt.IsSkipped(notebook.QuizTypeGrammar),
+					})
+				}
+			}
+		}
+		out[notebookID] = mistakes
+	}
+	return out, nil
 }
 
 // grammarMistakeDue reports whether a mistake is due for review: it is due when
@@ -311,10 +332,15 @@ func grammarExpressionsByID(histories []notebook.LearningHistory) map[string]not
 // grammars notebook, with GrammarReviewCount set to the number of mistakes
 // currently due.
 func (s *Service) LoadGrammarStorySummaries(userID int64) ([]NotebookSummary, error) {
-	reader, err := s.newReader()
+	reader, err := s.newSummaryReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
+	return s.grammarStorySummaries(reader, userID)
+}
+
+// grammarStorySummaries is LoadGrammarStorySummaries over a given reader.
+func (s *Service) grammarStorySummaries(reader *notebook.Reader, userID int64) ([]NotebookSummary, error) {
 	learningHistories, err := s.loadHistoriesForNotebooks(userID, reader.GrammarStoryIDs()...)
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
