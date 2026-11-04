@@ -2167,7 +2167,7 @@ func needsReverseFlashcardReview(
 	includeUnstudied bool,
 ) bool {
 	for _, h := range learningHistories {
-		if h.Metadata.Title != flashcardTitle {
+		if !h.CoversTitle(flashcardTitle) {
 			continue
 		}
 
@@ -2996,7 +2996,7 @@ func (s *Service) GetFreeformNextReviewDates(userID int64, cards []FreeformCard)
 
 func freeformNextReviewDate(histories []notebook.LearningHistory, card FreeformCard) string {
 	for _, hist := range histories {
-		if hist.Metadata.Title != card.StoryTitle {
+		if !hist.CoversTitle(card.StoryTitle) {
 			continue
 		}
 		if hist.Metadata.Type == "flashcard" {

@@ -102,7 +102,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
-		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
+		if !h.CoversTitle(storyTitle) {
 			continue
 		}
 
@@ -162,7 +162,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
-		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
+		if !h.CoversTitle(storyTitle) {
 			continue
 		}
 

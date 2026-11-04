@@ -470,10 +470,13 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 
 // EnsureNotesForNotebook additively creates any notes (and their notebook_notes
 // links) that the notebook YAML for notebookID declares but the DB is missing.
-// It NEVER updates note bodies and NEVER deletes — it does NOT run the ImportAll
-// reconcile pass — so DB-only learning state (logs, skip flags, overrides) is
-// untouched. It is idempotent: on an already-synced notebook it does no writes
-// and returns 0.
+// It NEVER updates note bodies and NEVER deletes notes — it does NOT run the
+// ImportAll reconcile pass — so DB-only learning state (logs, skip flags,
+// overrides) is untouched. The one exception is a flashcard notebook's own
+// links: regrouping its decks moves each card to its new deck, so the links of
+// this notebook whose deck no longer holds the card are removed (the note, its
+// logs and skip flags stay). It is idempotent: on an already-synced notebook it
+// does no writes and returns 0.
 //
 // Why this exists: in DB mode card CONTENT is read from the YAML notebooks while
 // learning STATE lives in Postgres keyed to real notes rows. When the operator
@@ -508,11 +511,15 @@ func (imp *Importer) EnsureNotesForNotebook(ctx context.Context, notebookID stri
 	}
 	var wanted []wantedNote
 	yamlNNCount := 0
+	decks := make(map[string]bool) // flashcard deck titles of this notebook
 	for i := range sourceNotes {
 		var nns []notebook.NotebookNote
 		for _, nn := range sourceNotes[i].NotebookNotes {
 			if nn.NotebookID == notebookID {
 				nns = append(nns, nn)
+				if nn.NotebookType == "flashcard" {
+					decks[nn.Group] = true
+				}
 			}
 		}
 		if len(nns) == 0 {
@@ -532,9 +539,11 @@ func (imp *Importer) EnsureNotesForNotebook(ctx context.Context, notebookID stri
 	// load and diff entirely. CountNotebookNotes is a capability of the DB repo
 	// (type-asserted so the YAML repo, used only outside DB mode, needn't add
 	// it); when absent we fall through to the exact diff, which is still correct.
+	// A flashcard notebook always takes the diff: regrouped decks keep the same
+	// link count, so the count can't tell they moved.
 	if counter, ok := imp.noteRepo.(interface {
 		CountNotebookNotes(context.Context, string) (int, error)
-	}); ok {
+	}); ok && len(decks) == 0 {
 		if dbCount, cerr := counter.CountNotebookNotes(ctx, notebookID); cerr == nil && dbCount >= yamlNNCount {
 			return 0, nil
 		}
@@ -555,14 +564,21 @@ func (imp *Importer) EnsureNotesForNotebook(ctx context.Context, notebookID stri
 
 	var newNotes []*notebook.NoteRecord
 	var newNNs []notebook.NotebookNote
+	wantNN := make(map[nnKey]bool)
 	seen := make(map[noteKey]bool, len(wanted))
 	for i := range wanted {
 		key := newNoteKey(wanted[i].rec.SenseID, wanted[i].rec.Usage, wanted[i].rec.Entry)
+		ex := haveNote[key]
+		if ex != nil {
+			for _, nn := range wanted[i].nns {
+				wantNN[nnKey{ex.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
+			}
+		}
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		if ex := haveNote[key]; ex != nil {
+		if ex != nil {
 			// Note already exists (possibly from another notebook sharing the
 			// sense_id): just add its notebook_notes link for this notebook.
 			for _, nn := range wanted[i].nns {
@@ -580,9 +596,6 @@ func (imp *Importer) EnsureNotesForNotebook(ctx context.Context, notebookID stri
 		newNotes = append(newNotes, &rec)
 	}
 
-	if len(newNotes) == 0 && len(newNNs) == 0 {
-		return 0, nil
-	}
 	if len(newNotes) > 0 {
 		if err := imp.noteRepo.BatchCreate(ctx, newNotes); err != nil {
 			return 0, fmt.Errorf("batch create missing notes for %q: %w", notebookID, err)
@@ -593,7 +606,57 @@ func (imp *Importer) EnsureNotesForNotebook(ctx context.Context, notebookID stri
 			return 0, fmt.Errorf("link existing notes to %q: %w", notebookID, err)
 		}
 	}
+	if len(decks) > 0 {
+		if err := imp.removeStaleDeckLinks(ctx, notebookID, decks, existing, newNotes, wantNN); err != nil {
+			return 0, err
+		}
+	}
 	return len(newNotes), nil
+}
+
+// removeStaleDeckLinks deletes this flashcard notebook's notebook_notes links
+// left behind by a deck regroup: a link whose card now sits in another deck of
+// the notebook, or whose deck no longer exists. Runs after the new links are
+// inserted (newNotes carry their resolved ids by then), so a card is never left
+// unlinked. Only links are removed — the note, its logs and skip flags stay.
+func (imp *Importer) removeStaleDeckLinks(
+	ctx context.Context,
+	notebookID string,
+	decks map[string]bool,
+	existing []notebook.NoteRecord,
+	newNotes []*notebook.NoteRecord,
+	wantNN map[nnKey]bool,
+) error {
+	linkedNotes := make(map[int64]bool)
+	for k := range wantNN {
+		linkedNotes[k.noteID] = true
+	}
+	for _, n := range newNotes {
+		linkedNotes[n.ID] = true
+		for _, nn := range n.NotebookNotes {
+			wantNN[nnKey{n.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
+		}
+	}
+
+	var stale []int64
+	for i := range existing {
+		for _, nn := range existing[i].NotebookNotes {
+			if nn.NotebookID != notebookID || nn.NotebookType != "flashcard" ||
+				wantNN[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] {
+				continue
+			}
+			if linkedNotes[nn.NoteID] || !decks[nn.Group] {
+				stale = append(stale, nn.ID)
+			}
+		}
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	if err := imp.noteRepo.BatchDeleteNotebookNotes(ctx, stale); err != nil {
+		return fmt.Errorf("remove stale deck links of %q: %w", notebookID, err)
+	}
+	return nil
 }
 
 func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions, state *classifyState) {

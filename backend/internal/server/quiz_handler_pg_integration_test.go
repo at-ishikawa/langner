@@ -225,23 +225,25 @@ func TestQuizHandler_Standard_LivePostgres_Integration(t *testing.T) {
 	mockClient := mock_inference.NewMockClient(ctrl)
 	handler, db, _, userID := pgIntegrationHandler(t, mockClient)
 
-	answerCard := func(t *testing.T) {
-		startResp, err := handler.StartQuiz(pgUserCtx(userID),
-			connect.NewRequest(&apiv1.StartQuizRequest{
-				NotebookIds:      []string{"test-vocab"},
-				IncludeUnstudied: true,
-			}))
-		require.NoError(t, err)
-		require.NotEmpty(t, startResp.Msg.GetFlashcards(), "start-quiz must produce a card for the fresh notebook")
-		noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+	// Start once: a correct answer schedules the card out of the next quiz, so
+	// the second answer re-submits the same card.
+	startResp, err := handler.StartQuiz(pgUserCtx(userID),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}))
+	require.NoError(t, err)
+	require.NotEmpty(t, startResp.Msg.GetFlashcards(), "start-quiz must produce a card for the fresh notebook")
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
 
+	answerCard := func(t *testing.T) {
 		mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
 			inference.AnswerMeaningsResponse{Answers: []inference.AnswerMeaning{{
 				Expression:        "serendipity",
 				Meaning:           "a fortunate discovery by accident",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 4}},
 			}}}, nil)
-		_, err = handler.SubmitAnswer(pgUserCtx(userID),
+		_, err := handler.SubmitAnswer(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.SubmitAnswerRequest{
 				NoteId: noteID, Answer: "a fortunate discovery by accident", ResponseTimeMs: 1000,
 			}))
@@ -265,22 +267,24 @@ func TestQuizHandler_Reverse_LivePostgres_Integration(t *testing.T) {
 	mockClient := mock_inference.NewMockClient(ctrl)
 	handler, db, _, userID := pgIntegrationHandler(t, mockClient)
 
-	answer := func(t *testing.T) {
-		startResp, err := handler.StartReverseQuiz(pgUserCtx(userID),
-			connect.NewRequest(&apiv1.StartReverseQuizRequest{
-				NotebookIds: []string{"test-vocab"}, IncludeUnstudied: true,
-			}))
-		require.NoError(t, err)
-		require.NotEmpty(t, startResp.Msg.GetFlashcards())
-		noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+	// Start once: a correct answer schedules the card out of the next quiz, so
+	// the second answer re-submits the same card.
+	startResp, err := handler.StartReverseQuiz(pgUserCtx(userID),
+		connect.NewRequest(&apiv1.StartReverseQuizRequest{
+			NotebookIds: []string{"test-vocab"}, IncludeUnstudied: true,
+		}))
+	require.NoError(t, err)
+	require.NotEmpty(t, startResp.Msg.GetFlashcards())
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
 
+	answer := func(t *testing.T) {
 		mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(
 			inference.ValidateWordFormResponse{
 				Classification: inference.ClassificationSameWord,
 				Reason:         "exact match",
 				Quality:        4,
 			}, nil)
-		_, err = handler.SubmitReverseAnswer(pgUserCtx(userID),
+		_, err := handler.SubmitReverseAnswer(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.SubmitReverseAnswerRequest{
 				NoteId: noteID, Answer: "serendipity", ResponseTimeMs: 1000,
 			}))

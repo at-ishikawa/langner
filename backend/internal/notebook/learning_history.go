@@ -66,10 +66,23 @@ func flatTypeForStory(storyTitle, sceneTitle string) string {
 	return ""
 }
 
+// CoversTitle reports whether h holds the learning series of an entry shown
+// under title. A flashcard history covers every deck title: within one notebook
+// a card is identified by its note, and deck titles only group cards for
+// display, so regrouping a notebook's decks must not orphan the cards' logs or
+// skip flags. Callers pass one notebook's histories, so this never reaches
+// another notebook's series. Every other kind matches its title.
+func (h LearningHistory) CoversTitle(title string) bool {
+	if h.Metadata.Type == "flashcard" {
+		return true
+	}
+	return normalizeQuotes(h.Metadata.Title) == normalizeQuotes(title)
+}
+
 func (h LearningHistory) GetLogs(
 	notebookTitle, sceneTitle string, definition Note,
 ) []LearningRecord {
-	if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(notebookTitle) {
+	if !h.CoversTitle(notebookTitle) {
 		return nil
 	}
 
@@ -112,7 +125,7 @@ func (h LearningHistory) GetLogs(
 func (h LearningHistory) GetReverseLogs(
 	notebookTitle, sceneTitle string, definition Note,
 ) []LearningRecord {
-	if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(notebookTitle) {
+	if !h.CoversTitle(notebookTitle) {
 		return nil
 	}
 
@@ -661,7 +674,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 // each call site supplies the quiz mode it's filtering for.
 func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition, id string, quizType QuizType) bool {
 	for _, hist := range histories {
-		if hist.Metadata.Title != event {
+		if !hist.CoversTitle(event) {
 			continue
 		}
 		if hist.Metadata.Type == "flashcard" {
