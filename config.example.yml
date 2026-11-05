@@ -134,9 +134,9 @@ inference:
 
 notebooks:
   # These directories are the IMPORT SOURCE for notebook content, not a serving
-  # path. The server serves notebook content from Postgres (the notebook_files
-  # table) in every environment; `langner-admin migrate import-content` (run by
-  # reset-db / seed-e2e) walks the dirs below and loads them into notebook_files.
+  # path. The server serves notebook content from Postgres (the content_*
+  # tables) in every environment; `langner-admin migrate import-content` (run by
+  # reset-db / seed-e2e) walks the dirs below and loads them into those tables.
   # Once the DB is seeded the running server never reads these dirs.
   #
   # Single base directory: every notebook dir below derives from it
