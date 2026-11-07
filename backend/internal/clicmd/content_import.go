@@ -2,11 +2,9 @@ package clicmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"slices"
-	"sort"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
@@ -100,52 +98,9 @@ func storeShippedNotebook(ctx context.Context, db *sqlx.DB, store *notebook.Note
 	return nil
 }
 
-// ConvertStoredFiles stores notebooks kept as raw YAML files (notebook_files,
-// before migration 038) in the content tables, keeping each notebook's
-// registry row as it is. It also rebuilds a notebook whose rows were not built
-// from its current stored files (see notebook.StoredFileBundles); notebooks
-// whose rows are current are skipped, and the files are left in place as a
-// backup. A notebook that fails to parse is reported. Returns the number
-// converted.
-func ConvertStoredFiles(ctx context.Context, db *sqlx.DB, out io.Writer) (int, error) {
-	bundles, err := notebook.StoredFileBundles(ctx, db)
-	if err != nil {
-		return 0, err
-	}
-	ids := make([]string, 0, len(bundles))
-	for id := range bundles {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
-	store := notebook.NewNotebookStore(db)
-	var errs []error
-	converted := 0
-	for _, id := range ids {
-		files := bundles[id]
-		content, err := notebook.ParseBundle(id, files)
-		if err == nil {
-			err = store.ConvertBundle(ctx, notebook.HashBundle(files), notebook.BundleBytes(files), content)
-		}
-		if err == nil {
-			_, err = datasync.EnsureContentNotes(ctx, db, content)
-		}
-		if err != nil {
-			errs = append(errs, fmt.Errorf("notebook %q: %w", id, err))
-			continue
-		}
-		converted++
-		if out != nil {
-			_, _ = fmt.Fprintf(out, "converted %s (%d file(s))\n", id, len(files))
-		}
-	}
-	return converted, errors.Join(errs...)
-}
-
 // newMigrateImportContentCommand imports the shipped notebook catalog into
 // Postgres. It is the standalone form of the step reset-db and seed-e2e run as
-// part of their seed. It first rebuilds rows that don't match their stored
-// files (ConvertStoredFiles), then stores every catalog notebook that changed.
+// part of their seed. It stores every catalog notebook that changed.
 func newMigrateImportContentCommand() *cobra.Command {
 	var force []string
 	cmd := &cobra.Command{
@@ -159,9 +114,6 @@ func newMigrateImportContentCommand() *cobra.Command {
 			}
 			defer func() { _ = db.Close() }()
 
-			if _, err := ConvertStoredFiles(ctx, db, cmd.OutOrStdout()); err != nil {
-				return fmt.Errorf("convert stored notebook files: %w", err)
-			}
 			n, err := ImportShippedContent(ctx, cfg, db, cmd.OutOrStdout(), force...)
 			if err != nil {
 				return err

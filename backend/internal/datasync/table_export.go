@@ -70,7 +70,6 @@ func DataTablesInDependencyOrder() []string {
 		"cli_device_codes",     // -> users (migration 029 CLI device flow); child of users
 		"cli_refresh_tokens",   // -> users (migration 030 CLI refresh tokens); child of users
 		"user_llm_credentials", // -> users (migration 034 per-user LLM keys); child of users
-		"notebook_files",       // FK-free string notebook_id (migration 031); pre-038 raw content files
 		// Notebook content (migration 038), children first; all -> notebooks.
 		"content_corrections",
 		"content_relations",
