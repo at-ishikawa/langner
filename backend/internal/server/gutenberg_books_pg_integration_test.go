@@ -32,8 +32,9 @@ import (
 // This test drives the WHOLE Gutenberg-books path end to end against a live
 // Postgres, through the SAME Service/NotebookHandler wiring the server uses:
 // ImportBook (with an injected fake fetcher serving the committed testdata
-// fixture) stores ONE shared, public, owner-less notebook; a second import is
-// an idempotent no-op; a DIFFERENT user can read it; then the per-user
+// fixture) stores ONE shared, public, owner-less library notebook that only the
+// users who imported it see; a second user's import adds it to their library
+// without downloading or storing it again; then the per-user
 // highlight bridge is exercised — user A's registration becomes A's reader
 // highlight + A's quiz card and B's LookupWord suggestion, while B sees neither
 // the highlight nor the card, and A's delete removes only A's copy.
@@ -45,10 +46,15 @@ import (
 type fakeGutendexClient struct {
 	sourceID string
 	raw      string
+	// downloads counts plain-text downloads.
+	downloads *int
 }
 
 func (c fakeGutendexClient) Do(req *http.Request) (*http.Response, error) {
 	u := req.URL.String()
+	if strings.Contains(u, "example.test") && c.downloads != nil {
+		*c.downloads++
+	}
 	body := ""
 	switch {
 	case strings.Contains(u, "/books/"+c.sourceID):
@@ -69,6 +75,7 @@ type booksFixture struct {
 	db              *sqlx.DB
 	userA           int64
 	userB           int64
+	downloads       *int
 }
 
 func newBooksFixture(t *testing.T) booksFixture {
@@ -120,27 +127,30 @@ func newBooksFixture(t *testing.T) booksFixture {
 	svc.SetUserDefinitionsRepo(userDefsRepo)
 	notebookHandler.SetContent(content, nil)
 	notebookHandler.SetPushDeps(db, notebook.NewNotebookStore(db))
-	notebookHandler.SetBookDeps(userDefsRepo, fakeGutendexClient{sourceID: "77", raw: string(raw)})
+	downloads := new(int)
+	notebookHandler.SetBookDeps(userDefsRepo, fakeGutendexClient{sourceID: "77", raw: string(raw), downloads: downloads})
 
-	return booksFixture{svc: svc, notebookHandler: notebookHandler, db: db, userA: userA, userB: userB}
+	return booksFixture{svc: svc, notebookHandler: notebookHandler, db: db, userA: userA, userB: userB, downloads: downloads}
 }
 
-func TestImportBook_SharedPublicAndIdempotent_LivePostgres_Integration(t *testing.T) {
+func TestImportBook_SharedCopyPerUserLibrary_LivePostgres_Integration(t *testing.T) {
 	f := newBooksFixture(t)
-	ctx := testutil.WithTestUser(context.Background(), f.userA)
+	ctxA := testutil.WithTestUser(context.Background(), f.userA)
+	ctxB := testutil.WithTestUser(context.Background(), f.userB)
 
-	resp, err := f.notebookHandler.ImportBook(ctx, connect.NewRequest(&apiv1.ImportBookRequest{SourceId: "77"}))
+	resp, err := f.notebookHandler.ImportBook(ctxA, connect.NewRequest(&apiv1.ImportBookRequest{SourceId: "77"}))
 	require.NoError(t, err)
 	assert.Equal(t, "gutenberg-77", resp.Msg.NotebookId)
+	assert.Equal(t, 1, *f.downloads)
 
-	// Stored ONCE as a shared, public, owner-less 'shipped' notebook.
+	// Stored ONCE as a shared, public, owner-less library notebook.
 	var visibility, source string
 	var owner *int64
 	require.NoError(t, f.db.QueryRow(
 		`SELECT visibility, source, owner_user_id FROM notebooks WHERE notebook_id = $1`, "gutenberg-77").
 		Scan(&visibility, &source, &owner))
 	assert.Equal(t, "public", visibility)
-	assert.Equal(t, "shipped", source)
+	assert.Equal(t, "library", source)
 	assert.Nil(t, owner, "shared books are owner-less")
 
 	// Content lands under the "books" family.
@@ -152,30 +162,49 @@ func TestImportBook_SharedPublicAndIdempotent_LivePostgres_Integration(t *testin
 	require.NoError(t, f.db.Get(&lineCount, `SELECT COUNT(*) FROM content_lines WHERE notebook_id = $1`, "gutenberg-77"))
 	require.Positive(t, lineCount, "the book's sentences are stored as rows")
 
-	// A second import by a DIFFERENT user is an idempotent no-op (upsert by id).
-	resp2, err := f.notebookHandler.ImportBook(testutil.WithTestUser(context.Background(), f.userB),
-		connect.NewRequest(&apiv1.ImportBookRequest{SourceId: "77"}))
+	// A has the book; B, who did not import it, does not see it anywhere.
+	hasBook := func(userID int64) bool {
+		summaries, err := f.svc.LoadNotebookSummaries(userID, true)
+		require.NoError(t, err)
+		for _, s := range summaries {
+			if s.NotebookID == "gutenberg-77" {
+				return true
+			}
+		}
+		return false
+	}
+	assert.True(t, hasBook(f.userA), "the importer has the book")
+	assert.False(t, hasBook(f.userB), "a user who did not import the book must not have it")
+	_, err = f.notebookHandler.GetNotebookDetail(ctxB, connect.NewRequest(&apiv1.GetNotebookDetailRequest{NotebookId: "gutenberg-77"}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "B can't open a book they did not import")
+
+	// B's import adds the shared copy to B's library: nothing is downloaded or
+	// stored again.
+	resp2, err := f.notebookHandler.ImportBook(ctxB, connect.NewRequest(&apiv1.ImportBookRequest{SourceId: "77"}))
 	require.NoError(t, err)
 	assert.Equal(t, "gutenberg-77", resp2.Msg.NotebookId)
+	assert.Equal(t, 1, *f.downloads, "an imported book is not downloaded again")
 
 	var nbCount, lineCount2 int
 	require.NoError(t, f.db.Get(&nbCount, `SELECT COUNT(*) FROM notebooks WHERE notebook_id = $1`, "gutenberg-77"))
 	require.NoError(t, f.db.Get(&lineCount2, `SELECT COUNT(*) FROM content_lines WHERE notebook_id = $1`, "gutenberg-77"))
 	assert.Equal(t, 1, nbCount, "one shared copy")
-	assert.Equal(t, lineCount, lineCount2, "re-import replaces the content wholesale, no duplication")
+	assert.Equal(t, lineCount, lineCount2, "the shared content is not duplicated")
 
-	// A different user can READ the shared book.
-	detail, err := f.notebookHandler.GetNotebookDetail(testutil.WithTestUser(context.Background(), f.userB),
-		connect.NewRequest(&apiv1.GetNotebookDetailRequest{NotebookId: "gutenberg-77"}))
+	assert.True(t, hasBook(f.userB), "after importing, B has the book")
+	detail, err := f.notebookHandler.GetNotebookDetail(ctxB, connect.NewRequest(&apiv1.GetNotebookDetailRequest{NotebookId: "gutenberg-77"}))
 	require.NoError(t, err)
 	require.NotEmpty(t, detail.Msg.Stories, "book must be readable")
 }
 
 func TestGutenbergBook_PerUserHighlightBridge_LivePostgres_Integration(t *testing.T) {
 	f := newBooksFixture(t)
-	_, err := f.notebookHandler.ImportBook(testutil.WithTestUser(context.Background(), f.userA),
-		connect.NewRequest(&apiv1.ImportBookRequest{SourceId: "77"}))
-	require.NoError(t, err)
+	for _, userID := range []int64{f.userA, f.userB} {
+		_, err := f.notebookHandler.ImportBook(testutil.WithTestUser(context.Background(), userID),
+			connect.NewRequest(&apiv1.ImportBookRequest{SourceId: "77"}))
+		require.NoError(t, err)
+	}
+	var err error
 
 	ctxA := testutil.WithTestUser(context.Background(), f.userA)
 	ctxB := testutil.WithTestUser(context.Background(), f.userB)

@@ -88,8 +88,9 @@ func DataTablesInDependencyOrder() []string {
 		"content_entries",
 		"content_files",
 		"content_indexes",
-		"notebooks", // -> users (migration 027 notebook ownership); child of users
-		"users",     // leaf parent (migration 024); notebooks + learning_logs.user_id reference it
+		"user_library", // -> users, notebooks (migration 041 per-user book library)
+		"notebooks",    // -> users (migration 027 notebook ownership); child of users
+		"users",        // leaf parent (migration 024); notebooks + learning_logs.user_id reference it
 	}
 }
 
