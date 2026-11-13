@@ -143,6 +143,8 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	// populates it on a data-only import — seed one unowned public row.
 	seedIfEmpty(ctx, t, db, "notebooks",
 		`INSERT INTO notebooks (notebook_id, visibility) VALUES ('roundtrip-seed', 'public')`)
+	seedIfEmpty(ctx, t, db, "user_library",
+		`INSERT INTO user_library (user_id, notebook_id) SELECT (SELECT MIN(id) FROM users), (SELECT MIN(notebook_id) FROM notebooks)`)
 	seedIfEmpty(ctx, t, db, "note_images",
 		`INSERT INTO note_images (note_id, url, sort_order) SELECT MIN(id), 'https://example.com/ice.png', 0 FROM notes`)
 	seedIfEmpty(ctx, t, db, "note_references",
