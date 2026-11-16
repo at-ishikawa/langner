@@ -317,11 +317,14 @@ export function RelearnOriginPost({
                   <Text fontWeight="semibold" color="fg" overflowWrap="anywhere">
                     {word.meaning}
                   </Text>
-                  {word.contexts.map((c, i) => (
-                    <Text key={i} fontSize="sm" color="fg.muted" overflowWrap="anywhere">
-                      {c.maskedContext || c.context}
-                    </Text>
-                  ))}
+                  {/* Only masked hints: the raw context contains the answer. */}
+                  {word.contexts
+                    .filter((c) => c.maskedContext)
+                    .map((c, i) => (
+                      <Text key={i} fontSize="sm" color="fg.muted" overflowWrap="anywhere">
+                        {c.maskedContext}
+                      </Text>
+                    ))}
                   {input}
                 </Box>
               );

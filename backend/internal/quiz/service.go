@@ -2001,9 +2001,16 @@ func maskWord(context, expression, definition, highlight string) string {
 // any example whose masked text STILL contains the expression / alt form /
 // highlight as a substring — so a reverse surface NEVER renders an unmasked
 // example containing the answer (an inflected example must carry a `highlight`
-// to be shown). ok=false means "do not show this example as a reverse hint".
+// to be shown). It also drops any example where masking replaced NOTHING: a
+// variant surface form with no highlight (e.g. "let the whole cat out of the
+// bag" for "let the cat out of the bag") contains none of the targets, yet the
+// raw sentence still gives the answer away. ok=false means "do not show this
+// example as a reverse hint".
 func reverseHintContext(text, expression, altForm, highlight string) (ReverseContext, bool) {
 	masked := maskWord(text, expression, altForm, highlight)
+	if masked == text {
+		return ReverseContext{}, false
+	}
 	low := strings.ToLower(masked)
 	for _, target := range []string{expression, altForm, highlight} {
 		if target == "" {
@@ -2761,12 +2768,16 @@ func loadFlashcardWords(reader *notebook.Reader, notebookID string, originMap ma
 				expression = card.Definition
 			}
 
+			// Contexts feed the grader; Examples carry each sentence's highlight
+			// so reverse surfaces (Relearn) can mask the exact surface form.
 			var contexts []inference.Context
+			var examples []Example
 			for _, ex := range card.Examples {
 				contexts = append(contexts, inference.Context{
 					Context:             ex.Text,
 					ReferenceDefinition: card.Meaning,
 				})
+				examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
 			}
 
 			cards = append(cards, FreeformCard{
@@ -2777,6 +2788,7 @@ func loadFlashcardWords(reader *notebook.Reader, notebookID string, originMap ma
 				Expression:   expression,
 				Meaning:      card.Meaning,
 				Contexts:     contexts,
+				Examples:     examples,
 				WordDetail:   buildWordDetail(&card, originMap),
 				Images:       card.Images,
 				Literal:      card.Note,
