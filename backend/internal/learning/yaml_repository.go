@@ -454,18 +454,13 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 	return nil
 }
 
-// UpdateLog rewrites the YAML log entry identified by the lookup keys.
-// Two modes:
-//
-//   - in.MirrorValues != nil (Undo path): restore the log to the
-//     captured pre-override snapshot exactly. Delegates to
-//     updater.UndoOverrideLog so status/quality/interval_days come
-//     back byte-identical.
-//   - otherwise (fresh Override path): apply in.MarkCorrect via
-//     updater.OverrideLog, which recomputes interval_days through
-//     the calculator and, for freeform variants, syncs both halves
-//     of the paired log lists.
+// UpdateLog writes in.Values onto the YAML log entry identified by the
+// lookup keys via updater.SetLogValues, which also rewrites the paired
+// entry of a freeform answer.
 func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput) (UpdateLogResult, error) {
+	if in.Values == nil {
+		return UpdateLogResult{}, nil
+	}
 	dir := r.directory
 	histories, err := notebook.NewLearningHistories(dir)
 	if err != nil {
@@ -473,82 +468,31 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 	}
 	updater := notebook.NewLearningHistoryUpdater(histories[in.NotebookName], r.calculator)
 
-	var res notebook.OverrideLogResult
-	if in.MirrorValues != nil {
-		undo := updater.UndoOverrideLog(notebook.UndoOverrideLogInput{
-			ID:                   in.ID,
-			Expression:           in.Expression,
-			OriginalExpression:   in.OriginalExpression,
-			SessionTitle:         in.StoryTitle,
-			Sense:                in.Sense,
-			QuizType:             notebook.QuizType(in.QuizType),
-			LearnedAt:            formatLearnedAt(in.LearnedAt),
-			OriginalQuality:      in.MirrorValues.Quality,
-			OriginalStatus:       in.MirrorValues.Status,
-			OriginalIntervalDays: in.MirrorValues.IntervalDays,
-		})
-		if !undo.Found {
-			return UpdateLogResult{}, nil
-		}
-		// UndoOverrideLog doesn't carry the pre-restore values (there's
-		// no callsite that needs them), so we surface the caller-
-		// supplied MirrorValues as the "new" state and leave Original*
-		// zeroed for this branch.
-		res = notebook.OverrideLogResult{
-			NewNextReviewDate: undo.NewNextReviewDate,
-			Found:             true,
-		}
-	} else {
-		res = updater.OverrideLog(notebook.OverrideLogInput{
-			ID:                 in.ID,
-			Expression:         in.Expression,
-			OriginalExpression: in.OriginalExpression,
-			SessionTitle:       in.StoryTitle,
-			Sense:              in.Sense,
-			QuizType:           notebook.QuizType(in.QuizType),
-			LearnedAt:          formatLearnedAt(in.LearnedAt),
-			MarkCorrect:        in.MarkCorrect,
-		})
-		if !res.Found {
-			return UpdateLogResult{}, nil
-		}
+	res := updater.SetLogValues(notebook.SetLogValuesInput{
+		ID:                 in.ID,
+		Expression:         in.Expression,
+		OriginalExpression: in.OriginalExpression,
+		QuizType:           notebook.QuizType(in.QuizType),
+		LearnedAt:          formatLearnedAt(in.LearnedAt),
+		Status:             notebook.LearnedStatus(in.Values.Status),
+		Quality:            in.Values.Quality,
+		IntervalDays:       in.Values.IntervalDays,
+	})
+	if !res.Found {
+		return UpdateLogResult{}, nil
 	}
 
 	notePath := filepath.Join(dir, in.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
 		return UpdateLogResult{}, fmt.Errorf("write learning history for %q: %w", in.NotebookName, err)
 	}
-	// Read back the just-written entry so the caller can mirror the
-	// exact bytes onto the secondary store. The updater's result
-	// already carries originals; we re-resolve the expression to read
-	// out the new status/quality/interval that landed on disk.
-	var expr *notebook.LearningHistoryExpression
-	if notebook.QuizType(in.QuizType) == notebook.QuizTypeEtymologyOrigin {
-		expr = notebook.FindOriginExpression(updater.GetHistory(), in.StoryTitle, in.Expression, in.Sense)
-	} else {
-		expr = updater.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
-	}
-	var newStatus string
-	var newQuality, newInterval int
-	if expr != nil {
-		logs := expr.GetLogsForQuizType(notebook.QuizType(in.QuizType))
-		for _, l := range logs {
-			if l.LearnedAt.Format(time.RFC3339) == formatLearnedAt(in.LearnedAt) ||
-				l.LearnedAt.Format("2006-01-02") == formatLearnedAt(in.LearnedAt) {
-				newStatus = string(l.Status)
-				newQuality = l.Quality
-				newInterval = l.IntervalDays
-				break
-			}
-		}
-	}
 	return UpdateLogResult{
 		OriginalQuality:      res.OriginalQuality,
 		OriginalStatus:       res.OriginalStatus,
 		OriginalIntervalDays: res.OriginalIntervalDays,
-		NewQuality:           newQuality,
-		NewStatus:            newStatus,
-		NewIntervalDays:      newInterval,
+		NewQuality:           in.Values.Quality,
+		NewStatus:            in.Values.Status,
+		NewIntervalDays:      in.Values.IntervalDays,
 		NewNextReviewDate:    res.NewNextReviewDate,
 		Found:                true,
 	}, nil

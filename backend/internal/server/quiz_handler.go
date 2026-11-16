@@ -799,6 +799,9 @@ func (h *QuizHandler) OverrideAnswer(ctx context.Context, req *connect.Request[a
 	userID, _ := auth.UserIDFromContext(ctx)
 
 	res, err := h.svc.OverrideAnswer(userID, *info, quizType)
+	if errors.Is(err, quiz.ErrOverrideNotLatest) {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override answer: %w", err))
 	}

@@ -401,9 +401,24 @@ func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 	return lastLog.Status
 }
 
+// LogSlot returns the quiz type naming the log list (and so the schedule)
+// quizType's logs belong to: reverse and etymology_origin have their own
+// lists; every other quiz type (notebook, freeform, grammar, legacy empty)
+// shares LearnedLogs and maps to notebook. GetLogsForQuizType,
+// SetLogsForQuizType, the DB history reconstruction and the interval repair
+// all route through it, so they agree on which logs form one series.
+func LogSlot(quizType QuizType) QuizType {
+	switch quizType {
+	case QuizTypeReverse, QuizTypeEtymologyOrigin:
+		return quizType
+	default:
+		return QuizTypeNotebook
+	}
+}
+
 // GetLogsForQuizType returns learning logs for the specified quiz type.
 func (exp LearningHistoryExpression) GetLogsForQuizType(quizType QuizType) []LearningRecord {
-	switch quizType {
+	switch LogSlot(quizType) {
 	case QuizTypeReverse:
 		return exp.ReverseLogs
 	case QuizTypeEtymologyOrigin:
@@ -415,7 +430,7 @@ func (exp LearningHistoryExpression) GetLogsForQuizType(quizType QuizType) []Lea
 
 // SetLogsForQuizType sets learning logs for the specified quiz type.
 func (exp *LearningHistoryExpression) SetLogsForQuizType(quizType QuizType, logs []LearningRecord) {
-	switch quizType {
+	switch LogSlot(quizType) {
 	case QuizTypeReverse:
 		exp.ReverseLogs = logs
 	case QuizTypeEtymologyOrigin:

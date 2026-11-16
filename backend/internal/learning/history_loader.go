@@ -862,16 +862,6 @@ func newExpressionFromOrigin(o notebook.EtymologyOriginRecord, logs []LearningLo
 // order, exactly like buildGrammarExpression already does.
 func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.LearningHistoryExpression {
 	var learnedLogs, reverseLogs, originLogs []notebook.LearningRecord
-	convert := func(l LearningLog) notebook.LearningRecord {
-		return notebook.LearningRecord{
-			Status:         notebook.LearnedStatus(l.Status),
-			LearnedAt:      notebook.NewDate(l.LearnedAt),
-			Quality:        l.Quality,
-			ResponseTimeMs: int64(l.ResponseTimeMs),
-			QuizType:       l.QuizType,
-			IntervalDays:   l.IntervalDays,
-		}
-	}
 	// Route each log to the SAME slot GetLogsForQuizType /
 	// SetLogsForQuizType use so the DB-reconstructed expression is
 	// symmetric with the writer (learning-history invariant L2):
@@ -880,8 +870,8 @@ func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.
 	// LearnedLogs. Freeform records stay in LearnedLogs carrying their
 	// own QuizType, exactly as the YAML reader surfaced them.
 	for _, l := range logs {
-		rec := convert(l)
-		switch notebook.QuizType(l.QuizType) {
+		rec := toLearningRecord(l)
+		switch notebook.LogSlot(notebook.QuizType(l.QuizType)) {
 		case notebook.QuizTypeReverse:
 			reverseLogs = append(reverseLogs, rec)
 		case notebook.QuizTypeEtymologyOrigin:
@@ -898,6 +888,19 @@ func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.
 		LearnedLogs:         learnedLogs,
 		ReverseLogs:         reverseLogs,
 		EtymologyOriginLogs: originLogs,
+	}
+}
+
+// toLearningRecord converts a learning_logs row to the record the history
+// and the interval calculators read.
+func toLearningRecord(l LearningLog) notebook.LearningRecord {
+	return notebook.LearningRecord{
+		Status:         notebook.LearnedStatus(l.Status),
+		LearnedAt:      notebook.NewDate(l.LearnedAt),
+		Quality:        l.Quality,
+		ResponseTimeMs: int64(l.ResponseTimeMs),
+		QuizType:       l.QuizType,
+		IntervalDays:   l.IntervalDays,
 	}
 }
 

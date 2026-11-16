@@ -40,5 +40,6 @@ schema/data and account administration.
 | `langner ebook clone/list/remove` | Manage cloned Standard Ebooks repositories |
 | `langner-admin migrate import-db` | Import notebook data into the database |
 | `langner-admin migrate schema/rollback` | Apply or roll back schema migrations |
+| `langner-admin migrate repair-intervals` | Recompute review intervals saved by older versions (reports only; `--apply` writes) |
 | `langner-admin auth provision` | Upsert allowlist/admin accounts and notebook ownership |
 | `langner-admin notebooks set-owner` | Set a notebook's visibility and owner |

@@ -12,18 +12,18 @@ import (
 	"github.com/at-ishikawa/langner/internal/database"
 )
 
-// UpdateLogInput identifies a single learning log entry and the
-// override to apply. Different implementations use different subsets:
-// the YAML repository looks up by (NotebookName + StoryTitle/SceneTitle
-// + Expression/OriginalExpression + QuizType + LearnedAt); the DB
-// repository looks up by (NoteID + QuizType + LearnedAt). Pass
-// everything you have — unused fields are ignored.
+// UpdateLogInput identifies a single learning log entry and the values
+// to write onto it. Different implementations use different subsets of
+// the lookup keys: the YAML repository looks up by (NotebookName +
+// ID/Expression/OriginalExpression + QuizType + LearnedAt); the DB
+// repository looks up by (ID/Expression/NoteID + QuizType + LearnedAt).
+// Pass everything you have — unused fields are ignored.
 //
-// MarkCorrect carries the user's intent for a fresh override. When
-// MirrorValues is non-nil the repo skips its own
-// markCorrect→status/quality derivation and writes exactly what's
-// inside — used by MultiLearningRepository so the secondary store
-// applies the same bytes the primary just wrote.
+// Values carries the status/quality/interval_days to write. The caller
+// computes them (quiz.Service.OverrideAnswer replays the series through
+// the interval calculator; UndoOverrideAnswer passes the captured
+// originals), so every store writes exactly the same values and none of
+// them guesses an interval. A nil Values is a no-op.
 type UpdateLogInput struct {
 	// UserID scopes the override to the caller's own logs (auth Phase 2): the
 	// DB UPDATE only matches a learning_logs row whose user_id equals this, so a
@@ -42,16 +42,14 @@ type UpdateLogInput struct {
 	OriginalExpression string
 	// Sense routes etymology-origin overrides to the (origin, sense) series;
 	// for etymology cards StoryTitle carries the session title. Empty otherwise.
-	Sense        string
-	QuizType     string
-	LearnedAt    time.Time
-	MarkCorrect  *bool
-	MirrorValues *UpdateLogMirror
+	Sense     string
+	QuizType  string
+	LearnedAt time.Time
+	Values    *UpdateLogValues
 }
 
-// UpdateLogMirror carries the already-computed new values when a
-// secondary store should byte-match a primary's override.
-type UpdateLogMirror struct {
+// UpdateLogValues carries the values UpdateLog writes onto the log.
+type UpdateLogValues struct {
 	Status       string
 	Quality      int
 	IntervalDays int
@@ -77,11 +75,8 @@ type LearningRepository interface {
 	FindAll(ctx context.Context) ([]LearningLog, error)
 	BatchCreate(ctx context.Context, logs []*LearningLog) error
 	Create(ctx context.Context, log *LearningLog) error
-	// UpdateLog rewrites the log identified by in's lookup keys
-	// according to in.MarkCorrect. Used by OverrideAnswer. The DB
-	// implementation can fall back to mirroring values computed
-	// upstream when in.NewStatus/NewQuality are pre-filled (used by
-	// MultiLearningRepository so YAML and DB stay byte-identical).
+	// UpdateLog writes in.Values onto the log identified by in's lookup
+	// keys. Used by OverrideAnswer and UndoOverrideAnswer.
 	UpdateLog(ctx context.Context, in UpdateLogInput) (UpdateLogResult, error)
 	// BatchDelete removes rows whose IDs appear in ids. Used by the
 	// reconcile pass to drop DB-only logs that no longer exist in YAML.
@@ -568,11 +563,10 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 	})
 }
 
-// UpdateLog rewrites a single learning_logs row identified by
-// (note_id, quiz_type, learned_at) according to in.MarkCorrect (or
-// in.MirrorValues when set). Returns the pre-update values plus the
-// recomputed next-review date so the handler can hand them back to the
-// frontend's Undo workflow.
+// UpdateLog writes in.Values onto a single learning_logs row identified by
+// (note, quiz_type, learned_at). Returns the pre-update values plus the
+// next-review date after the update so the handler can hand them back to
+// the frontend's Undo workflow.
 //
 // Note-id resolution: the frontend can't reliably know the DB's
 // notes.id (StartQuiz returns handler-assigned sequential card IDs,
@@ -583,10 +577,9 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 // card.noteId you got back from Start*Quiz" honest.
 //
 // If either the note or the log can't be found the call returns
-// Found=false with no error — MultiLearningRepository treats that as
-// a soft no-op so the YAML write's success isn't unwound.
+// Found=false with no error — callers treat that as a soft no-op.
 func (r *DBLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput) (UpdateLogResult, error) {
-	if in.QuizType == "" || in.LearnedAt.IsZero() {
+	if in.Values == nil || in.QuizType == "" || in.LearnedAt.IsZero() {
 		return UpdateLogResult{}, nil
 	}
 
@@ -649,7 +642,7 @@ func (r *DBLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput)
 		return UpdateLogResult{}, nil
 	}
 
-	newStatus, newQuality, newIntervalDays := computeOverrideValues(in, cur.Status, cur.Quality, cur.IntervalDays)
+	newStatus, newQuality, newIntervalDays := in.Values.Status, in.Values.Quality, in.Values.IntervalDays
 
 	if _, err := r.db.ExecContext(ctx, `
 		UPDATE learning_logs
@@ -669,32 +662,6 @@ func (r *DBLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput)
 		NewNextReviewDate:    cur.LearnedAt.AddDate(0, 0, newIntervalDays).Format("2006-01-02"),
 		Found:                true,
 	}, nil
-}
-
-// computeOverrideValues derives the post-override status/quality/
-// interval. If the caller provided MirrorValues (the YAML primary's
-// already-computed values, in the Multi flow), those win — keeping
-// YAML and DB byte-identical. Otherwise we apply the markCorrect
-// shorthand directly: quality 1/misunderstood or 4/understood with
-// interval reset to 1 on misunderstood, otherwise carry the prior
-// interval. The DB doesn't have the calculator's full SM-2 chain at
-// hand; for the rare DB-only deployment that's a small drift the
-// next quiz answer will replay through the YAML calculator anyway.
-func computeOverrideValues(in UpdateLogInput, curStatus string, curQuality, curInterval int) (status string, quality, intervalDays int) {
-	if in.MirrorValues != nil {
-		return in.MirrorValues.Status, in.MirrorValues.Quality, in.MirrorValues.IntervalDays
-	}
-	if in.MarkCorrect == nil {
-		return curStatus, curQuality, curInterval
-	}
-	if *in.MarkCorrect {
-		newStatus := "understood"
-		if in.QuizType == "freeform" || in.QuizType == "etymology_freeform" {
-			newStatus = "usable"
-		}
-		return newStatus, 4, max(curInterval, 1)
-	}
-	return "misunderstood", 1, 1
 }
 
 // BatchDelete removes the rows whose IDs are in the slice. Used by the

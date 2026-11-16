@@ -433,7 +433,7 @@ func TestQuizHandler_Standard_OverrideAnswer_LivePostgres_Integration(t *testing
 		}))
 	require.NoError(t, err)
 
-	// The DB row must now show "understood" — if MirrorValues isn't
+	// The DB row must now show "understood" — if the override values aren't
 	// forwarded to the DB path, the row would still say
 	// "misunderstood" and this assertion would trip.
 	require.NoError(t, db.Get(&status, `

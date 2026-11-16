@@ -148,11 +148,11 @@ func TestService_OverrideAnswer_PersistsCorrectionToYAML_DefinitionEntryFallback
 }
 
 // The frontend sends LearnedAt of the specific log the user clicked
-// Mark-as-Correct on. The backend must flip THAT log — not blindly
-// touch logs[0]. Test: mark a historical (older) misunderstood log
-// correct while a more recent understood log exists. The newer log
-// must not be touched.
-func TestService_OverrideAnswer_TargetsLearnedAt_NotJustLatest(t *testing.T) {
+// Mark-as-Correct on. When that log is not the newest of its series, the
+// later attempts' intervals were computed from it, so rewriting it alone
+// would leave them stale: the override is refused with
+// ErrOverrideNotLatest and nothing on disk changes.
+func TestService_OverrideAnswer_RejectsNonLatestAttempt(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	learningDir := t.TempDir()
 
@@ -196,7 +196,7 @@ func TestService_OverrideAnswer_TargetsLearnedAt_NotJustLatest(t *testing.T) {
 	info.MarkCorrect = &markCorrect
 
 	_, err := svc.OverrideAnswer(0, info, notebook.QuizTypeNotebook)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrOverrideNotLatest)
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "test-story.yml"))
 	require.NoError(t, err)
@@ -204,10 +204,11 @@ func TestService_OverrideAnswer_TargetsLearnedAt_NotJustLatest(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(raw, &got))
 	logs := got[0].Scenes[0].Expressions[0].LearnedLogs
 	require.Len(t, logs, 2)
-	assert.Equal(t, notebook.LearnedStatus("understood"), logs[0].Status,
-		"newest log was already understood — override of historical log must leave it untouched")
-	assert.Equal(t, notebook.LearnedStatus("understood"), logs[1].Status,
-		"the historical log at LearnedAt=2026-06-27 should have flipped to understood")
+	assert.Equal(t, notebook.LearnedStatus("understood"), logs[0].Status, "newest log must be untouched")
+	assert.Equal(t, 3, logs[0].IntervalDays)
+	assert.Equal(t, notebook.LearnedStatus("misunderstood"), logs[1].Status,
+		"a refused override must leave the historical log as it was")
+	assert.Equal(t, 1, logs[1].Quality)
 }
 
 // Freeform quizzes write each answer into both LearnedLogs AND
@@ -274,10 +275,9 @@ func TestService_OverrideAnswer_Freeform_KeepsLearnedAndReverseLogsInSync(t *tes
 
 // UndoOverrideAnswer restores the log to the caller-supplied
 // pre-override snapshot on disk — this is the path the frontend's
-// Analytics "Undo" button takes after a Mark-as-Correct. Without
-// this, YAML.UpdateLog silently no-op'd when MirrorValues was set
-// (Undo passes MirrorValues, not MarkCorrect), leaving the log stuck
-// in the overridden state.
+// Analytics "Undo" button takes after a Mark-as-Correct. The originals
+// are written back verbatim, so the log is not left stuck in the
+// overridden state.
 func TestService_UndoOverrideAnswer_RestoresOriginalStateOnDisk(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	learningDir := t.TempDir()

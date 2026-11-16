@@ -360,46 +360,38 @@ func IsExpressionExcludedForQuizType(histories []LearningHistory, id string, qui
 	return expr != nil && expr.SkippedAt.IsSkipped(quizType)
 }
 
-// OverrideLogInput carries everything OverrideLog needs to locate and
-// rewrite a single learning log entry.
+// SetLogValuesInput identifies a single learning log entry and the
+// status/quality/interval_days to write onto it.
 //
-//   - Expression / OriginalExpression: the YAML lookup key. Definitions-
-//     style cards expose the long Definition form as the card's Entry
-//     while the YAML keeps the original word; passing both lets the
-//     updater fall back. Either field may be empty.
-//   - QuizType: which per-quiz-type log list to scan. For Freeform
-//     variants, OverrideLog mirrors the write side (Create) and flips
-//     the matching entry in BOTH paired lists.
+//   - ID / Expression / OriginalExpression: the lookup key. ID takes
+//     precedence; definitions-style cards expose the long Definition form
+//     as the card's Entry while the YAML keeps the original word, so both
+//     names are tried.
+//   - QuizType: which per-quiz-type log list to scan. For Freeform the
+//     matching entry of the paired list is rewritten too (see
+//     mirrorOverrideToPair).
 //   - LearnedAt: YYYY-MM-DD or RFC3339; identifies the specific log
 //     within the list (never blindly logs[0]).
-//   - MarkCorrect: nil = no status change; non-nil = set the entry to
-//     the explicit correct/incorrect state. Toggling is not a primitive
-//     here — callers that want toggle should compute it themselves and
-//     pass the desired state, which is what the frontend already does.
-type OverrideLogInput struct {
-	// ID is the stable identity of the target entry. When set it takes
-	// precedence over Expression/OriginalExpression (which remain for the
-	// legacy id-less fallback).
+//   - Status / Quality / IntervalDays: the values to write, computed by the
+//     caller (an override recomputes them with the interval calculator; an
+//     undo passes the captured originals back).
+type SetLogValuesInput struct {
 	ID                 string
 	Expression         string
 	OriginalExpression string
 	QuizType           QuizType
 	LearnedAt          string
-	MarkCorrect        *bool
-	// SessionTitle and Sense are retained for call-site compatibility. The
-	// etymology-origin schedule now lives on the WORD's own entry (invariants
-	// L1/L4), resolved by id/expression like every other quiz type, so these no
-	// longer select a per-origin series.
-	SessionTitle string
-	Sense        string
+	Status             LearnedStatus
+	Quality            int
+	IntervalDays       int
 }
 
-// OverrideLogResult reports the pre-change values of the affected log
-// plus the recomputed next-review date. Found is false when no log
+// SetLogValuesResult reports the pre-change values of the affected log
+// plus its next-review date after the change. Found is false when no log
 // matched the (expression, quiz_type, learned_at) tuple — callers must
 // treat that as a soft no-op (the same way Update returns rows-affected
 // 0 in SQL).
-type OverrideLogResult struct {
+type SetLogValuesResult struct {
 	OriginalQuality      int
 	OriginalStatus       string
 	OriginalIntervalDays int
@@ -407,39 +399,35 @@ type OverrideLogResult struct {
 	Found                bool
 }
 
-// OverrideLog rewrites the log identified by (expression/originalExpression,
-// quizType, learnedAt) according to MarkCorrect. When the quiz type is one
-// of the freeform variants — which write the same answer into two paired
-// log lists at submit time — the override is applied to both lists in the
-// same call so the two halves of one logical answer stay in sync.
-func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogResult {
+// SetLogValues writes the given status/quality/interval_days onto the log
+// identified by (expression/originalExpression, quizType, learnedAt). It is
+// the YAML write of both Mark-as-Correct/Incorrect (with recomputed values)
+// and Undo (with the captured originals). When the quiz type is one of the
+// freeform variants — which write the same answer into two paired log lists
+// at submit time — the paired entry is rewritten in the same call so the two
+// halves of one logical answer stay in sync.
+func (u *LearningHistoryUpdater) SetLogValues(in SetLogValuesInput) SetLogValuesResult {
 	expr := u.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
 	if expr == nil {
-		return OverrideLogResult{}
+		return SetLogValuesResult{}
 	}
 
 	primary := in.QuizType.PrimaryLogList()
 	logs := getLogsByList(expr, primary)
 	idx := indexLogByLearnedAt(logs, in.LearnedAt)
 	if idx < 0 {
-		return OverrideLogResult{}
+		return SetLogValuesResult{}
 	}
 
-	result := OverrideLogResult{
+	result := SetLogValuesResult{
 		OriginalQuality:      logs[idx].Quality,
 		OriginalStatus:       string(logs[idx].Status),
 		OriginalIntervalDays: logs[idx].IntervalDays,
 	}
-
-	if in.MarkCorrect != nil {
-		applyMark(&logs[idx], *in.MarkCorrect, in.QuizType)
-		var previous []LearningRecord
-		if idx+1 < len(logs) {
-			previous = logs[idx+1:]
-		}
-		newInterval, _ := u.calculator.NextIntervalForWrite(previous, logs[idx])
-		logs[idx].IntervalDays = newInterval
-	}
+	logs[idx].Status = in.Status
+	logs[idx].Quality = in.Quality
+	logs[idx].IntervalDays = in.IntervalDays
+	logs[idx].OverrideInterval = 0
 	setLogsByList(expr, primary, logs)
 	mirrorOverrideToPair(expr, in.QuizType, logs[idx])
 
@@ -448,64 +436,12 @@ func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogRes
 	return result
 }
 
-// UndoOverrideLogInput is the symmetric input for UndoOverrideLog.
-type UndoOverrideLogInput struct {
-	ID                   string
-	Expression           string
-	OriginalExpression   string
-	QuizType             QuizType
-	LearnedAt            string
-	OriginalQuality      int
-	OriginalStatus       string
-	OriginalIntervalDays int
-	// SessionTitle and Sense — see OverrideLogInput.
-	SessionTitle string
-	Sense        string
-}
-
-// UndoOverrideLogResult mirrors OverrideLogResult for the undo path.
-type UndoOverrideLogResult struct {
-	Correct           bool
-	NewNextReviewDate string
-	Found             bool
-}
-
-// UndoOverrideLog restores a log entry to a previously captured state.
-// Used by the Analytics UI's "Undo" button after a manual override.
-// Like OverrideLog, the freeform variants mirror the restore across
-// both paired log lists.
-func (u *LearningHistoryUpdater) UndoOverrideLog(in UndoOverrideLogInput) UndoOverrideLogResult {
-	expr := u.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
-	if expr == nil {
-		return UndoOverrideLogResult{}
-	}
-
-	primary := in.QuizType.PrimaryLogList()
-	logs := getLogsByList(expr, primary)
-	idx := indexLogByLearnedAt(logs, in.LearnedAt)
-	if idx < 0 {
-		return UndoOverrideLogResult{}
-	}
-
-	logs[idx].Quality = in.OriginalQuality
-	logs[idx].Status = LearnedStatus(in.OriginalStatus)
-	logs[idx].IntervalDays = in.OriginalIntervalDays
-	logs[idx].OverrideInterval = 0
-	setLogsByList(expr, primary, logs)
-	mirrorOverrideToPair(expr, in.QuizType, logs[idx])
-
-	return UndoOverrideLogResult{
-		Correct:           logs[idx].Quality >= 3,
-		NewNextReviewDate: logs[idx].LearnedAt.AddDate(0, 0, logs[idx].IntervalDays).Format("2006-01-02"),
-		Found:             true,
-	}
-}
-
-// applyMark writes the desired correct/incorrect state onto a log.
+// ApplyMark writes the desired correct/incorrect state onto a log.
 // Standard / reverse / etymology-non-freeform use the binary
 // understood/misunderstood pair; freeform variants use can-be-used to
 // match the higher bar the freeform write path sets (active recall).
-func applyMark(log *LearningRecord, markCorrect bool, quizType QuizType) {
+// It sets only status and quality; the caller recomputes the interval.
+func ApplyMark(log *LearningRecord, markCorrect bool, quizType QuizType) {
 	if !markCorrect {
 		log.Quality = 1
 		log.Status = LearnedStatusMisunderstood
@@ -565,7 +501,7 @@ func mirrorOverrideToPair(expr *LearningHistoryExpression, quizType QuizType, up
 
 // logList is an internal enum picking which log slice on a
 // LearningHistoryExpression to read/write. Kept private to this file so
-// OverrideLog / UndoOverrideLog / mirrorOverrideToPair speak the same
+// SetLogValues / mirrorOverrideToPair speak the same
 // language without exposing the discriminator to the rest of the package.
 type logList int
 
@@ -575,7 +511,7 @@ const (
 	listEtymologyOrigin
 )
 
-// PrimaryLogList returns the log list a single OverrideLog call mutates
+// PrimaryLogList returns the log list a single SetLogValues call mutates
 // for the given quiz type. Freeform identifies its primary list here; the
 // secondary (paired) list is handled by mirrorOverrideToPair after the
 // primary has been written.
