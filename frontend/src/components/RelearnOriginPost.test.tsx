@@ -261,6 +261,28 @@ describe("RelearnOriginPost", () => {
     expect(screen.queryByText("They fought for liberty.")).not.toBeInTheDocument();
   });
 
+  it("never shows a reverse word's raw context when it has no masked form", () => {
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[
+            word("liberty", 1, 2, [
+              { context: "They fought for their liberties.", maskedContext: "" },
+            ] as RelearnCard["contexts"]),
+          ]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    expect(screen.queryByText(/fought for/)).not.toBeInTheDocument();
+  });
+
   it("disables Next while a committed word is still grading, then enables it once the grade lands", async () => {
     // A single-word family: committing the one word makes remainingCount 0, so
     // the Next control renders — but the grade is still in flight. Next must be

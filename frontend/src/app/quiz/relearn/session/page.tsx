@@ -191,13 +191,17 @@ export default function RelearnSessionPage() {
             ))}
           </Box>
         )}
-        {isReverse && current.contexts.length > 0 && (
+        {/* Reverse shows ONLY masked hints: the raw context contains the answer,
+            so a context without a masked form is skipped, never shown. */}
+        {isReverse && current.contexts.some((c) => c.maskedContext) && (
           <Box mt={3} display="flex" flexDirection="column" gap={1}>
-            {current.contexts.map((c, i) => (
-              <Text key={i} fontSize="sm" color="fg.muted">
-                {c.maskedContext || c.context}
-              </Text>
-            ))}
+            {current.contexts
+              .filter((c) => c.maskedContext)
+              .map((c, i) => (
+                <Text key={i} fontSize="sm" color="fg.muted">
+                  {c.maskedContext}
+                </Text>
+              ))}
           </Box>
         )}
       </Box>

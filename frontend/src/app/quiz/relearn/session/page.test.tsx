@@ -148,6 +148,21 @@ describe("RelearnSessionPage", () => {
     expect(screen.getByText("The word")).toBeInTheDocument();
   });
 
+  it("shows only masked hints on a reverse card, never the raw context", () => {
+    useRelearnStore.getState().seedQueue([
+      {
+        ...reverseCard("break the ice", "to start a conversation"),
+        contexts: [
+          { context: "He broke the ice with a joke.", maskedContext: "He ______ with a joke." },
+          { context: "She broke the ice at the party.", maskedContext: "" },
+        ],
+      } as RelearnCard,
+    ]);
+    renderPage();
+    expect(screen.getByText("He ______ with a joke.")).toBeInTheDocument();
+    expect(screen.queryByText(/broke the ice/)).not.toBeInTheDocument();
+  });
+
   it("submits a correct answer, shows feedback, and clears the word on Next", async () => {
     useRelearnStore.getState().seedQueue([card("alpha"), card("beta")]);
     submitRelearnAnswer.mockResolvedValue({ correct: true, meaning: "the first", reason: "ok" });

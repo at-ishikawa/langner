@@ -65,3 +65,14 @@
         - "deteriorate"
         - "aggravate"
       origin: "from Latin 'melior' meaning 'better'"
+
+    # Example 6: Examples that use a variant of the expression. `highlight`
+    # names the exact surface form so the reverse quiz can blank it. A variant
+    # sentence without a highlight cannot be masked, so it is never shown as a
+    # reverse-quiz hint (it still appears once the answer is revealed).
+    - expression: "let the cat out of the bag"
+      meaning: "to reveal a secret by mistake"
+      examples:
+        - text: "She let the whole cat out of the bag at dinner."
+          highlight: "let the whole cat out of the bag"
+        - "He let the whole cat out of the bag before the party."

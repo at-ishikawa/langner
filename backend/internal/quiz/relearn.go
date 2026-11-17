@@ -790,11 +790,13 @@ func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 			out = append(out, rc)
 		}
 	}
-	for _, c := range fc.Contexts {
-		add(c.Context, "")
-	}
+	// Examples first: they carry the highlight, and dedup keeps the first copy,
+	// so a sentence present in both lists is masked with its highlight.
 	for _, ex := range fc.Examples {
 		add(ex.Text, ex.Highlight)
+	}
+	for _, c := range fc.Contexts {
+		add(c.Context, "")
 	}
 	return out
 }
@@ -951,11 +953,12 @@ func relearnExampleHints(fc FreeformCard) []Example {
 		seen[strings.ToLower(text)] = true
 		out = append(out, Example{Text: text, Speaker: speaker, Highlight: highlight})
 	}
-	for _, c := range fc.Contexts {
-		add(c.Context, "", "")
-	}
+	// Examples first so a sentence in both lists keeps its highlight.
 	for _, ex := range fc.Examples {
 		add(ex.Text, ex.Speaker, ex.Highlight)
+	}
+	for _, c := range fc.Contexts {
+		add(c.Context, "", "")
 	}
 	return out
 }
