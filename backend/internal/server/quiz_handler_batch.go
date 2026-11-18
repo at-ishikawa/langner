@@ -231,7 +231,8 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		}
 		isSynonym := grades[i].Classification == string(inference.ClassificationSynonym)
 		if isSynonym && answers[i].GetAcceptSynonymAsCorrect() {
-			// Accepted-on-retry synonym: save as correct with reduced quality.
+			// Accepted-on-retry synonym: save as correct with a quality that holds
+			// the word's interval (see synonymAcceptedQuality).
 			grades[i].Correct = true
 			grades[i].Quality = synonymAcceptedQuality
 		}
@@ -271,9 +272,12 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 }
 
 // synonymAcceptedQuality is the SRS quality used when an answer is a synonym
-// of the expected word and the user has accepted it on retry. Lower than a
-// regular correct answer (3-5) so repeated synonym-only answers don't advance
-// the word as fast as exact-match answers.
+// of the expected word and the user has accepted it on retry. It is saved with
+// a correct status ("understood"), and a correct answer graded below 3 is a
+// HOLD for both interval calculators (notebook.isHeldAnswer): the word keeps
+// its current interval (the first step when it has none). So a synonym-only
+// answer neither advances the word like an exact-match answer (3-5) nor lapses
+// it like a wrong one.
 const synonymAcceptedQuality = 2
 
 // gradeBatch grades every answer in items and returns the results in original

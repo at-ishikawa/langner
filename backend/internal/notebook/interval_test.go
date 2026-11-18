@@ -81,6 +81,41 @@ func TestSM2Calculator_RecalculateAll(t *testing.T) {
 		})
 		assert.Equal(t, 30, logs[0].IntervalDays)
 	})
+
+	// An accepted synonym (understood, quality 2) holds: the interval, the
+	// correct streak and the EF stay where the previous answer left them, so
+	// the next correct answer advances exactly as if the synonym never happened.
+	t.Run("accepted synonym holds interval, streak and EF", func(t *testing.T) {
+		correct1 := LearningRecord{Quality: 4, LearnedAt: Date{Time: baseTime}, Status: LearnedStatusUnderstood}
+		correct2 := LearningRecord{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 3)}, Status: LearnedStatusUnderstood}
+		synonym := LearningRecord{Quality: 2, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 20)}, Status: LearnedStatusUnderstood}
+		correct3 := LearningRecord{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 40)}, Status: LearnedStatusUnderstood}
+
+		efWithout, without := calc.RecalculateAll([]LearningRecord{correct3, correct2, correct1})
+		efWith, with := calc.RecalculateAll([]LearningRecord{correct3, synonym, correct2, correct1})
+
+		require.Len(t, with, 4)
+		assert.Equal(t, with[2].IntervalDays, with[1].IntervalDays, "the synonym keeps the previous interval")
+		assert.Equal(t, without[0].IntervalDays, with[0].IntervalDays, "the next correct answer advances as if the synonym never happened")
+		assert.InDelta(t, efWithout, efWith, 1e-9, "the synonym leaves the EF unchanged")
+		assert.InDelta(t, efWithout, calc.DeriveEF([]LearningRecord{correct3, synonym, correct2, correct1}), 1e-9)
+	})
+
+	t.Run("accepted synonym with no history gets 1 day", func(t *testing.T) {
+		_, logs := calc.RecalculateAll([]LearningRecord{
+			{Quality: 2, LearnedAt: Date{Time: baseTime}, Status: LearnedStatusUnderstood},
+		})
+		assert.Equal(t, 1, logs[0].IntervalDays)
+	})
+
+	t.Run("misunderstood q2 still lapses", func(t *testing.T) {
+		_, logs := calc.RecalculateAll([]LearningRecord{
+			{Quality: 2, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 20)}, Status: LearnedStatusMisunderstood},
+			{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 3)}, Status: LearnedStatusUnderstood},
+			{Quality: 4, LearnedAt: Date{Time: baseTime}, Status: LearnedStatusUnderstood},
+		})
+		assert.Less(t, logs[0].IntervalDays, logs[1].IntervalDays)
+	})
 }
 
 func TestSM2Calculator_RecalculateAll_EarlyReviewGuard(t *testing.T) {
@@ -432,6 +467,61 @@ func TestFixedLevelCalculator_RecalculateAll(t *testing.T) {
 			},
 			validate: func(t *testing.T, logs []LearningRecord) {
 				assert.Equal(t, 1, logs[0].IntervalDays)
+			},
+		},
+		{
+			name: "accepted synonym (understood q2) on time holds the level",
+			logs: []LearningRecord{
+				{Status: LearnedStatusUnderstood, Quality: 2, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 7)}},
+				{Status: LearnedStatusUnderstood, Quality: 4, LearnedAt: Date{Time: baseTime}},
+			},
+			validate: func(t *testing.T, logs []LearningRecord) {
+				assert.Equal(t, 7, logs[1].IntervalDays)
+				assert.Equal(t, 7, logs[0].IntervalDays, "a held answer keeps 7, neither 30 nor the lapse to 1")
+			},
+		},
+		{
+			name: "usable q2 holds a higher level too",
+			logs: []LearningRecord{
+				{Status: LearnedStatusCanBeUsed, Quality: 1, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 40)}},
+				{Status: LearnedStatusUnderstood, Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 8)}},
+				{Status: LearnedStatusUnderstood, Quality: 4, LearnedAt: Date{Time: baseTime}},
+			},
+			validate: func(t *testing.T, logs []LearningRecord) {
+				assert.Equal(t, 30, logs[1].IntervalDays)
+				assert.Equal(t, 30, logs[0].IntervalDays)
+			},
+		},
+		{
+			name: "accepted synonym with no history gets the first level",
+			logs: []LearningRecord{
+				{Status: LearnedStatusUnderstood, Quality: 2, LearnedAt: Date{Time: baseTime}},
+			},
+			validate: func(t *testing.T, logs []LearningRecord) {
+				assert.Equal(t, 1, logs[0].IntervalDays)
+			},
+		},
+		{
+			name: "misunderstood q2 still lapses one level",
+			logs: []LearningRecord{
+				{Status: LearnedStatusMisunderstood, Quality: 2, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 40)}},
+				{Status: LearnedStatusUnderstood, Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 8)}},
+				{Status: LearnedStatusUnderstood, Quality: 4, LearnedAt: Date{Time: baseTime}},
+			},
+			validate: func(t *testing.T, logs []LearningRecord) {
+				assert.Equal(t, 30, logs[1].IntervalDays)
+				assert.Equal(t, 7, logs[0].IntervalDays)
+			},
+		},
+		{
+			name: "a held answer does not break the following advance",
+			logs: []LearningRecord{
+				{Status: LearnedStatusUnderstood, Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 14)}},
+				{Status: LearnedStatusUnderstood, Quality: 2, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 7)}},
+				{Status: LearnedStatusUnderstood, Quality: 4, LearnedAt: Date{Time: baseTime}},
+			},
+			validate: func(t *testing.T, logs []LearningRecord) {
+				assert.Equal(t, 30, logs[0].IntervalDays)
 			},
 		},
 	}

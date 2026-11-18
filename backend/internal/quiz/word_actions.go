@@ -386,32 +386,45 @@ type OverrideResult struct {
 	OriginalIntervalDays int
 }
 
-// OverrideAnswer rewrites the log identified by (info, quizType,
-// info.LearnedAt) according to info.MarkCorrect, on every configured
-// storage backend.
+// ErrOverrideNotLatest is returned by OverrideAnswer when the attempt the
+// learner wants to override is not the newest one in its series. Every later
+// attempt's interval was computed from this one, so rewriting it alone would
+// leave them stale; the quiz only offers the override on the attempt it just
+// wrote, which is always the newest.
+var ErrOverrideNotLatest = errors.New("only the latest attempt of a word can be overridden")
+
+// OverrideAnswer marks the log identified by (info, quizType,
+// info.LearnedAt) correct or incorrect according to info.MarkCorrect and
+// reschedules it as if it had been graded that way.
 //
-// Storage routing: the service hands the override to
-// s.learningRepository, which is whatever was wired at startup —
-// YAML, DB, or MultiLearningRepository(YAML+DB). YAML reproduces the
-// updater's full SM-2 recompute; DB does an UPDATE on
-// learning_logs(note_id, quiz_type, learned_at). For multi-store
-// setups, MultiLearningRepository runs the YAML write first and
-// mirrors the exact values onto the DB so the two stores agree.
+// The new interval is computed here, not by the store: the override
+// replays the attempt's own series (the same per-quiz-type slot the
+// writer used — GetLogsForQuizType, so forward and reverse never cross)
+// through s.calculator, using only the logs BEFORE the overridden one,
+// exactly what nextIntervalDays did when the attempt was first written.
+// The store then writes those values verbatim (YAML, DB, or both).
 //
-// info.LearnedAt MUST be the timestamp of the specific log the user
-// clicked; the override targets THAT entry, not blindly logs[0]. When
-// info.MarkCorrect is nil the call is a no-op for status/quality
-// (kept for symmetry with the proto's optional field).
+// info.LearnedAt MUST be the timestamp (or YYYY-MM-DD date) of the
+// specific log the user clicked. When it is not the newest log of the
+// series the override is refused with ErrOverrideNotLatest (see there).
+// When info.MarkCorrect is nil, or the log can't be found, the call is a
+// no-op and returns an empty result.
 //
-// Freeform variants flip the matching entry in both paired log lists
-// in the same call so the two halves of one logical freeform answer
-// stay consistent on disk.
-//
-// Returns the new next-review date as YYYY-MM-DD (empty when no
-// matching log was found).
+// Returns the new next-review date as YYYY-MM-DD plus the original
+// values the frontend needs for Undo.
 func (s *Service) OverrideAnswer(userID int64, info CardInfo, quizType notebook.QuizType) (OverrideResult, error) {
 	if s.learningRepository == nil {
 		return OverrideResult{}, fmt.Errorf("no learning repository configured")
+	}
+	if info.MarkCorrect == nil {
+		return OverrideResult{}, nil
+	}
+	values, found, err := s.overrideValues(userID, info, quizType, *info.MarkCorrect)
+	if err != nil {
+		return OverrideResult{}, err
+	}
+	if !found {
+		return OverrideResult{}, nil
 	}
 	res, err := s.learningRepository.UpdateLog(context.Background(), learning.UpdateLogInput{
 		UserID:             userID,
@@ -425,7 +438,7 @@ func (s *Service) OverrideAnswer(userID int64, info CardInfo, quizType notebook.
 		Sense:              info.Sense,
 		QuizType:           string(quizType),
 		LearnedAt:          parseLearnedAt(info.LearnedAt),
-		MarkCorrect:        info.MarkCorrect,
+		Values:             &values,
 	})
 	if err != nil {
 		return OverrideResult{}, fmt.Errorf("override learning log: %w", err)
@@ -438,15 +451,64 @@ func (s *Service) OverrideAnswer(userID int64, info CardInfo, quizType notebook.
 	}, nil
 }
 
+// overrideValues computes the status/quality/interval_days the overridden
+// log gets. It resolves the series with the same lookup nextIntervalDays
+// uses (FindExpressionInHistories by id then names → GetLogsForQuizType),
+// so the override reads the series the writer wrote (learning-history
+// invariant L2). found is false when the series or the log is missing.
+func (s *Service) overrideValues(userID int64, info CardInfo, quizType notebook.QuizType, markCorrect bool) (values learning.UpdateLogValues, found bool, err error) {
+	histories, err := s.loadHistoriesForNotebooks(userID, info.NotebookName)
+	if err != nil {
+		return learning.UpdateLogValues{}, false, fmt.Errorf("load learning history for %q: %w", info.NotebookName, err)
+	}
+	expr := notebook.FindExpressionInHistories(histories[info.NotebookName], info.ID, info.Expression, info.OriginalExpression)
+	if expr == nil {
+		return learning.UpdateLogValues{}, false, nil
+	}
+	logs := expr.GetLogsForQuizType(quizType) // newest first
+	idx := latestLogOn(logs, quizType, info.LearnedAt)
+	if idx < 0 {
+		return learning.UpdateLogValues{}, false, nil
+	}
+	if idx > 0 {
+		return learning.UpdateLogValues{}, false, ErrOverrideNotLatest
+	}
+
+	overridden := logs[idx]
+	overridden.OverrideInterval = 0
+	notebook.ApplyMark(&overridden, markCorrect, quizType)
+	interval, _ := s.calculator.NextIntervalForWrite(logs[idx+1:], overridden)
+	return learning.UpdateLogValues{
+		Status:       string(overridden.Status),
+		Quality:      overridden.Quality,
+		IntervalDays: interval,
+	}, true, nil
+}
+
+// latestLogOn returns the index of the newest log of quizType whose
+// learned_at matches learnedAt (YYYY-MM-DD or RFC3339) — the row the stores
+// rewrite — or -1. logs must be newest first. A log with no quiz type
+// (legacy YAML) matches any.
+func latestLogOn(logs []notebook.LearningRecord, quizType notebook.QuizType, learnedAt string) int {
+	for i, l := range logs {
+		if l.QuizType != "" && l.QuizType != string(quizType) {
+			continue
+		}
+		if l.LearnedAt.Format("2006-01-02") == learnedAt || l.LearnedAt.Format(time.RFC3339) == learnedAt {
+			return i
+		}
+	}
+	return -1
+}
+
 // UndoOverrideAnswer restores a previously overridden log to the
 // captured pre-override values (passed via info.OriginalQuality /
 // OriginalStatus / OriginalIntervalDays). Returns the new next-review
 // date and whether the restored entry is now considered correct.
 //
-// Implementation note: undo is just an override with MirrorValues
-// pre-set to the originals — neither markCorrect nor the calculator
-// is consulted, so the restored row is byte-identical to what it was
-// before the user clicked Mark-as-Correct.
+// Implementation note: undo writes the originals back as the log's
+// values — the calculator is not consulted, so the restored row is
+// byte-identical to what it was before the user clicked Mark-as-Correct.
 func (s *Service) UndoOverrideAnswer(userID int64, info CardInfo, quizType notebook.QuizType) (correct bool, nextReview string, err error) {
 	if s.learningRepository == nil {
 		return false, "", fmt.Errorf("no learning repository configured")
@@ -463,7 +525,7 @@ func (s *Service) UndoOverrideAnswer(userID int64, info CardInfo, quizType noteb
 		Sense:              info.Sense,
 		QuizType:           string(quizType),
 		LearnedAt:          parseLearnedAt(info.LearnedAt),
-		MirrorValues: &learning.UpdateLogMirror{
+		Values: &learning.UpdateLogValues{
 			Status:       info.OriginalStatus,
 			Quality:      info.OriginalQuality,
 			IntervalDays: info.OriginalIntervalDays,

@@ -156,6 +156,9 @@ func (c *SM2Calculator) DeriveEF(logs []LearningRecord) float64 {
 		if log.Status == LearnedStatusMisunderstood && quality >= 3 {
 			quality = 2
 		}
+		if isHeldAnswer(log.Status, quality) {
+			continue
+		}
 		if quality >= 3 {
 			correctStreak++
 		} else {
@@ -203,6 +206,19 @@ func (c *SM2Calculator) RecalculateAll(logs []LearningRecord) (float64, []Learni
 			log.Quality = quality
 		}
 
+		if isHeldAnswer(log.Status, quality) {
+			// A correct answer graded below 3 (an accepted synonym) holds the
+			// word where it is: streak, EF and interval stay unchanged.
+			if log.OverrideInterval > 0 {
+				lastInterval = log.OverrideInterval
+			}
+			if lastInterval == 0 {
+				lastInterval = 1
+			}
+			log.IntervalDays = lastInterval
+			continue
+		}
+
 		if quality >= 3 {
 			correctStreak++
 		} else {
@@ -240,10 +256,34 @@ func (c *SM2Calculator) RecalculateAll(logs []LearningRecord) (float64, []Learni
 
 // FixedLevelCalculator implements fixed interval levels.
 // Fast correct (q=5) advances two levels, other correct (q >= 3) advances one level,
-// wrong answers (q < 3) go back one level.
+// wrong answers (q < 3) go back one level, and a correct answer graded below 3
+// (see isHeldAnswer) keeps its level.
 // Levels map to a configurable list of intervals in days.
 type FixedLevelCalculator struct {
 	Intervals []int
+}
+
+// isHeldAnswer reports whether a log is a correct answer graded below 3 — an
+// answer accepted as correct that should neither advance nor lapse the word
+// (e.g. a synonym the learner accepted on retry, saved with quality 2). Both
+// calculators replay such a log as a HOLD: the word keeps its current interval
+// (the first step when it has none). A misunderstood log with a low quality is
+// a wrong answer and still lapses.
+func isHeldAnswer(status LearnedStatus, quality int) bool {
+	if quality >= 3 {
+		return false
+	}
+	return status == LearnedStatusUnderstood || status == LearnedStatusCanBeUsed
+}
+
+// recordLevelDelta returns the level change a stored log applies during a
+// replay: a held answer (see isHeldAnswer) keeps the level, otherwise the
+// quality decides.
+func recordLevelDelta(status LearnedStatus, quality int) int {
+	if isHeldAnswer(status, quality) {
+		return 0
+	}
+	return qualityToLevelDelta(quality)
 }
 
 // qualityToLevelDelta returns the level change for a given quality grade.
@@ -290,27 +330,30 @@ func (c *FixedLevelCalculator) NextIntervalForWrite(existingLogs []LearningRecor
 // CalculateInterval computes the next interval using fixed levels.
 // Derives current level from the most recent log's stored interval,
 // then advances by the quality delta.
+//
+// It sees only a quality, not a status, so it cannot tell a held answer (see
+// isHeldAnswer) from a wrong one; RecalculateAll, which every write and replay
+// goes through, does.
 func (c *FixedLevelCalculator) CalculateInterval(logs []LearningRecord, currentQuality int, _ float64) (int, float64) {
-	intervals := c.intervals()
-	maxLevel := len(intervals) - 1
-
-	// Derive current level from the most recent log's interval
-	level := 0
+	lastInterval := 0
 	if len(logs) > 0 {
-		level = c.levelFromInterval(logs[0].IntervalDays)
+		lastInterval = logs[0].IntervalDays
 	}
+	return c.shiftLevel(lastInterval, qualityToLevelDelta(currentQuality)), 0
+}
 
-	// Apply current quality
-	level += qualityToLevelDelta(currentQuality)
-
+// shiftLevel derives the level of lastInterval, moves it by delta (clamped to
+// the ladder) and returns that level's interval.
+func (c *FixedLevelCalculator) shiftLevel(lastInterval, delta int) int {
+	intervals := c.intervals()
+	level := c.levelFromInterval(lastInterval) + delta
 	if level < 0 {
 		level = 0
 	}
-	if level > maxLevel {
-		level = maxLevel
+	if level > len(intervals)-1 {
+		level = len(intervals) - 1
 	}
-
-	return intervals[level], 0
+	return intervals[level]
 }
 
 // RecalculateAll replays logs oldest-to-newest using fixed interval levels,
@@ -346,13 +389,7 @@ func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, [
 		if log.OverrideInterval > 0 {
 			nextInterval = log.OverrideInterval
 		} else {
-			// Build a fake "previous logs" slice with just the last interval
-			// so CalculateInterval can derive the current level.
-			prevLogs := []LearningRecord{}
-			if lastInterval > 0 {
-				prevLogs = []LearningRecord{{IntervalDays: lastInterval}}
-			}
-			nextInterval, _ = c.CalculateInterval(prevLogs, q, 0)
+			nextInterval = c.shiftLevel(lastInterval, recordLevelDelta(log.Status, q))
 		}
 
 		// Early review guard
