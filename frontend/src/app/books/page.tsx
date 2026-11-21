@@ -26,9 +26,10 @@ import { Card } from "@/components/Card";
 // BooksPage is the Project Gutenberg discovery surface (reached from the home
 // page). It BROWSES the popular catalog on load — no search required — and
 // paginates it; typing a title/author switches to a free-text search. Importing
-// a book stores it once as a shared notebook and jumps into the reader, where
-// highlighting → saving → quizzing all happen. Already-imported shared books
-// (gutenberg- ids, visible via quiz options) are listed under "Continue reading".
+// a book adds it to the user's library (the text is stored once and shared) and
+// jumps into the reader, where highlighting → saving → quizzing all happen. The
+// user's imported books (gutenberg- ids, visible via quiz options) are listed
+// under "Continue reading".
 export default function BooksPage() {
   const router = useRouter();
   const [input, setInput] = useState("");

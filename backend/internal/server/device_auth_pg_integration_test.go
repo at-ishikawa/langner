@@ -114,7 +114,6 @@ func TestDeviceFlow_RealConfig_LivePostgres(t *testing.T) {
 		State:          state,
 		Users:          users,
 		DeviceCodes:    deviceCodes,
-		AllowedEmails:  cfg.Auth.AllowedEmails,
 		FrontendURL:    cfg.Auth.FrontendURL,
 		AllowedOrigins: cfg.Server.CORS.AllowedOrigins,
 		CookieSecure:   false,

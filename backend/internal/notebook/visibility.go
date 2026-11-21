@@ -27,7 +27,8 @@ type NotebookVisibility interface {
 	// VisibleNotebookIDs returns a predicate reporting whether a notebook is
 	// visible to userID. Public and unlisted (no ownership row) notebooks and
 	// the user's own private notebooks pass; someone else's private notebook —
-	// or a private notebook with no owner — is hidden.
+	// or a private notebook with no owner — is hidden, and so is a shared
+	// library book the user has not imported.
 	VisibleNotebookIDs(ctx context.Context, userID int64) (VisibilityPredicate, error)
 }
 
@@ -65,7 +66,8 @@ func NewNotebookACLRepository(db *sqlx.DB) *NotebookACLRepository {
 }
 
 // VisibleNotebookIDs computes the HIDDEN set for userID — the private notebooks
-// that are NOT theirs — in one query, then returns visible(id) = id NOT IN that
+// that are NOT theirs, and the shared library books (source='library') they
+// have not added to their library — in one query, then returns visible(id) = id NOT IN that
 // set. Framing it as "hidden" rather than "visible" is what makes an unlisted
 // notebook (no ownership row) fall through to visible for free: only private,
 // non-owned rows can hide a notebook, so public rows, missing rows, and the
@@ -79,7 +81,9 @@ func (r *NotebookACLRepository) VisibleNotebookIDs(ctx context.Context, userID i
 	var hiddenIDs []string
 	if err := r.db.SelectContext(ctx, &hiddenIDs,
 		`SELECT notebook_id FROM notebooks
-		 WHERE visibility = 'private' AND (owner_user_id IS NULL OR owner_user_id <> $1)`,
+		 WHERE (visibility = 'private' AND (owner_user_id IS NULL OR owner_user_id <> $1))
+		    OR (source = 'library' AND NOT EXISTS (
+		          SELECT 1 FROM user_library l WHERE l.notebook_id = notebooks.notebook_id AND l.user_id = $1))`,
 		userID,
 	); err != nil {
 		return nil, fmt.Errorf("select hidden notebooks: %w", err)
