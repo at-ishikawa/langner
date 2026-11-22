@@ -65,11 +65,14 @@ func (h *NotebookHandler) ImportBook(
 	if err != nil {
 		return nil, err
 	}
+	sourceID := req.Msg.GetSourceId()
+	if !isGutenbergID(sourceID) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source_id %q is not a Project Gutenberg book number", sourceID))
+	}
 	if h.db == nil || h.store == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("importing books requires a configured database"))
 	}
 
-	sourceID := req.Msg.GetSourceId()
 	added, err := h.store.AddToLibrary(ctx, userID, bookNotebookID(sourceID))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("add book to library: %w", err))
@@ -102,6 +105,20 @@ func (h *NotebookHandler) ImportBook(
 
 // bookNotebookID is the shared notebook id of a Project Gutenberg book.
 func bookNotebookID(sourceID string) string { return "gutenberg-" + sourceID }
+
+// isGutenbergID reports whether sourceID is a Project Gutenberg book number;
+// it becomes part of both the download URL and the notebook id.
+func isGutenbergID(sourceID string) bool {
+	if sourceID == "" {
+		return false
+	}
+	for _, r := range sourceID {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // buildBookBundle parses a raw Project Gutenberg plain-text book into stored
 // notebook files, overriding the index id with the DETERMINISTIC shared id
