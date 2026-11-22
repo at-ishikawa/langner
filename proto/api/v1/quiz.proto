@@ -83,6 +83,13 @@ service QuizService {
   rpc ListGrammarMistakes(ListGrammarMistakesRequest) returns (ListGrammarMistakesResponse);
   rpc ExcludeGrammarMistake(ExcludeGrammarMistakeRequest) returns (ExcludeGrammarMistakeResponse);
   rpc ResumeGrammarMistake(ResumeGrammarMistakeRequest) returns (ResumeGrammarMistakeResponse);
+
+  // Review schedule — the signed-in user's choice of how far apart reviews
+  // are (Settings). A user who never saved one follows the server default
+  // (quiz.algorithm / quiz.fixed_intervals). Changing it schedules future
+  // answers only; past answers keep the dates they were given.
+  rpc GetIntervalSettings(GetIntervalSettingsRequest) returns (GetIntervalSettingsResponse);
+  rpc UpdateIntervalSettings(UpdateIntervalSettingsRequest) returns (UpdateIntervalSettingsResponse);
 }
 
 message GetQuizOptionsRequest {
@@ -859,3 +866,39 @@ message ResumeEtymologyWordRequest {
 
 message ResumeEtymologyWordResponse {}
 
+
+// IntervalSettings is a review schedule.
+message IntervalSettings {
+  // algorithm is "fixed" (the fixed_intervals ladder) or "modified_sm2"
+  // (intervals adapt to how easily each word is recalled).
+  string algorithm = 1;
+  // fixed_intervals is the ladder in days, strictly ascending, for "fixed";
+  // empty for "modified_sm2".
+  repeated int32 fixed_intervals = 2;
+}
+
+message GetIntervalSettingsRequest {}
+
+message GetIntervalSettingsResponse {
+  // settings is the schedule the user's answers are scheduled with.
+  IntervalSettings settings = 1;
+  // is_default is true when the user saved no schedule and follows the
+  // server default.
+  bool is_default = 2;
+  // default_settings is the server default schedule.
+  IntervalSettings default_settings = 3;
+}
+
+message UpdateIntervalSettingsRequest {
+  // settings is the schedule to save. Ignored when reset_to_default is set.
+  IntervalSettings settings = 1;
+  // reset_to_default removes the user's schedule so they follow the server
+  // default again.
+  bool reset_to_default = 2;
+}
+
+message UpdateIntervalSettingsResponse {
+  IntervalSettings settings = 1;
+  bool is_default = 2;
+  IntervalSettings default_settings = 3;
+}

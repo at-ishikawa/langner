@@ -235,6 +235,9 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	svc := quiz.NewService(cfg.Notebooks, clientResolver, dictionaryMap, learningRepo, cfg.Quiz)
 	svc.SetHistoryStore(historyStore)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
+	// Each user's answers are scheduled with their own review schedule
+	// (Settings), else the quiz config default.
+	svc.SetIntervalSchedules(repos.Intervals)
 
 	if content != nil {
 		svc.SetContent(content, dictionaryEntries)

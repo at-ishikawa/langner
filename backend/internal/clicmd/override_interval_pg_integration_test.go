@@ -102,11 +102,14 @@ func newOverrideIntervalEnv(t *testing.T) *overrideIntervalEnv {
 			}}}, nil
 		}).AnyTimes()
 
-	env.repos = bootstrap.BuildStateRepositories(cfg.Notebooks, cfg.Quiz, db)
+	// The server default is the fixed ladder (QUIZ_ALGORITHM=fixed); wired the
+	// way serverapp wires it, so a user's own schedule (Settings) overrides it.
+	quizCfg := config.QuizConfig{Algorithm: "fixed", FixedIntervals: overrideIntervalLadder}
+	env.repos = bootstrap.BuildStateRepositories(cfg.Notebooks, quizCfg, db)
 	require.NotNil(t, env.repos.HistoryStore)
-	env.svc = quiz.NewService(cfg.Notebooks, inference.StaticResolver(client), nil, env.repos.Learning,
-		config.QuizConfig{Algorithm: "fixed", FixedIntervals: overrideIntervalLadder})
+	env.svc = quiz.NewService(cfg.Notebooks, inference.StaticResolver(client), nil, env.repos.Learning, quizCfg)
 	env.svc.SetHistoryStore(env.repos.HistoryStore)
+	env.svc.SetIntervalSchedules(env.repos.Intervals)
 	env.userID = seedIntegrationUser(t, db, "override-interval-user")
 	env.ctx = auth.WithUserID(context.Background(), env.userID)
 	return env
@@ -499,7 +502,7 @@ func TestRepairLatestIntervals_LivePostgres_Integration(t *testing.T) {
 
 	assert.Contains(t, repair("--apply"), "Repaired the interval of 0 learning log(s).", "a second run changes nothing")
 
-	n, err := learning.RepairLatestIntervals(env.ctx, env.db, notebook.NewIntervalCalculator("fixed", overrideIntervalLadder), false)
+	n, err := learning.RepairLatestIntervals(env.ctx, env.db, learning.NewIntervalSchedules(env.db, config.QuizConfig{Algorithm: "fixed", FixedIntervals: overrideIntervalLadder}), false)
 	require.NoError(t, err)
 	assert.Zero(t, n)
 }

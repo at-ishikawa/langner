@@ -200,6 +200,11 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		`INSERT INTO user_llm_credentials (user_id, provider, api_key_encrypted, model)
 		 SELECT id, 'openai', '\x0123456789abcdef'::bytea, 'gpt-4o-mini'
 		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
+	// user_interval_settings (migration 042): a per-user review schedule; the
+	// INTEGER[] ladder exercises the int-array round trip.
+	seedIfEmpty(ctx, t, db, "user_interval_settings",
+		`INSERT INTO user_interval_settings (user_id, algorithm, fixed_intervals)
+		 SELECT id, 'fixed', '{1,3,10,30}' FROM users WHERE google_sub='roundtrip-seed-sub'`)
 	// user_notebook_definitions (migration 036): a per-user private book-highlight
 	// registration, attributed to the seeded user and an existing note, so the new
 	// table dumps + restores (examples is JSON text).

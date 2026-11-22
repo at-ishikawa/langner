@@ -45,8 +45,9 @@ func batchNoteRefs[A interface {
 }
 
 // preloadHistories returns a context carrying the distinct notebooks'
-// histories, so the per-card SaveResultInfo calls in a batch reuse one scoped
-// read per notebook instead of issuing one per graded card. loaded holds the
+// histories and the user's review schedule, so the per-card SaveResultInfo
+// calls in a batch reuse one scoped read per notebook (and one schedule
+// lookup) instead of issuing them per graded card. loaded holds the
 // histories already read while resolving the cards; only the other notebooks
 // are read here.
 func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []string, loaded map[string][]notebook.LearningHistory) context.Context {
@@ -71,6 +72,7 @@ func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []stri
 			histories[id] = hs
 		}
 	}
+	ctx = h.svc.IntervalSchedules().WithCalculator(ctx, userID)
 	return quiz.WithPreloadedHistories(ctx, histories)
 }
 

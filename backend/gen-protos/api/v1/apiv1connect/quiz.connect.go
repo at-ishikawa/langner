@@ -99,6 +99,12 @@ const (
 	// QuizServiceResumeGrammarMistakeProcedure is the fully-qualified name of the QuizService's
 	// ResumeGrammarMistake RPC.
 	QuizServiceResumeGrammarMistakeProcedure = "/api.v1.QuizService/ResumeGrammarMistake"
+	// QuizServiceGetIntervalSettingsProcedure is the fully-qualified name of the QuizService's
+	// GetIntervalSettings RPC.
+	QuizServiceGetIntervalSettingsProcedure = "/api.v1.QuizService/GetIntervalSettings"
+	// QuizServiceUpdateIntervalSettingsProcedure is the fully-qualified name of the QuizService's
+	// UpdateIntervalSettings RPC.
+	QuizServiceUpdateIntervalSettingsProcedure = "/api.v1.QuizService/UpdateIntervalSettings"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -152,6 +158,12 @@ type QuizServiceClient interface {
 	ListGrammarMistakes(context.Context, *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error)
 	ExcludeGrammarMistake(context.Context, *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error)
 	ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error)
+	// Review schedule — the signed-in user's choice of how far apart reviews
+	// are (Settings). A user who never saved one follows the server default
+	// (quiz.algorithm / quiz.fixed_intervals). Changing it schedules future
+	// answers only; past answers keep the dates they were given.
+	GetIntervalSettings(context.Context, *connect.Request[v1.GetIntervalSettingsRequest]) (*connect.Response[v1.GetIntervalSettingsResponse], error)
+	UpdateIntervalSettings(context.Context, *connect.Request[v1.UpdateIntervalSettingsRequest]) (*connect.Response[v1.UpdateIntervalSettingsResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -303,6 +315,18 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("ResumeGrammarMistake")),
 			connect.WithClientOptions(opts...),
 		),
+		getIntervalSettings: connect.NewClient[v1.GetIntervalSettingsRequest, v1.GetIntervalSettingsResponse](
+			httpClient,
+			baseURL+QuizServiceGetIntervalSettingsProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("GetIntervalSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		updateIntervalSettings: connect.NewClient[v1.UpdateIntervalSettingsRequest, v1.UpdateIntervalSettingsResponse](
+			httpClient,
+			baseURL+QuizServiceUpdateIntervalSettingsProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("UpdateIntervalSettings")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -331,6 +355,8 @@ type quizServiceClient struct {
 	listGrammarMistakes       *connect.Client[v1.ListGrammarMistakesRequest, v1.ListGrammarMistakesResponse]
 	excludeGrammarMistake     *connect.Client[v1.ExcludeGrammarMistakeRequest, v1.ExcludeGrammarMistakeResponse]
 	resumeGrammarMistake      *connect.Client[v1.ResumeGrammarMistakeRequest, v1.ResumeGrammarMistakeResponse]
+	getIntervalSettings       *connect.Client[v1.GetIntervalSettingsRequest, v1.GetIntervalSettingsResponse]
+	updateIntervalSettings    *connect.Client[v1.UpdateIntervalSettingsRequest, v1.UpdateIntervalSettingsResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -448,6 +474,16 @@ func (c *quizServiceClient) ResumeGrammarMistake(ctx context.Context, req *conne
 	return c.resumeGrammarMistake.CallUnary(ctx, req)
 }
 
+// GetIntervalSettings calls api.v1.QuizService.GetIntervalSettings.
+func (c *quizServiceClient) GetIntervalSettings(ctx context.Context, req *connect.Request[v1.GetIntervalSettingsRequest]) (*connect.Response[v1.GetIntervalSettingsResponse], error) {
+	return c.getIntervalSettings.CallUnary(ctx, req)
+}
+
+// UpdateIntervalSettings calls api.v1.QuizService.UpdateIntervalSettings.
+func (c *quizServiceClient) UpdateIntervalSettings(ctx context.Context, req *connect.Request[v1.UpdateIntervalSettingsRequest]) (*connect.Response[v1.UpdateIntervalSettingsResponse], error) {
+	return c.updateIntervalSettings.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
@@ -499,6 +535,12 @@ type QuizServiceHandler interface {
 	ListGrammarMistakes(context.Context, *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error)
 	ExcludeGrammarMistake(context.Context, *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error)
 	ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error)
+	// Review schedule — the signed-in user's choice of how far apart reviews
+	// are (Settings). A user who never saved one follows the server default
+	// (quiz.algorithm / quiz.fixed_intervals). Changing it schedules future
+	// answers only; past answers keep the dates they were given.
+	GetIntervalSettings(context.Context, *connect.Request[v1.GetIntervalSettingsRequest]) (*connect.Response[v1.GetIntervalSettingsResponse], error)
+	UpdateIntervalSettings(context.Context, *connect.Request[v1.UpdateIntervalSettingsRequest]) (*connect.Response[v1.UpdateIntervalSettingsResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -646,6 +688,18 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("ResumeGrammarMistake")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceGetIntervalSettingsHandler := connect.NewUnaryHandler(
+		QuizServiceGetIntervalSettingsProcedure,
+		svc.GetIntervalSettings,
+		connect.WithSchema(quizServiceMethods.ByName("GetIntervalSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceUpdateIntervalSettingsHandler := connect.NewUnaryHandler(
+		QuizServiceUpdateIntervalSettingsProcedure,
+		svc.UpdateIntervalSettings,
+		connect.WithSchema(quizServiceMethods.ByName("UpdateIntervalSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuizServiceGetQuizOptionsProcedure:
@@ -694,6 +748,10 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceExcludeGrammarMistakeHandler.ServeHTTP(w, r)
 		case QuizServiceResumeGrammarMistakeProcedure:
 			quizServiceResumeGrammarMistakeHandler.ServeHTTP(w, r)
+		case QuizServiceGetIntervalSettingsProcedure:
+			quizServiceGetIntervalSettingsHandler.ServeHTTP(w, r)
+		case QuizServiceUpdateIntervalSettingsProcedure:
+			quizServiceUpdateIntervalSettingsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -793,4 +851,12 @@ func (UnimplementedQuizServiceHandler) ExcludeGrammarMistake(context.Context, *c
 
 func (UnimplementedQuizServiceHandler) ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ResumeGrammarMistake is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) GetIntervalSettings(context.Context, *connect.Request[v1.GetIntervalSettingsRequest]) (*connect.Response[v1.GetIntervalSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.GetIntervalSettings is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) UpdateIntervalSettings(context.Context, *connect.Request[v1.UpdateIntervalSettingsRequest]) (*connect.Response[v1.UpdateIntervalSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.UpdateIntervalSettings is not implemented"))
 }

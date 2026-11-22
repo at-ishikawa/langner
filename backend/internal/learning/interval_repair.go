@@ -20,16 +20,17 @@ type intervalSeries struct {
 	slot         notebook.QuizType
 }
 
-// RepairLatestIntervals replays every learning-log series with calculator and
-// rewrites the NEWEST row's interval_days wherever it differs from the replay.
+// RepairLatestIntervals replays every learning-log series with its user's
+// review schedule (schedules.CalculatorFor: the user's saved choice, else the
+// server default) and rewrites the NEWEST row's interval_days wherever it differs from the replay.
 // Only the newest row decides when a word is due next, so older rows are left
 // alone. The newest row is recomputed exactly as the quiz computes it when it
-// writes an attempt: calculator.NextIntervalForWrite over the series' earlier
+// writes an attempt: the user's calculator.NextIntervalForWrite over the series' earlier
 // logs. It repairs rows an earlier version scheduled wrongly (a Mark-as-Correct
 // that kept the wrong answer's interval, an accepted synonym scheduled as a
 // lapse). Running it again changes nothing. With apply false it only counts the
 // rows it would rewrite. Returns how many rows it rewrote (or would rewrite).
-func RepairLatestIntervals(ctx context.Context, db *sqlx.DB, calculator notebook.IntervalCalculator, apply bool) (int, error) {
+func RepairLatestIntervals(ctx context.Context, db *sqlx.DB, schedules *IntervalSchedules, apply bool) (int, error) {
 	var logs []LearningLog
 	if err := db.SelectContext(ctx, &logs, selectScopedLearningLogColumns+" ORDER BY id"); err != nil {
 		return 0, fmt.Errorf("load learning logs: %w", err)
@@ -52,7 +53,16 @@ func RepairLatestIntervals(ctx context.Context, db *sqlx.DB, calculator notebook
 		intervalDays int
 	}
 	var fixes []fix
-	for _, series := range bySeries {
+	calculators := make(map[int64]notebook.IntervalCalculator)
+	for key, series := range bySeries {
+		calculator, ok := calculators[key.userID]
+		if !ok {
+			var err error
+			if calculator, err = schedules.CalculatorFor(ctx, key.userID); err != nil {
+				return 0, err
+			}
+			calculators[key.userID] = calculator
+		}
 		newest := 0
 		for i, l := range series {
 			if l.LearnedAt.After(series[newest].LearnedAt) ||

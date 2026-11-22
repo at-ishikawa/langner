@@ -511,7 +511,11 @@ func (s *Service) SaveGrammarBlankInfo(ctx context.Context, userID int64, notebo
 		IsCorrect:        result.Correct,
 		LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(ctx, userID, notebookID, senseID, notebook.QuizTypeGrammar, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, senseID)
+	intervalDays, err := s.nextIntervalDays(ctx, userID, notebookID, senseID, notebook.QuizTypeGrammar, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, senseID)
+	if err != nil {
+		return "", "", fmt.Errorf("schedule grammar learning log for %q: %w", notebookID, err)
+	}
+	log.IntervalDays = intervalDays
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return "", "", fmt.Errorf("save grammar learning log for %q: %w", notebookID, err)
 	}
