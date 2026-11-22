@@ -7,7 +7,7 @@
 // identically to notebooks produced by the EPUB pipeline.
 //
 // Parse is a pure function (no network, no filesystem) so it is fully unit
-// testable offline. The network calls that feed it (Gutendex search + plain
+// testable offline. The network calls that feed it (Gutenberg search + plain
 // text fetch) live in client.go and are kept strictly separate.
 package gutenberg
 
@@ -20,7 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Book is a catalog entry resolved from Gutendex. SourceID is the Gutenberg
+// Book is a catalog entry from the Gutenberg search feed. SourceID is the Gutenberg
 // book id (as a string); TextURL points at the plain-text format to download.
 type Book struct {
 	SourceID string

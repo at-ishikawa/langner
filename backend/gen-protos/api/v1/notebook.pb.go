@@ -24,8 +24,8 @@ const (
 
 type SearchBooksRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// query is optional: empty browses the popular catalog (fast + cached by
-	// Gutendex); non-empty runs a free-text search. page is 1-based (0 or 1 =
+	// query is optional: empty browses the popular catalog (most-downloaded
+	// first); non-empty runs a free-text search. page is 1-based (0 or 1 =
 	// first page) so the catalog pages without a query.
 	Query         string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	Page          int32  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
@@ -78,7 +78,7 @@ func (x *SearchBooksRequest) GetPage() int32 {
 }
 
 // BookResult is one catalog hit. source_id is the Gutenberg book id (as a
-// string) passed back to ImportBook. cover_url is a thumbnail when Gutendex has one.
+// string) passed back to ImportBook. cover_url is a thumbnail when Gutenberg has one.
 type BookResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SourceId      string                 `protobuf:"bytes,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`

@@ -40,33 +40,25 @@ import (
 // the highlight nor the card, and A's delete removes only A's copy.
 // Postgres-only, so it skips without LANGNER_INTEGRATION_DB_URL.
 
-// fakeGutendexClient serves canned Gutendex metadata + plain-text so ImportBook
-// runs without real network (the dev container/CI has no egress). It routes by
-// URL: the catalog metadata endpoint vs the plain-text download URL.
-type fakeGutendexClient struct {
+// fakeGutenbergClient serves a canned Project Gutenberg plain-text file at the
+// gutenberg.org cache URL so ImportBook runs without real network (the dev
+// container/CI has no egress). The title/author come from the text's header.
+type fakeGutenbergClient struct {
 	sourceID string
 	raw      string
 	// downloads counts plain-text downloads.
 	downloads *int
 }
 
-func (c fakeGutendexClient) Do(req *http.Request) (*http.Response, error) {
-	u := req.URL.String()
-	if strings.Contains(u, "example.test") && c.downloads != nil {
-		*c.downloads++
-	}
-	body := ""
-	switch {
-	case strings.Contains(u, "/books/"+c.sourceID):
-		// Gutendex metadata: a single plain-text UTF-8 format pointing at the
-		// download URL the fake also serves below.
-		body = fmt.Sprintf(`{"id":%s,"title":"A Small Invented Tale","authors":[{"name":"Jane Placeholder"}],"languages":["en"],"formats":{"text/plain; charset=utf-8":"https://example.test/%s.txt"}}`, c.sourceID, c.sourceID)
-	case strings.Contains(u, "example.test"):
-		body = c.raw
-	default:
+func (c fakeGutenbergClient) Do(req *http.Request) (*http.Response, error) {
+	textURL := fmt.Sprintf("https://www.gutenberg.org/cache/epub/%s/pg%s.txt", c.sourceID, c.sourceID)
+	if req.URL.String() != textURL {
 		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}
-	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+	if c.downloads != nil {
+		*c.downloads++
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(c.raw))}, nil
 }
 
 type booksFixture struct {
@@ -128,7 +120,7 @@ func newBooksFixture(t *testing.T) booksFixture {
 	notebookHandler.SetContent(content, nil)
 	notebookHandler.SetPushDeps(db, notebook.NewNotebookStore(db))
 	downloads := new(int)
-	notebookHandler.SetBookDeps(userDefsRepo, fakeGutendexClient{sourceID: "77", raw: string(raw), downloads: downloads})
+	notebookHandler.SetBookDeps(userDefsRepo, fakeGutenbergClient{sourceID: "77", raw: string(raw), downloads: downloads})
 
 	return booksFixture{svc: svc, notebookHandler: notebookHandler, db: db, userA: userA, userB: userB, downloads: downloads}
 }
@@ -144,14 +136,16 @@ func TestImportBook_SharedCopyPerUserLibrary_LivePostgres_Integration(t *testing
 	assert.Equal(t, 1, *f.downloads)
 
 	// Stored ONCE as a shared, public, owner-less library notebook.
-	var visibility, source string
+	var visibility, source, displayName string
 	var owner *int64
 	require.NoError(t, f.db.QueryRow(
-		`SELECT visibility, source, owner_user_id FROM notebooks WHERE notebook_id = $1`, "gutenberg-77").
-		Scan(&visibility, &source, &owner))
+		`SELECT visibility, source, owner_user_id, display_name FROM notebooks WHERE notebook_id = $1`, "gutenberg-77").
+		Scan(&visibility, &source, &owner, &displayName))
 	assert.Equal(t, "public", visibility)
 	assert.Equal(t, "library", source)
 	assert.Nil(t, owner, "shared books are owner-less")
+	// Title and author come from the downloaded text's Gutenberg header.
+	assert.Equal(t, "A Small Invented Tale by Jane Placeholder", displayName)
 
 	// Content lands under the "books" family.
 	var family string
