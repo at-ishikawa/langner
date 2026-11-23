@@ -89,7 +89,7 @@ type NotebookServiceClient interface {
 	ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error)
 	DeleteNotebook(context.Context, *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error)
 	// Project Gutenberg books. SearchBooks queries the public catalog
-	// (gutenberg.org) by free text. ImportBook downloads + parses a book and
+	// (keyless Gutendex) by free text. ImportBook downloads + parses a book and
 	// stores it ONCE as a shared, public, owner-less notebook under a
 	// deterministic id `gutenberg-<source_id>`; a re-import by anyone is an
 	// idempotent no-op. Every user can then read/quiz it; highlights stay
@@ -278,7 +278,7 @@ type NotebookServiceHandler interface {
 	ListMyNotebooks(context.Context, *connect.Request[v1.ListMyNotebooksRequest]) (*connect.Response[v1.ListMyNotebooksResponse], error)
 	DeleteNotebook(context.Context, *connect.Request[v1.DeleteNotebookRequest]) (*connect.Response[v1.DeleteNotebookResponse], error)
 	// Project Gutenberg books. SearchBooks queries the public catalog
-	// (gutenberg.org) by free text. ImportBook downloads + parses a book and
+	// (keyless Gutendex) by free text. ImportBook downloads + parses a book and
 	// stores it ONCE as a shared, public, owner-less notebook under a
 	// deterministic id `gutenberg-<source_id>`; a re-import by anyone is an
 	// idempotent no-op. Every user can then read/quiz it; highlights stay

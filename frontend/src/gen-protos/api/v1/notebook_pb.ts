@@ -18,8 +18,8 @@ export const file_api_v1_notebook: GenFile = /*@__PURE__*/
  */
 export type SearchBooksRequest = Message<"api.v1.SearchBooksRequest"> & {
   /**
-   * query is optional: empty browses the popular catalog (most-downloaded
-   * first); non-empty runs a free-text search. page is 1-based (0 or 1 =
+   * query is optional: empty browses the popular catalog (fast + cached by
+   * Gutendex); non-empty runs a free-text search. page is 1-based (0 or 1 =
    * first page) so the catalog pages without a query.
    *
    * @generated from field: string query = 1;
@@ -41,7 +41,7 @@ export const SearchBooksRequestSchema: GenMessage<SearchBooksRequest> = /*@__PUR
 
 /**
  * BookResult is one catalog hit. source_id is the Gutenberg book id (as a
- * string) passed back to ImportBook. cover_url is a thumbnail when Gutenberg has one.
+ * string) passed back to ImportBook. cover_url is a thumbnail when Gutendex has one.
  *
  * @generated from message api.v1.BookResult
  */
@@ -1470,7 +1470,7 @@ export const NotebookService: GenService<{
   },
   /**
    * Project Gutenberg books. SearchBooks queries the public catalog
-   * (gutenberg.org) by free text. ImportBook downloads + parses a book and
+   * (keyless Gutendex) by free text. ImportBook downloads + parses a book and
    * stores it ONCE as a shared, public, owner-less notebook under a
    * deterministic id `gutenberg-<source_id>`; a re-import by anyone is an
    * idempotent no-op. Every user can then read/quiz it; highlights stay

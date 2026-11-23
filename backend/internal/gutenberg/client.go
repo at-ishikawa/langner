@@ -2,31 +2,28 @@ package gutenberg
 
 import (
 	"context"
-	"encoding/xml"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 )
 
-// These calls talk to Project Gutenberg (gutenberg.org) directly: its OPDS
-// search feed for the catalog and its plain-text cache for a book. They run
-// only in prod/preview (no network in CI/containers); they are structured
-// around an injectable HTTPClient so the feed/header mapping is testable
-// without the real network.
+// Search pages the catalog through Gutendex (https://gutendex.com), a JSON API
+// over the Project Gutenberg catalog. Fetch downloads a book's text from
+// Project Gutenberg's plain-text cache, so importing a book never depends on
+// Gutendex. These calls run only in prod/preview (no network in
+// CI/containers); they are structured around an injectable HTTPClient so the
+// JSON/header mapping is testable without the real network.
 const (
+	gutendexBaseURL  = "https://gutendex.com/books"
 	gutenbergBaseURL = "https://www.gutenberg.org"
 	// mirrorBaseURL is an official Project Gutenberg mirror. Gutenberg asks
 	// automated clients to download texts from mirrors, and the mirror stays up
 	// while www.gutenberg.org is down for maintenance.
 	mirrorBaseURL = "https://gutenberg.pglaf.org"
-
-	// searchPageSize is how many books one OPDS search page holds; start_index
-	// (1-based) pages through the results in steps of this size.
-	searchPageSize = 25
 
 	// maxTextBytes bounds the downloaded plain-text body so a hostile or
 	// mislabeled URL can't stream an unbounded amount into memory.
@@ -37,8 +34,8 @@ const (
 	// whole request (the reported "Client.Timeout exceeded" on a slow search).
 	defaultTimeout = 20 * time.Second
 
-	// gutenberg.org can be slow or briefly throttle a bare Go user-agent; retry
-	// a couple of times with backoff before giving up.
+	// Gutendex and gutenberg.org can be slow or briefly throttle a bare Go
+	// user-agent; retry a couple of times with backoff before giving up.
 	maxAttempts = 3
 
 	// userAgent identifies the app politely — a named UA is less likely to be
@@ -61,31 +58,24 @@ func resolveClient(c HTTPClient) HTTPClient {
 	return &http.Client{Timeout: defaultTimeout}
 }
 
-// opdsFeed mirrors the fields we consume from a Gutenberg OPDS (Atom) search
-// feed. Besides one entry per book, the feed carries navigation entries (e.g.
-// "Sort Alphabetically by Title"); those have no book id and are skipped.
-type opdsFeed struct {
-	Links   []opdsLink  `xml:"link"`
-	Entries []opdsEntry `xml:"entry"`
+// gutendexBook mirrors the fields we consume from a Gutendex book object.
+type gutendexBook struct {
+	ID        int               `json:"id"`
+	Title     string            `json:"title"`
+	Authors   []gutendexAuthor  `json:"authors"`
+	Languages []string          `json:"languages"`
+	Formats   map[string]string `json:"formats"`
 }
 
-type opdsEntry struct {
-	ID      string     `xml:"id"`
-	Title   string     `xml:"title"`
-	Authors []string   `xml:"author>name"`
-	Content string     `xml:"content"`
-	Links   []opdsLink `xml:"link"`
+type gutendexAuthor struct {
+	Name string `json:"name"`
 }
 
-type opdsLink struct {
-	Rel  string `xml:"rel,attr"`
-	Type string `xml:"type,attr"`
-	Href string `xml:"href,attr"`
+type gutendexSearchResponse struct {
+	Results  []gutendexBook `json:"results"`
+	Next     *string        `json:"next"`
+	Previous *string        `json:"previous"`
 }
-
-// opdsBookID matches a book entry id such as
-// "http://www.gutenberg.org/ebooks/11.opds" and captures the numeric id.
-var opdsBookID = regexp.MustCompile(`/ebooks/(\d+)(?:\.opds)?$`)
 
 // SearchResult is one page of catalog hits plus whether adjacent pages exist,
 // so the UI can page the catalog (with or without a query).
@@ -96,47 +86,39 @@ type SearchResult struct {
 	Page    int
 }
 
-// Search returns one page of the Gutenberg catalog, most-downloaded first. An
-// empty query BROWSES the popular catalog; a non-empty query runs a free-text
-// search. page is 1-based (<=0 means page 1). httpClient may be nil (a default
-// client with a per-attempt timeout is used).
+// Search returns one page of the Gutenberg catalog via Gutendex. An empty
+// query BROWSES the popular catalog (Gutendex's default ordering, fast +
+// cached); a non-empty query runs a free-text search. page is 1-based (<=0
+// means page 1). httpClient may be nil (a default client with a per-attempt
+// timeout is used).
 func Search(ctx context.Context, httpClient HTTPClient, query string, page int) (SearchResult, error) {
 	if page <= 0 {
 		page = 1
 	}
 	params := url.Values{}
-	params.Set("sort_order", "downloads")
-	params.Set("start_index", fmt.Sprintf("%d", (page-1)*searchPageSize+1))
+	params.Set("page", fmt.Sprintf("%d", page))
 	if query != "" {
-		params.Set("query", query)
+		params.Set("search", query)
 	}
-	u := gutenbergBaseURL + "/ebooks/search.opds/?" + params.Encode()
+	u := gutendexBaseURL + "/?" + params.Encode()
 
 	body, err := fetchBytes(ctx, resolveClient(httpClient), u)
 	if err != nil {
-		return SearchResult{}, fmt.Errorf("gutenberg search: %w", err)
+		return SearchResult{}, fmt.Errorf("gutendex search: %w", err)
 	}
-	var feed opdsFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
-		return SearchResult{}, fmt.Errorf("gutenberg search: decode feed: %w", err)
+	var resp gutendexSearchResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return SearchResult{}, fmt.Errorf("gutendex search: decode: %w", err)
 	}
 
-	books := make([]Book, 0, len(feed.Entries))
-	for _, e := range feed.Entries {
-		if b, ok := toBook(e); ok {
-			books = append(books, b)
-		}
-	}
-	hasNext := false
-	for _, l := range feed.Links {
-		if l.Rel == "next" {
-			hasNext = true
-		}
+	books := make([]Book, 0, len(resp.Results))
+	for _, r := range resp.Results {
+		books = append(books, toBook(r))
 	}
 	return SearchResult{
 		Books:   books,
-		HasNext: hasNext,
-		HasPrev: page > 1,
+		HasNext: resp.Next != nil && *resp.Next != "",
+		HasPrev: resp.Previous != nil && *resp.Previous != "",
 		Page:    page,
 	}, nil
 }
@@ -180,39 +162,25 @@ func cacheTextURL(base, sourceID string) string {
 	return fmt.Sprintf("%s/cache/epub/%s/pg%s.txt", base, id, id)
 }
 
-// toBook maps an OPDS search entry to our Book; ok is false for the feed's
-// navigation entries, which carry no book id.
-func toBook(e opdsEntry) (Book, bool) {
-	m := opdsBookID.FindStringSubmatch(strings.TrimSpace(e.ID))
-	if m == nil {
-		return Book{}, false
-	}
+// toBook maps a Gutendex book object to our Book. TextURL is the cache URL
+// Fetch would try last; Fetch itself tries the mirror first.
+func toBook(g gutendexBook) Book {
+	id := fmt.Sprintf("%d", g.ID)
 	b := Book{
-		SourceID: m[1],
-		Title:    strings.TrimSpace(e.Title),
-		TextURL:  textURL(m[1]),
+		SourceID: id,
+		Title:    strings.TrimSpace(g.Title),
+		TextURL:  textURL(id),
+		// Gutendex links covers on www.gutenberg.org; the mirror serves the same
+		// cache path and stays up when the main site is down.
+		CoverURL: strings.Replace(g.Formats["image/jpeg"], gutenbergBaseURL+"/cache/", mirrorBaseURL+"/cache/", 1),
 	}
-	// Search entries put the author in <content>; acquisition-style entries
-	// use <author><name>.
-	if len(e.Authors) > 0 {
-		b.Author = strings.TrimSpace(e.Authors[0])
-	} else {
-		b.Author = strings.TrimSpace(e.Content)
+	if len(g.Authors) > 0 {
+		b.Author = g.Authors[0].Name
 	}
-	for _, l := range e.Links {
-		if strings.HasPrefix(l.Type, "image/") && strings.HasSuffix(l.Rel, "/thumbnail") {
-			b.CoverURL = absoluteURL(l.Href)
-		}
+	if len(g.Languages) > 0 {
+		b.Language = g.Languages[0]
 	}
-	return b, true
-}
-
-// absoluteURL resolves a feed-relative href ("/cache/...") against gutenberg.org.
-func absoluteURL(href string) string {
-	if strings.HasPrefix(href, "/") {
-		return gutenbergBaseURL + href
-	}
-	return href
+	return b
 }
 
 // parseHeader reads the "Title:" and "Author:" lines of the Project Gutenberg

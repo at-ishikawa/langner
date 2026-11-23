@@ -13,7 +13,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// SearchBooks queries the public Project Gutenberg catalog (gutenberg.org)
+// SearchBooks queries the public Project Gutenberg catalog (keyless Gutendex)
 // by free text and returns catalog hits. Discovery only — no DB and no auth
 // gating beyond the always-on interceptor. Outbound HTTP runs only in
 // preview/prod (the dev container/CI has no egress), so this surfaces an error

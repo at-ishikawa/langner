@@ -37,59 +37,47 @@ func readFixture(t *testing.T, name string) string {
 
 func TestSearchMapping(t *testing.T) {
 	client := fakeClient{responses: map[string]string{
-		// url.Values.Encode sorts keys: query, sort_order, start_index.
-		"https://www.gutenberg.org/ebooks/search.opds/?query=alice&sort_order=downloads&start_index=1": readFixture(t, "search.opds"),
+		// url.Values.Encode sorts keys: page, search.
+		"https://gutendex.com/books/?page=1&search=austen": readFixture(t, "search.json"),
 	}}
 
-	res, err := Search(context.Background(), client, "alice", 1)
+	res, err := Search(context.Background(), client, "austen", 1)
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	// The "Sort Alphabetically" navigation entry is not a book.
 	if len(res.Books) != 2 {
 		t.Fatalf("got %d books, want 2: %+v", len(res.Books), res.Books)
 	}
 	b := res.Books[0]
-	if b.SourceID != "11" || b.Title != "Alice's Adventures in Wonderland" || b.Author != "Lewis Carroll" {
+	if b.SourceID != "1342" || b.Title != "Pride and Prejudice" || b.Author != "Austen, Jane" || b.Language != "en" {
 		t.Errorf("unexpected book mapping: %+v", b)
 	}
-	if b.TextURL != "https://www.gutenberg.org/cache/epub/11/pg11.txt" {
+	if b.TextURL != "https://www.gutenberg.org/cache/epub/1342/pg1342.txt" {
 		t.Errorf("TextURL = %q, want the cache plain-text URL", b.TextURL)
 	}
-	if b.CoverURL != "https://www.gutenberg.org/cache/epub/11/pg11.cover.small.jpg" {
-		t.Errorf("CoverURL = %q, want the thumbnail link", b.CoverURL)
+	if b.CoverURL != "https://gutenberg.pglaf.org/cache/epub/1342/pg1342.cover.medium.jpg" {
+		t.Errorf("CoverURL = %q, want the image/jpeg format on the mirror", b.CoverURL)
 	}
-	// A feed-relative thumbnail href is made absolute.
-	if got := res.Books[1].CoverURL; got != "https://www.gutenberg.org/cache/epub/12/pg12.cover.small.jpg" {
-		t.Errorf("relative CoverURL = %q, want absolute", got)
-	}
-	// rel="next" link present on page 1 → hasNext true, hasPrev false.
+	// "next" set and "previous" null on page 1 → hasNext true, hasPrev false.
 	if !res.HasNext || res.HasPrev || res.Page != 1 {
 		t.Errorf("pagination = (next %v, prev %v, page %d), want (true, false, 1)", res.HasNext, res.HasPrev, res.Page)
 	}
 }
 
 // TestBrowseNoQuery: an empty query browses the catalog — the request carries
-// the page's start_index but NO query param.
+// the page but NO search param.
 func TestBrowseNoQuery(t *testing.T) {
-	feed := `<?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-<link rel="self" type="application/atom+xml;profile=opds-catalog" href="/ebooks/search.opds/?sort_order=downloads&amp;start_index=26"/>
-<entry>
-<title>Pride and Prejudice</title>
-<content type="text">Jane Austen</content>
-<id>http://www.gutenberg.org/ebooks/1342.opds</id>
-</entry>
-</feed>`
+	page := `{"count": 1, "next": null, "previous": "https://gutendex.com/books/",
+"results": [{"id": 84, "title": "Frankenstein", "authors": [{"name": "Shelley, Mary Wollstonecraft"}], "languages": ["en"], "formats": {}}]}`
 	client := fakeClient{responses: map[string]string{
-		"https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads&start_index=26": feed,
+		"https://gutendex.com/books/?page=2": page,
 	}}
 
 	res, err := Search(context.Background(), client, "", 2)
 	if err != nil {
 		t.Fatalf("Search(browse): %v", err)
 	}
-	if len(res.Books) != 1 || res.Books[0].SourceID != "1342" || res.Books[0].Author != "Jane Austen" {
+	if len(res.Books) != 1 || res.Books[0].SourceID != "84" || res.Books[0].Author != "Shelley, Mary Wollstonecraft" {
 		t.Fatalf("unexpected browse results: %+v", res.Books)
 	}
 	if res.HasNext || !res.HasPrev || res.Page != 2 {
@@ -97,12 +85,12 @@ func TestBrowseNoQuery(t *testing.T) {
 	}
 }
 
-func TestSearchRejectsMalformedFeed(t *testing.T) {
+func TestSearchRejectsMalformedResponse(t *testing.T) {
 	client := fakeClient{responses: map[string]string{
-		"https://www.gutenberg.org/ebooks/search.opds/?query=x&sort_order=downloads&start_index=1": "<feed><entry>",
+		"https://gutendex.com/books/?page=1&search=x": "{",
 	}}
 	if _, err := Search(context.Background(), client, "x", 1); err == nil {
-		t.Fatal("Search with a malformed feed: want error, got nil")
+		t.Fatal("Search with a malformed response: want error, got nil")
 	}
 }
 
