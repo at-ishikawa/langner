@@ -155,7 +155,7 @@ func (s *Service) SkipWord(userID int64, info CardInfo, skipUntil string, quizTy
 		return fmt.Errorf("failed to load learning history for %q: %w", info.NotebookName, err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
+	updater := notebook.NewLearningHistoryUpdater(history, s.intervals.DefaultCalculator())
 
 	expressions := s.conceptMembersOrSelf(info.NotebookName, info.Expression)
 
@@ -362,7 +362,7 @@ func (s *Service) ResumeWord(userID int64, info CardInfo, quizTypes []notebook.Q
 		return fmt.Errorf("failed to load learning history for %q: %w", info.NotebookName, err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
+	updater := notebook.NewLearningHistoryUpdater(history, s.intervals.DefaultCalculator())
 	for _, expr := range s.conceptMembersOrSelf(info.NotebookName, info.Expression) {
 		for _, qt := range quizTypes {
 			updater.ClearSkippedAt(expr, "", qt)
@@ -400,7 +400,7 @@ var ErrOverrideNotLatest = errors.New("only the latest attempt of a word can be 
 // The new interval is computed here, not by the store: the override
 // replays the attempt's own series (the same per-quiz-type slot the
 // writer used — GetLogsForQuizType, so forward and reverse never cross)
-// through s.calculator, using only the logs BEFORE the overridden one,
+// through the user's own review schedule, using only the logs BEFORE the overridden one,
 // exactly what nextIntervalDays did when the attempt was first written.
 // The store then writes those values verbatim (YAML, DB, or both).
 //
@@ -474,10 +474,14 @@ func (s *Service) overrideValues(userID int64, info CardInfo, quizType notebook.
 		return learning.UpdateLogValues{}, false, ErrOverrideNotLatest
 	}
 
+	calculator, err := s.intervals.CalculatorFor(context.Background(), userID)
+	if err != nil {
+		return learning.UpdateLogValues{}, false, err
+	}
 	overridden := logs[idx]
 	overridden.OverrideInterval = 0
 	notebook.ApplyMark(&overridden, markCorrect, quizType)
-	interval, _ := s.calculator.NextIntervalForWrite(logs[idx+1:], overridden)
+	interval, _ := calculator.NextIntervalForWrite(logs[idx+1:], overridden)
 	return learning.UpdateLogValues{
 		Status:       string(overridden.Status),
 		Quality:      overridden.Quality,

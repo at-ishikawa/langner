@@ -39,6 +39,11 @@ type StateRepositories struct {
 	// every read path filters out notebooks the requesting user can't see. Nil
 	// (no DB) means every notebook is visible.
 	ACL notebook.NotebookVisibility
+	// Intervals resolves each user's review schedule (their own setting, else
+	// the quiz config default). Always non-nil; without a database every user
+	// gets the default. Installed on the quiz service so every interval it
+	// computes for a user uses that user's schedule.
+	Intervals *learning.IntervalSchedules
 }
 
 // BuildStateRepositories wires the user-state repositories the way
@@ -67,8 +72,9 @@ func BuildStateRepositories(notebooksCfg config.NotebooksConfig, quizCfg config.
 			defsDir = notebooksCfg.DefinitionsDirectories[0]
 		}
 		return StateRepositories{
-			Learning: learning.NewYAMLLearningRepository(notebooksCfg.LearningNotesDirectory, calculator),
-			Note:     notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir),
+			Learning:  learning.NewYAMLLearningRepository(notebooksCfg.LearningNotesDirectory, calculator),
+			Note:      notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir),
+			Intervals: learning.NewIntervalSchedules(nil, quizCfg),
 		}
 	}
 
@@ -95,5 +101,6 @@ func BuildStateRepositories(notebooksCfg config.NotebooksConfig, quizCfg config.
 		SkipFlags:    dbSkipFlagRepo,
 		Origin:       dbOriginRepo,
 		ACL:          notebook.NewNotebookACLRepository(db),
+		Intervals:    learning.NewIntervalSchedules(db, quizCfg),
 	}
 }

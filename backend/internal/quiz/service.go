@@ -39,8 +39,11 @@ type Service struct {
 	// reader. Both the write repos (learningRepository) and this read store
 	// resolve a log's canonical storage key with the same rule, keeping the
 	// read symmetric with the write (learning-history invariant L2).
-	historyStore   learning.HistoryStore
-	calculator     notebook.IntervalCalculator
+	historyStore learning.HistoryStore
+	// intervals picks the review schedule each user's answers are scheduled
+	// with (their own setting, else the quiz config default). Every interval
+	// this service computes for a user goes through intervals.CalculatorFor.
+	intervals      *learning.IntervalSchedules
 	disableShuffle bool
 	// skipFlagRepo, when set (DB mode), routes the deliberate Exclude action
 	// (SkipWord/ResumeWord) to the DB skip-flag tables instead of writing the
@@ -86,7 +89,7 @@ func NewService(notebooksConfig config.NotebooksConfig, clientResolver inference
 		clientResolver:     clientResolver,
 		dictionaryMap:      dictionaryMap,
 		learningRepository: learningRepo,
-		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals),
+		intervals:          learning.NewIntervalSchedules(nil, quizCfg),
 		disableShuffle:     quizCfg.DisableShuffle,
 	}
 }
@@ -96,6 +99,18 @@ func NewService(notebooksConfig config.NotebooksConfig, clientResolver inference
 // (YAML-only mode) loadHistories reads the on-disk learning_notes YAML.
 func (s *Service) SetHistoryStore(store learning.HistoryStore) {
 	s.historyStore = store
+}
+
+// SetIntervalSchedules installs the per-user review schedules (DB mode).
+// Without it every user's answers are scheduled with the quiz config default.
+func (s *Service) SetIntervalSchedules(intervals *learning.IntervalSchedules) {
+	s.intervals = intervals
+}
+
+// IntervalSchedules returns the per-user review schedules the service
+// schedules answers with.
+func (s *Service) IntervalSchedules() *learning.IntervalSchedules {
+	return s.intervals
 }
 
 // SetSkipStores installs the DB skip-flag repository plus the note/origin
@@ -1165,8 +1180,10 @@ func canonicalNoteSurface(displaySurface, word string) (usage, entry string) {
 // on misunderstood-vs-not and quality — so this yields the same interval as the
 // YAML path's isKnownWord handling.
 //
-// Returns 0 only when histories cannot be loaded; a first-ever attempt (no
-// priors) legitimately yields the ladder's first step (>=1 for a success).
+// The interval comes from userID's own review schedule (intervals.CalculatorFor).
+// Returns 0 when histories cannot be loaded; a first-ever attempt (no priors)
+// legitimately yields the ladder's first step (>=1 for a success). An error
+// means the user's schedule could not be read.
 func (s *Service) nextIntervalDays(
 	ctx context.Context,
 	userID int64,
@@ -1177,7 +1194,11 @@ func (s *Service) nextIntervalDays(
 	responseTimeMs int64,
 	learnedAt time.Time,
 	names ...string,
-) int {
+) (int, error) {
+	calculator, err := s.intervals.CalculatorFor(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
 	status := notebook.LearnedStatusMisunderstood
 	if isCorrect {
 		status = notebook.LearnedStatusUnderstood
@@ -1198,7 +1219,7 @@ func (s *Service) nextIntervalDays(
 	if _, ok := histories[notebookName]; !ok {
 		loaded, err := s.loadHistoriesForNotebooks(userID, notebookName)
 		if err != nil {
-			return 0
+			return 0, nil
 		}
 		histories = loaded
 	}
@@ -1206,8 +1227,8 @@ func (s *Service) nextIntervalDays(
 	if expr := notebook.FindExpressionInHistories(histories[notebookName], id, names...); expr != nil {
 		priorLogs = expr.GetLogsForQuizType(quizType)
 	}
-	interval, _ := s.calculator.NextIntervalForWrite(priorLogs, tentative)
-	return interval
+	interval, _ := calculator.NextIntervalForWrite(priorLogs, tentative)
+	return interval, nil
 }
 
 // SaveResult updates learning history via the repository.
@@ -1264,7 +1285,11 @@ func (s *Service) SaveResultInfo(ctx context.Context, userID int64, card Card, r
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(ctx, userID, card.NotebookName, senseID, notebook.QuizTypeNotebook, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	intervalDays, err := s.nextIntervalDays(ctx, userID, card.NotebookName, senseID, notebook.QuizTypeNotebook, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	if err != nil {
+		return "", "", fmt.Errorf("schedule learning log for %q: %w", card.NotebookName, err)
+	}
+	log.IntervalDays = intervalDays
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -2446,7 +2471,11 @@ func (s *Service) SaveReverseResultInfo(ctx context.Context, userID int64, card 
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(ctx, userID, card.NotebookName, senseID, notebook.QuizTypeReverse, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	intervalDays, err := s.nextIntervalDays(ctx, userID, card.NotebookName, senseID, notebook.QuizTypeReverse, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	if err != nil {
+		return "", "", fmt.Errorf("schedule learning log for %q: %w", card.NotebookName, err)
+	}
+	log.IntervalDays = intervalDays
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -2927,7 +2956,11 @@ func (s *Service) SaveFreeformResultInfo(ctx context.Context, userID int64, card
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-	log.IntervalDays = s.nextIntervalDays(ctx, userID, card.NotebookName, senseID, notebook.QuizTypeFreeform, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	intervalDays, err := s.nextIntervalDays(ctx, userID, card.NotebookName, senseID, notebook.QuizTypeFreeform, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
+	if err != nil {
+		return "", "", fmt.Errorf("schedule learning log for %q: %w", card.NotebookName, err)
+	}
+	log.IntervalDays = intervalDays
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return "", "", fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -3062,7 +3095,7 @@ func (s *Service) GetLatestLearnedInfo(userID int64, notebookName, id, expressio
 		return "", ""
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName], s.calculator)
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName], s.intervals.DefaultCalculator())
 	expr := updater.FindExpressionByID(id, expression)
 	if expr == nil {
 		return "", ""

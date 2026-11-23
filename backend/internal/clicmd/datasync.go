@@ -143,23 +143,24 @@ needed. Idempotent: a no-op when the schema is already up to date.`,
 	return cmd
 }
 
-// newMigrateRepairIntervalsCommand replays every learning-log series with the
-// configured interval calculator and reports (or, with --apply, rewrites) the
+// newMigrateRepairIntervalsCommand replays every learning-log series with its
+// user's review schedule (the user's own setting, else the configured default)
+// and reports (or, with --apply, rewrites) the
 // newest rows whose interval_days differs from the replay.
 func newMigrateRepairIntervalsCommand() *cobra.Command {
 	var apply bool
 	cmd := &cobra.Command{
 		Use:   "repair-intervals",
 		Short: "Recompute the newest learning-log interval of every series",
-		Long: `Replay every learning-log series with the configured interval calculator
-(quiz.algorithm / quiz.fixed_intervals) and rewrite the newest row's
-interval_days where it differs. It repairs rows scheduled by older versions
-(a Mark-as-Correct that kept the wrong answer's interval, an accepted synonym
-scheduled as a lapse).
+		Long: `Replay every learning-log series with its user's review schedule and
+rewrite the newest row's interval_days where it differs. It repairs rows
+scheduled by older versions (a Mark-as-Correct that kept the wrong answer's
+interval, an accepted synonym scheduled as a lapse).
 
-The result depends on the quiz settings, so run it with the same
-quiz.algorithm and quiz.fixed_intervals as the server. Without --apply it
-only reports how many rows it would rewrite.`,
+A user who chose a schedule on the Settings page is replayed with it; every
+other user with the default (quiz.algorithm / quiz.fixed_intervals), so run
+it with the same quiz settings as the server. Without --apply it only reports
+how many rows it would rewrite.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, db, err := openConfigAndDB()
 			if err != nil {
@@ -168,9 +169,8 @@ only reports how many rows it would rewrite.`,
 			defer func() { _ = db.Close() }()
 
 			out := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(out, "quiz.algorithm=%q quiz.fixed_intervals=%v\n", cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
-			calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
-			n, err := learning.RepairLatestIntervals(cmd.Context(), db, calculator, apply)
+			_, _ = fmt.Fprintf(out, "default quiz.algorithm=%q quiz.fixed_intervals=%v (users with their own schedule use it)\n", cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
+			n, err := learning.RepairLatestIntervals(cmd.Context(), db, learning.NewIntervalSchedules(db, cfg.Quiz), apply)
 			if err != nil {
 				return fmt.Errorf("repair learning-log intervals: %w", err)
 			}

@@ -7,27 +7,35 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
-// Gutendex (https://gutendex.com) is a JSON API over the Project Gutenberg
-// catalog. These calls run only in prod/preview (no network in CI/containers);
-// they are structured around an injectable HTTPClient so the JSON mapping is
-// testable without the real network.
+// Search pages the catalog through Gutendex (https://gutendex.com), a JSON API
+// over the Project Gutenberg catalog. Fetch downloads a book's text from
+// Project Gutenberg's plain-text cache, so importing a book never depends on
+// Gutendex. These calls run only in prod/preview (no network in
+// CI/containers); they are structured around an injectable HTTPClient so the
+// JSON/header mapping is testable without the real network.
 const (
-	gutendexBaseURL = "https://gutendex.com/books"
+	gutendexBaseURL  = "https://gutendex.com/books"
+	gutenbergBaseURL = "https://www.gutenberg.org"
+	// mirrorBaseURL is an official Project Gutenberg mirror. Gutenberg asks
+	// automated clients to download texts from mirrors, and the mirror stays up
+	// while www.gutenberg.org is down for maintenance.
+	mirrorBaseURL = "https://gutenberg.pglaf.org"
 
 	// maxTextBytes bounds the downloaded plain-text body so a hostile or
 	// mislabeled URL can't stream an unbounded amount into memory.
 	maxTextBytes = 8 << 20 // 8 MiB
 
-	// defaultTimeout is the per-ATTEMPT HTTP budget; getJSON/download retry a few
+	// defaultTimeout is the per-ATTEMPT HTTP budget; fetchBytes retries a few
 	// times on a transient failure, so a single slow attempt no longer sinks the
 	// whole request (the reported "Client.Timeout exceeded" on a slow search).
 	defaultTimeout = 20 * time.Second
 
-	// gutendex can be slow or briefly throttle a bare Go user-agent; retry a
-	// couple of times with backoff before giving up.
+	// Gutendex and gutenberg.org can be slow or briefly throttle a bare Go
+	// user-agent; retry a couple of times with backoff before giving up.
 	maxAttempts = 3
 
 	// userAgent identifies the app politely — a named UA is less likely to be
@@ -50,16 +58,13 @@ func resolveClient(c HTTPClient) HTTPClient {
 	return &http.Client{Timeout: defaultTimeout}
 }
 
-// gutendexFormats maps MIME type -> download URL for one catalog entry.
-type gutendexFormats map[string]string
-
 // gutendexBook mirrors the fields we consume from a Gutendex book object.
 type gutendexBook struct {
-	ID        int              `json:"id"`
-	Title     string           `json:"title"`
-	Authors   []gutendexAuthor `json:"authors"`
-	Languages []string         `json:"languages"`
-	Formats   gutendexFormats  `json:"formats"`
+	ID        int               `json:"id"`
+	Title     string            `json:"title"`
+	Authors   []gutendexAuthor  `json:"authors"`
+	Languages []string          `json:"languages"`
+	Formats   map[string]string `json:"formats"`
 }
 
 type gutendexAuthor struct {
@@ -81,24 +86,29 @@ type SearchResult struct {
 	Page    int
 }
 
-// Search returns one page of the Gutenberg catalog. An empty query BROWSES the
-// popular catalog (Gutendex's default ordering, fast + cached); a non-empty
-// query runs a free-text search. page is 1-based (<=0 means page 1). httpClient
-// may be nil (a default client with a per-attempt timeout is used).
+// Search returns one page of the Gutenberg catalog via Gutendex. An empty
+// query BROWSES the popular catalog (Gutendex's default ordering, fast +
+// cached); a non-empty query runs a free-text search. page is 1-based (<=0
+// means page 1). httpClient may be nil (a default client with a per-attempt
+// timeout is used).
 func Search(ctx context.Context, httpClient HTTPClient, query string, page int) (SearchResult, error) {
 	if page <= 0 {
 		page = 1
 	}
 	params := url.Values{}
 	params.Set("page", fmt.Sprintf("%d", page))
-	if q := query; q != "" {
-		params.Set("search", q)
+	if query != "" {
+		params.Set("search", query)
 	}
-	u := gutendexBaseURL + "?" + params.Encode()
+	u := gutendexBaseURL + "/?" + params.Encode()
 
-	var resp gutendexSearchResponse
-	if err := getJSON(ctx, resolveClient(httpClient), u, &resp); err != nil {
+	body, err := fetchBytes(ctx, resolveClient(httpClient), u)
+	if err != nil {
 		return SearchResult{}, fmt.Errorf("gutendex search: %w", err)
+	}
+	var resp gutendexSearchResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return SearchResult{}, fmt.Errorf("gutendex search: decode: %w", err)
 	}
 
 	books := make([]Book, 0, len(resp.Results))
@@ -113,37 +123,56 @@ func Search(ctx context.Context, httpClient HTTPClient, query string, page int) 
 	}, nil
 }
 
-// Fetch resolves a book's metadata and plain-text URL via Gutendex, then
-// downloads the plain text. The returned raw text is ready for Parse.
+// Fetch downloads a book's UTF-8 plain text from the Gutenberg cache (the
+// mirror first, then www.gutenberg.org) and reads its title/author from the
+// text's own header, so an import needs ONE successful request. The returned
+// raw text is ready for Parse.
 func Fetch(ctx context.Context, httpClient HTTPClient, sourceID string) (title, author, raw string, err error) {
 	client := resolveClient(httpClient)
-
-	u := fmt.Sprintf("%s/%s", gutendexBaseURL, url.PathEscape(sourceID))
-	var meta gutendexBook
-	if err := getJSON(ctx, client, u, &meta); err != nil {
-		return "", "", "", fmt.Errorf("gutendex fetch metadata: %w", err)
+	var body []byte
+	for _, u := range textURLs(sourceID) {
+		if body, err = fetchBytes(ctx, client, u); err == nil {
+			break
+		}
 	}
-
-	book := toBook(meta)
-	if book.TextURL == "" {
-		return "", "", "", fmt.Errorf("no plain-text format for book %s", sourceID)
-	}
-
-	raw, err = download(ctx, client, book.TextURL)
 	if err != nil {
 		return "", "", "", fmt.Errorf("download text: %w", err)
 	}
-	return book.Title, book.Author, raw, nil
+	raw = string(body)
+	title, author = parseHeader(raw)
+	if title == "" {
+		title = "Project Gutenberg eBook #" + sourceID
+	}
+	return title, author, raw, nil
 }
 
-// toBook maps a Gutendex book object to our Book, picking the best plain-text
-// format: prefer UTF-8, then any "text/plain" variant.
+// textURL is the plain-text (UTF-8) download URL for a Gutenberg book id on
+// www.gutenberg.org.
+func textURL(sourceID string) string {
+	return cacheTextURL(gutenbergBaseURL, sourceID)
+}
+
+// textURLs lists where Fetch looks for a book's text, in order.
+func textURLs(sourceID string) []string {
+	return []string{cacheTextURL(mirrorBaseURL, sourceID), textURL(sourceID)}
+}
+
+func cacheTextURL(base, sourceID string) string {
+	id := url.PathEscape(sourceID)
+	return fmt.Sprintf("%s/cache/epub/%s/pg%s.txt", base, id, id)
+}
+
+// toBook maps a Gutendex book object to our Book. TextURL is the cache URL
+// Fetch would try last; Fetch itself tries the mirror first.
 func toBook(g gutendexBook) Book {
+	id := fmt.Sprintf("%d", g.ID)
 	b := Book{
-		SourceID: fmt.Sprintf("%d", g.ID),
-		Title:    g.Title,
-		TextURL:  pickTextURL(g.Formats),
-		CoverURL: g.Formats["image/jpeg"],
+		SourceID: id,
+		Title:    strings.TrimSpace(g.Title),
+		TextURL:  textURL(id),
+		// Gutendex links covers on www.gutenberg.org; the mirror serves the same
+		// cache path and stays up when the main site is down.
+		CoverURL: strings.Replace(g.Formats["image/jpeg"], gutenbergBaseURL+"/cache/", mirrorBaseURL+"/cache/", 1),
 	}
 	if len(g.Authors) > 0 {
 		b.Author = g.Authors[0].Name
@@ -154,38 +183,31 @@ func toBook(g gutendexBook) Book {
 	return b
 }
 
-// pickTextURL selects a plain-text download URL, preferring the UTF-8 variant
-// and falling back to any text/plain format.
-func pickTextURL(formats gutendexFormats) string {
-	if u, ok := formats["text/plain; charset=utf-8"]; ok {
-		return u
+// parseHeader reads the "Title:" and "Author:" lines of the Project Gutenberg
+// header (everything before the START marker). A value may wrap onto indented
+// continuation lines, which are joined with a space.
+func parseHeader(raw string) (title, author string) {
+	header := raw
+	if loc := pgStartMarker.FindStringIndex(raw); loc != nil {
+		header = raw[:loc[0]]
 	}
-	for mime, u := range formats {
-		// Match "text/plain", "text/plain; charset=us-ascii", etc.
-		if len(mime) >= len("text/plain") && mime[:len("text/plain")] == "text/plain" {
-			return u
+	var current *string
+	for _, line := range strings.Split(header, "\n") {
+		line = strings.TrimRight(line, "\r")
+		switch {
+		case strings.HasPrefix(line, "Title:"):
+			title = strings.TrimSpace(strings.TrimPrefix(line, "Title:"))
+			current = &title
+		case strings.HasPrefix(line, "Author:"):
+			author = strings.TrimSpace(strings.TrimPrefix(line, "Author:"))
+			current = &author
+		case current != nil && strings.TrimSpace(line) != "" && strings.TrimLeft(line, " \t") != line:
+			*current += " " + strings.TrimSpace(line)
+		default:
+			current = nil
 		}
 	}
-	return ""
-}
-
-func getJSON(ctx context.Context, client HTTPClient, u string, out any) error {
-	body, err := fetchBytes(ctx, client, u)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("decode json: %w", err)
-	}
-	return nil
-}
-
-func download(ctx context.Context, client HTTPClient, u string) (string, error) {
-	body, err := fetchBytes(ctx, client, u)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
+	return title, author
 }
 
 // fetchBytes GETs u and returns the (size-bounded) body, retrying transient

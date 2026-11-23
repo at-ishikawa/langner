@@ -33,7 +33,7 @@ func (f fakeAuthenticator) FetchUserInfo(_ context.Context, _ *oauth2.Token) (au
 	return f.info, nil
 }
 
-func newTestAuthHandler(t *testing.T, allowed []string, info auth.UserInfo) *AuthHandler {
+func newTestAuthHandler(t *testing.T, info auth.UserInfo) *AuthHandler {
 	t.Helper()
 	tokens, err := auth.NewTokenSigner([]byte("handler-test-token-key"))
 	require.NoError(t, err)
@@ -43,10 +43,9 @@ func newTestAuthHandler(t *testing.T, allowed []string, info auth.UserInfo) *Aut
 		Authenticator: fakeAuthenticator{info: info},
 		Tokens:        tokens,
 		State:         state,
-		// Users is intentionally nil: the allowlist-reject / invalid-state paths
-		// must return BEFORE any user upsert, so touching the DB here would panic.
+		// Users is intentionally nil: the invalid-state path must return BEFORE
+		// any user upsert, so touching the DB here would panic.
 		Users:          nil,
-		AllowedEmails:  allowed,
 		FrontendURL:    "http://frontend.example",
 		AllowedOrigins: []string{"http://frontend.example"},
 		CookieSecure:   false,
@@ -65,30 +64,8 @@ func noSessionCookie(rec *httptest.ResponseRecorder) bool {
 	return true
 }
 
-func TestAuthHandler_Callback_AllowlistReject(t *testing.T) {
-	h := newTestAuthHandler(t, []string{"admin@example.com"},
-		auth.UserInfo{Sub: "google-sub-123", Email: "intruder@example.com", Name: "Intruder"})
-
-	// A valid, matching state so the flow reaches the allowlist check.
-	stateVal, err := h.state.Issue(stateTTL, auth.StateClaims{})
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodGet,
-		"/auth/google/callback?state="+url.QueryEscape(stateVal)+"&code=any-code", nil)
-	req.AddCookie(&http.Cookie{Name: stateCookieName, Value: stateVal})
-	rec := httptest.NewRecorder()
-
-	h.Callback(rec, req)
-
-	assert.Equal(t, http.StatusFound, rec.Code)
-	assert.Equal(t, "http://frontend.example/login?error=not_allowed", rec.Header().Get("Location"))
-	assert.True(t, noSessionCookie(rec), "no session cookie must be set for a rejected email")
-	assert.NotContains(t, rec.Header().Get("Location"), "access_token", "no token may leak for a rejected email")
-}
-
 func TestAuthHandler_Callback_InvalidState(t *testing.T) {
-	h := newTestAuthHandler(t, []string{"admin@example.com"},
-		auth.UserInfo{Sub: "s", Email: "admin@example.com", Name: "Admin"})
+	h := newTestAuthHandler(t, auth.UserInfo{Sub: "s", Email: "admin@example.com", Name: "Admin"})
 
 	// State cookie present but query state does not match.
 	stateVal, err := h.state.Issue(stateTTL, auth.StateClaims{})
@@ -106,7 +83,7 @@ func TestAuthHandler_Callback_InvalidState(t *testing.T) {
 }
 
 func TestAuthHandler_Me_Unauthenticated(t *testing.T) {
-	h := newTestAuthHandler(t, nil, auth.UserInfo{})
+	h := newTestAuthHandler(t, auth.UserInfo{})
 	req := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
 	rec := httptest.NewRecorder()
 
@@ -116,7 +93,7 @@ func TestAuthHandler_Me_Unauthenticated(t *testing.T) {
 }
 
 func TestAuthHandler_Logout_NoOp(t *testing.T) {
-	h := newTestAuthHandler(t, nil, auth.UserInfo{})
+	h := newTestAuthHandler(t, auth.UserInfo{})
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
 	rec := httptest.NewRecorder()
 
@@ -131,7 +108,7 @@ func TestAuthHandler_Logout_NoOp(t *testing.T) {
 // + preserved path), a foreign origin falls back to the configured frontend
 // origin, and the token is always delivered in the fragment (never the query).
 func TestAuthHandler_CallbackRedirect_OpenRedirectGuard(t *testing.T) {
-	h := newTestAuthHandler(t, nil, auth.UserInfo{})
+	h := newTestAuthHandler(t, auth.UserInfo{})
 
 	t.Run("allowlisted absolute next preserves origin + path", func(t *testing.T) {
 		got := h.callbackRedirect("http://frontend.example/quiz/standard?x=1", "JWT")

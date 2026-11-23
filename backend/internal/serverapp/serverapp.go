@@ -235,6 +235,9 @@ func BuildHandler(cfg *config.Config) (http.Handler, *AuthComponents, func(), er
 	svc := quiz.NewService(cfg.Notebooks, clientResolver, dictionaryMap, learningRepo, cfg.Quiz)
 	svc.SetHistoryStore(historyStore)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
+	// Each user's answers are scheduled with their own review schedule
+	// (Settings), else the quiz config default.
+	svc.SetIntervalSchedules(repos.Intervals)
 
 	if content != nil {
 		svc.SetContent(content, dictionaryEntries)
@@ -438,7 +441,6 @@ func buildAuth(cfg *config.Config, db *sqlx.DB) (*AuthComponents, error) {
 		DeviceCodes:    deviceCodes,
 		RefreshTokens:  refreshTokens,
 		Credentials:    credentials,
-		AllowedEmails:  cfg.Auth.AllowedEmails,
 		FrontendURL:    cfg.Auth.FrontendURL,
 		AllowedOrigins: cfg.Server.CORS.AllowedOrigins,
 		CookieSecure:   cfg.Auth.CookieSecure,

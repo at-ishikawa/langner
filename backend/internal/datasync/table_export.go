@@ -67,9 +67,10 @@ func DataTablesInDependencyOrder() []string {
 		"semantic_concepts",
 		"definition_concepts",
 		"dictionary_entries",
-		"cli_device_codes",     // -> users (migration 029 CLI device flow); child of users
-		"cli_refresh_tokens",   // -> users (migration 030 CLI refresh tokens); child of users
-		"user_llm_credentials", // -> users (migration 034 per-user LLM keys); child of users
+		"cli_device_codes",       // -> users (migration 029 CLI device flow); child of users
+		"cli_refresh_tokens",     // -> users (migration 030 CLI refresh tokens); child of users
+		"user_llm_credentials",   // -> users (migration 034 per-user LLM keys); child of users
+		"user_interval_settings", // -> users (migration 042 per-user review schedule); child of users
 		// Notebook content (migration 038), children first; all -> notebooks.
 		"content_corrections",
 		"content_relations",
@@ -88,8 +89,9 @@ func DataTablesInDependencyOrder() []string {
 		"content_entries",
 		"content_files",
 		"content_indexes",
-		"notebooks", // -> users (migration 027 notebook ownership); child of users
-		"users",     // leaf parent (migration 024); notebooks + learning_logs.user_id reference it
+		"user_library", // -> users, notebooks (migration 041 per-user book library)
+		"notebooks",    // -> users (migration 027 notebook ownership); child of users
+		"users",        // leaf parent (migration 024); notebooks + learning_logs.user_id reference it
 	}
 }
 

@@ -1,13 +1,17 @@
 package server
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/ebook"
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -57,4 +61,16 @@ func TestBuildBookBundle_DeterministicIDAndBooksFamily(t *testing.T) {
 		assert.False(t, strings.Contains(string(f.Content), "PROJECT GUTENBERG EBOOK"),
 			"boilerplate leaked into %q", f.Path)
 	}
+}
+
+func TestImportBook_RejectsNonNumericSourceID(t *testing.T) {
+	h := &NotebookHandler{}
+	ctx := testutil.WithTestUser(context.Background(), 1)
+	for _, id := range []string{"..", "11/../12", "abc", "12a"} {
+		_, err := h.ImportBook(ctx, connect.NewRequest(&apiv1.ImportBookRequest{SourceId: id}))
+		require.Error(t, err, id)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), id)
+	}
+	_, err := h.ImportBook(ctx, connect.NewRequest(&apiv1.ImportBookRequest{SourceId: "11"}))
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err), "a valid id gets past the check")
 }

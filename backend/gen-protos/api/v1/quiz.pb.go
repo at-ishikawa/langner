@@ -4802,6 +4802,278 @@ func (*ResumeEtymologyWordResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_quiz_proto_rawDescGZIP(), []int{66}
 }
 
+// IntervalSettings is a review schedule.
+type IntervalSettings struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// algorithm is "fixed" (the fixed_intervals ladder) or "modified_sm2"
+	// (intervals adapt to how easily each word is recalled).
+	Algorithm string `protobuf:"bytes,1,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	// fixed_intervals is the ladder in days, strictly ascending, for "fixed";
+	// empty for "modified_sm2".
+	FixedIntervals []int32 `protobuf:"varint,2,rep,packed,name=fixed_intervals,json=fixedIntervals,proto3" json:"fixed_intervals,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *IntervalSettings) Reset() {
+	*x = IntervalSettings{}
+	mi := &file_api_v1_quiz_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntervalSettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntervalSettings) ProtoMessage() {}
+
+func (x *IntervalSettings) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntervalSettings.ProtoReflect.Descriptor instead.
+func (*IntervalSettings) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *IntervalSettings) GetAlgorithm() string {
+	if x != nil {
+		return x.Algorithm
+	}
+	return ""
+}
+
+func (x *IntervalSettings) GetFixedIntervals() []int32 {
+	if x != nil {
+		return x.FixedIntervals
+	}
+	return nil
+}
+
+type GetIntervalSettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIntervalSettingsRequest) Reset() {
+	*x = GetIntervalSettingsRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIntervalSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIntervalSettingsRequest) ProtoMessage() {}
+
+func (x *GetIntervalSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIntervalSettingsRequest.ProtoReflect.Descriptor instead.
+func (*GetIntervalSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{68}
+}
+
+type GetIntervalSettingsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// settings is the schedule the user's answers are scheduled with.
+	Settings *IntervalSettings `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	// is_default is true when the user saved no schedule and follows the
+	// server default.
+	IsDefault bool `protobuf:"varint,2,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
+	// default_settings is the server default schedule.
+	DefaultSettings *IntervalSettings `protobuf:"bytes,3,opt,name=default_settings,json=defaultSettings,proto3" json:"default_settings,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GetIntervalSettingsResponse) Reset() {
+	*x = GetIntervalSettingsResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIntervalSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIntervalSettingsResponse) ProtoMessage() {}
+
+func (x *GetIntervalSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIntervalSettingsResponse.ProtoReflect.Descriptor instead.
+func (*GetIntervalSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *GetIntervalSettingsResponse) GetSettings() *IntervalSettings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+func (x *GetIntervalSettingsResponse) GetIsDefault() bool {
+	if x != nil {
+		return x.IsDefault
+	}
+	return false
+}
+
+func (x *GetIntervalSettingsResponse) GetDefaultSettings() *IntervalSettings {
+	if x != nil {
+		return x.DefaultSettings
+	}
+	return nil
+}
+
+type UpdateIntervalSettingsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// settings is the schedule to save. Ignored when reset_to_default is set.
+	Settings *IntervalSettings `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	// reset_to_default removes the user's schedule so they follow the server
+	// default again.
+	ResetToDefault bool `protobuf:"varint,2,opt,name=reset_to_default,json=resetToDefault,proto3" json:"reset_to_default,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *UpdateIntervalSettingsRequest) Reset() {
+	*x = UpdateIntervalSettingsRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateIntervalSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateIntervalSettingsRequest) ProtoMessage() {}
+
+func (x *UpdateIntervalSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateIntervalSettingsRequest.ProtoReflect.Descriptor instead.
+func (*UpdateIntervalSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *UpdateIntervalSettingsRequest) GetSettings() *IntervalSettings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+func (x *UpdateIntervalSettingsRequest) GetResetToDefault() bool {
+	if x != nil {
+		return x.ResetToDefault
+	}
+	return false
+}
+
+type UpdateIntervalSettingsResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Settings        *IntervalSettings      `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	IsDefault       bool                   `protobuf:"varint,2,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
+	DefaultSettings *IntervalSettings      `protobuf:"bytes,3,opt,name=default_settings,json=defaultSettings,proto3" json:"default_settings,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *UpdateIntervalSettingsResponse) Reset() {
+	*x = UpdateIntervalSettingsResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateIntervalSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateIntervalSettingsResponse) ProtoMessage() {}
+
+func (x *UpdateIntervalSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateIntervalSettingsResponse.ProtoReflect.Descriptor instead.
+func (*UpdateIntervalSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *UpdateIntervalSettingsResponse) GetSettings() *IntervalSettings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+func (x *UpdateIntervalSettingsResponse) GetIsDefault() bool {
+	if x != nil {
+		return x.IsDefault
+	}
+	return false
+}
+
+func (x *UpdateIntervalSettingsResponse) GetDefaultSettings() *IntervalSettings {
+	if x != nil {
+		return x.DefaultSettings
+	}
+	return nil
+}
+
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
 const file_api_v1_quiz_proto_rawDesc = "" +
@@ -5194,7 +5466,24 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
 	"expression\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"expression\"\x1d\n" +
-	"\x1bResumeEtymologyWordResponse*\xc6\x01\n" +
+	"\x1bResumeEtymologyWordResponse\"Y\n" +
+	"\x10IntervalSettings\x12\x1c\n" +
+	"\talgorithm\x18\x01 \x01(\tR\talgorithm\x12'\n" +
+	"\x0ffixed_intervals\x18\x02 \x03(\x05R\x0efixedIntervals\"\x1c\n" +
+	"\x1aGetIntervalSettingsRequest\"\xb7\x01\n" +
+	"\x1bGetIntervalSettingsResponse\x124\n" +
+	"\bsettings\x18\x01 \x01(\v2\x18.api.v1.IntervalSettingsR\bsettings\x12\x1d\n" +
+	"\n" +
+	"is_default\x18\x02 \x01(\bR\tisDefault\x12C\n" +
+	"\x10default_settings\x18\x03 \x01(\v2\x18.api.v1.IntervalSettingsR\x0fdefaultSettings\"\x7f\n" +
+	"\x1dUpdateIntervalSettingsRequest\x124\n" +
+	"\bsettings\x18\x01 \x01(\v2\x18.api.v1.IntervalSettingsR\bsettings\x12(\n" +
+	"\x10reset_to_default\x18\x02 \x01(\bR\x0eresetToDefault\"\xba\x01\n" +
+	"\x1eUpdateIntervalSettingsResponse\x124\n" +
+	"\bsettings\x18\x01 \x01(\v2\x18.api.v1.IntervalSettingsR\bsettings\x12\x1d\n" +
+	"\n" +
+	"is_default\x18\x02 \x01(\bR\tisDefault\x12C\n" +
+	"\x10default_settings\x18\x03 \x01(\v2\x18.api.v1.IntervalSettingsR\x0fdefaultSettings*\xc6\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +
@@ -5202,7 +5491,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x12QUIZ_TYPE_FREEFORM\x10\x03\x12\x1e\n" +
 	"\x1aQUIZ_TYPE_ETYMOLOGY_ORIGIN\x10\x04\x12\x15\n" +
 	"\x11QUIZ_TYPE_RELEARN\x10\a\x12\x15\n" +
-	"\x11QUIZ_TYPE_GRAMMAR\x10\b\"\x04\b\x05\x10\x05\"\x04\b\x06\x10\x062\xa6\x10\n" +
+	"\x11QUIZ_TYPE_GRAMMAR\x10\b\"\x04\b\x05\x10\x05\"\x04\b\x06\x10\x062\xef\x11\n" +
 	"\vQuizService\x12O\n" +
 	"\x0eGetQuizOptions\x12\x1d.api.v1.GetQuizOptionsRequest\x1a\x1e.api.v1.GetQuizOptionsResponse\x12@\n" +
 	"\tStartQuiz\x12\x18.api.v1.StartQuizRequest\x1a\x19.api.v1.StartQuizResponse\x12I\n" +
@@ -5227,7 +5516,9 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11SubmitGrammarPost\x12 .api.v1.SubmitGrammarPostRequest\x1a!.api.v1.SubmitGrammarPostResponse\x12^\n" +
 	"\x13ListGrammarMistakes\x12\".api.v1.ListGrammarMistakesRequest\x1a#.api.v1.ListGrammarMistakesResponse\x12d\n" +
 	"\x15ExcludeGrammarMistake\x12$.api.v1.ExcludeGrammarMistakeRequest\x1a%.api.v1.ExcludeGrammarMistakeResponse\x12a\n" +
-	"\x14ResumeGrammarMistake\x12#.api.v1.ResumeGrammarMistakeRequest\x1a$.api.v1.ResumeGrammarMistakeResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x14ResumeGrammarMistake\x12#.api.v1.ResumeGrammarMistakeRequest\x1a$.api.v1.ResumeGrammarMistakeResponse\x12^\n" +
+	"\x13GetIntervalSettings\x12\".api.v1.GetIntervalSettingsRequest\x1a#.api.v1.GetIntervalSettingsResponse\x12g\n" +
+	"\x16UpdateIntervalSettings\x12%.api.v1.UpdateIntervalSettingsRequest\x1a&.api.v1.UpdateIntervalSettingsResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_quiz_proto_rawDescOnce sync.Once
@@ -5242,7 +5533,7 @@ func file_api_v1_quiz_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_quiz_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 73)
 var file_api_v1_quiz_proto_goTypes = []any{
 	(QuizType)(0),                             // 0: api.v1.QuizType
 	(GraphPrompt_Shape)(0),                    // 1: api.v1.GraphPrompt.Shape
@@ -5314,7 +5605,12 @@ var file_api_v1_quiz_proto_goTypes = []any{
 	(*ExcludeEtymologyWordResponse)(nil),      // 67: api.v1.ExcludeEtymologyWordResponse
 	(*ResumeEtymologyWordRequest)(nil),        // 68: api.v1.ResumeEtymologyWordRequest
 	(*ResumeEtymologyWordResponse)(nil),       // 69: api.v1.ResumeEtymologyWordResponse
-	nil,                                       // 70: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	(*IntervalSettings)(nil),                  // 70: api.v1.IntervalSettings
+	(*GetIntervalSettingsRequest)(nil),        // 71: api.v1.GetIntervalSettingsRequest
+	(*GetIntervalSettingsResponse)(nil),       // 72: api.v1.GetIntervalSettingsResponse
+	(*UpdateIntervalSettingsRequest)(nil),     // 73: api.v1.UpdateIntervalSettingsRequest
+	(*UpdateIntervalSettingsResponse)(nil),    // 74: api.v1.UpdateIntervalSettingsResponse
+	nil,                                       // 75: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 }
 var file_api_v1_quiz_proto_depIdxs = []int32{
 	5,  // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
@@ -5332,7 +5628,7 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	12, // 12: api.v1.SubmitReverseAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	22, // 13: api.v1.BatchSubmitReverseAnswersRequest.answers:type_name -> api.v1.SubmitReverseAnswerRequest
 	23, // 14: api.v1.BatchSubmitReverseAnswersResponse.responses:type_name -> api.v1.SubmitReverseAnswerResponse
-	70, // 15: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	75, // 15: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 	12, // 16: api.v1.SubmitFreeformAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	0,  // 17: api.v1.OverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
 	0,  // 18: api.v1.UndoOverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
@@ -5359,57 +5655,66 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	56, // 39: api.v1.SubmitGrammarPostRequest.answers:type_name -> api.v1.GrammarBlankAnswer
 	58, // 40: api.v1.SubmitGrammarPostResponse.results:type_name -> api.v1.GrammarBlankResult
 	61, // 41: api.v1.ListGrammarMistakesResponse.mistakes:type_name -> api.v1.GrammarMistake
-	3,  // 42: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	8,  // 43: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	14, // 44: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	16, // 45: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
-	18, // 46: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	22, // 47: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	24, // 48: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
-	26, // 49: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	28, // 50: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	30, // 51: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
-	32, // 52: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
-	34, // 53: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
-	36, // 54: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
-	66, // 55: api.v1.QuizService.ExcludeEtymologyWord:input_type -> api.v1.ExcludeEtymologyWordRequest
-	68, // 56: api.v1.QuizService.ResumeEtymologyWord:input_type -> api.v1.ResumeEtymologyWordRequest
-	41, // 57: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
-	45, // 58: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
-	49, // 59: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
-	51, // 60: api.v1.QuizService.StartGrammarQuiz:input_type -> api.v1.StartGrammarQuizRequest
-	55, // 61: api.v1.QuizService.SubmitGrammarPost:input_type -> api.v1.SubmitGrammarPostRequest
-	59, // 62: api.v1.QuizService.ListGrammarMistakes:input_type -> api.v1.ListGrammarMistakesRequest
-	62, // 63: api.v1.QuizService.ExcludeGrammarMistake:input_type -> api.v1.ExcludeGrammarMistakeRequest
-	64, // 64: api.v1.QuizService.ResumeGrammarMistake:input_type -> api.v1.ResumeGrammarMistakeRequest
-	4,  // 65: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	9,  // 66: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	15, // 67: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	17, // 68: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
-	19, // 69: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	23, // 70: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	25, // 71: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
-	27, // 72: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	29, // 73: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	31, // 74: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
-	33, // 75: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
-	35, // 76: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
-	37, // 77: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
-	67, // 78: api.v1.QuizService.ExcludeEtymologyWord:output_type -> api.v1.ExcludeEtymologyWordResponse
-	69, // 79: api.v1.QuizService.ResumeEtymologyWord:output_type -> api.v1.ResumeEtymologyWordResponse
-	42, // 80: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
-	46, // 81: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
-	50, // 82: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
-	52, // 83: api.v1.QuizService.StartGrammarQuiz:output_type -> api.v1.StartGrammarQuizResponse
-	57, // 84: api.v1.QuizService.SubmitGrammarPost:output_type -> api.v1.SubmitGrammarPostResponse
-	60, // 85: api.v1.QuizService.ListGrammarMistakes:output_type -> api.v1.ListGrammarMistakesResponse
-	63, // 86: api.v1.QuizService.ExcludeGrammarMistake:output_type -> api.v1.ExcludeGrammarMistakeResponse
-	65, // 87: api.v1.QuizService.ResumeGrammarMistake:output_type -> api.v1.ResumeGrammarMistakeResponse
-	65, // [65:88] is the sub-list for method output_type
-	42, // [42:65] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	70, // 42: api.v1.GetIntervalSettingsResponse.settings:type_name -> api.v1.IntervalSettings
+	70, // 43: api.v1.GetIntervalSettingsResponse.default_settings:type_name -> api.v1.IntervalSettings
+	70, // 44: api.v1.UpdateIntervalSettingsRequest.settings:type_name -> api.v1.IntervalSettings
+	70, // 45: api.v1.UpdateIntervalSettingsResponse.settings:type_name -> api.v1.IntervalSettings
+	70, // 46: api.v1.UpdateIntervalSettingsResponse.default_settings:type_name -> api.v1.IntervalSettings
+	3,  // 47: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	8,  // 48: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	14, // 49: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	16, // 50: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
+	18, // 51: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	22, // 52: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	24, // 53: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
+	26, // 54: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	28, // 55: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	30, // 56: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	32, // 57: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	34, // 58: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	36, // 59: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	66, // 60: api.v1.QuizService.ExcludeEtymologyWord:input_type -> api.v1.ExcludeEtymologyWordRequest
+	68, // 61: api.v1.QuizService.ResumeEtymologyWord:input_type -> api.v1.ResumeEtymologyWordRequest
+	41, // 62: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
+	45, // 63: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
+	49, // 64: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
+	51, // 65: api.v1.QuizService.StartGrammarQuiz:input_type -> api.v1.StartGrammarQuizRequest
+	55, // 66: api.v1.QuizService.SubmitGrammarPost:input_type -> api.v1.SubmitGrammarPostRequest
+	59, // 67: api.v1.QuizService.ListGrammarMistakes:input_type -> api.v1.ListGrammarMistakesRequest
+	62, // 68: api.v1.QuizService.ExcludeGrammarMistake:input_type -> api.v1.ExcludeGrammarMistakeRequest
+	64, // 69: api.v1.QuizService.ResumeGrammarMistake:input_type -> api.v1.ResumeGrammarMistakeRequest
+	71, // 70: api.v1.QuizService.GetIntervalSettings:input_type -> api.v1.GetIntervalSettingsRequest
+	73, // 71: api.v1.QuizService.UpdateIntervalSettings:input_type -> api.v1.UpdateIntervalSettingsRequest
+	4,  // 72: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	9,  // 73: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	15, // 74: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	17, // 75: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
+	19, // 76: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	23, // 77: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	25, // 78: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
+	27, // 79: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	29, // 80: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	31, // 81: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
+	33, // 82: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
+	35, // 83: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
+	37, // 84: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
+	67, // 85: api.v1.QuizService.ExcludeEtymologyWord:output_type -> api.v1.ExcludeEtymologyWordResponse
+	69, // 86: api.v1.QuizService.ResumeEtymologyWord:output_type -> api.v1.ResumeEtymologyWordResponse
+	42, // 87: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
+	46, // 88: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
+	50, // 89: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
+	52, // 90: api.v1.QuizService.StartGrammarQuiz:output_type -> api.v1.StartGrammarQuizResponse
+	57, // 91: api.v1.QuizService.SubmitGrammarPost:output_type -> api.v1.SubmitGrammarPostResponse
+	60, // 92: api.v1.QuizService.ListGrammarMistakes:output_type -> api.v1.ListGrammarMistakesResponse
+	63, // 93: api.v1.QuizService.ExcludeGrammarMistake:output_type -> api.v1.ExcludeGrammarMistakeResponse
+	65, // 94: api.v1.QuizService.ResumeGrammarMistake:output_type -> api.v1.ResumeGrammarMistakeResponse
+	72, // 95: api.v1.QuizService.GetIntervalSettings:output_type -> api.v1.GetIntervalSettingsResponse
+	74, // 96: api.v1.QuizService.UpdateIntervalSettings:output_type -> api.v1.UpdateIntervalSettingsResponse
+	72, // [72:97] is the sub-list for method output_type
+	47, // [47:72] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
@@ -5425,7 +5730,7 @@ func file_api_v1_quiz_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   68,
+			NumMessages:   73,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

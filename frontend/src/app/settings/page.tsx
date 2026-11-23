@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Box, Button, Heading, Input, Text, VStack } from "@chakra-ui/react";
 import { Card } from "@/components/Card";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ReviewScheduleSettings } from "@/components/ReviewScheduleSettings";
 import { useSession } from "@/components/SessionProvider";
 import {
   setLlmCredential,
@@ -94,6 +95,11 @@ export default function SettingsPage() {
           </Box>
           <ThemeToggle />
         </Card>
+      </Box>
+
+      <Box mb={7}>
+        <SectionLabel>Review schedule</SectionLabel>
+        <ReviewScheduleSettings />
       </Box>
 
       <SectionLabel>AI grading</SectionLabel>

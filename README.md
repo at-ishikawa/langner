@@ -139,6 +139,8 @@ Choose how many answers to review at once on the start screen (default 10). You 
 
 At the end of a session, a results page shows your score and lets you review incorrect answers.
 
+**Review schedule** - On the Settings page you can choose how long Langner waits before asking a word again: fixed steps you set yourself (for example 1, 7, 30, 90, 365 days), or an adaptive schedule that waits longer for words you find easy. Until you choose, you get the default schedule, and you can switch back to it at any time. A change applies to your next answers; words you have already studied keep their current review dates.
+
 ![Quiz](docs/static/screenshots/quiz.jpg)
 
 ![Quiz Setup](docs/static/screenshots/quiz-setup.jpg)

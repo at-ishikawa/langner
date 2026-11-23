@@ -194,7 +194,9 @@ func (h *QuizHandler) SubmitGrammarPost(
 	}
 
 	// Save sequentially — writes go through the learning repository, so keep
-	// them serialized and in order.
+	// them serialized and in order. The user's review schedule is looked up
+	// once for the whole post.
+	ctx = h.svc.IntervalSchedules().WithCalculator(ctx, userID)
 	results := make([]*apiv1.GrammarBlankResult, len(answers))
 	for i, a := range answers {
 		if !resolved[i] {

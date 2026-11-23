@@ -47,13 +47,13 @@ func (h *NotebookHandler) SearchBooks(
 	}), nil
 }
 
-// ImportBook downloads + parses a Project Gutenberg book and stores it ONCE as
-// a shared, public, owner-less notebook under the deterministic id
-// `gutenberg-<source_id>` via ImportShippedBundle (owner_user_id=NULL,
-// visibility='public', upsert by id). A re-import by anyone is an idempotent
-// no-op — one shared copy every user can read and quiz; private highlights stay
-// per-user (user_notebook_definitions). Requires a signed-in user and a
-// configured database (mirrors PushNotebook's Unimplemented guard).
+// ImportBook adds a Project Gutenberg book to the caller's library. The book
+// is stored ONCE as a shared, owner-less library notebook under the
+// deterministic id `gutenberg-<source_id>`: the first import downloads and
+// stores it, later imports (by anyone) only add it to their library. Only
+// users who imported a book see it; private highlights stay per-user
+// (user_notebook_definitions). Requires a signed-in user and a configured
+// database (mirrors PushNotebook's Unimplemented guard).
 func (h *NotebookHandler) ImportBook(
 	ctx context.Context,
 	req *connect.Request[apiv1.ImportBookRequest],
@@ -61,14 +61,25 @@ func (h *NotebookHandler) ImportBook(
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
-	if _, err := requireUserID(ctx); err != nil {
+	userID, err := requireUserID(ctx)
+	if err != nil {
 		return nil, err
+	}
+	sourceID := req.Msg.GetSourceId()
+	if !isGutenbergID(sourceID) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source_id %q is not a Project Gutenberg book number", sourceID))
 	}
 	if h.db == nil || h.store == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("importing books requires a configured database"))
 	}
 
-	sourceID := req.Msg.GetSourceId()
+	added, err := h.store.AddToLibrary(ctx, userID, bookNotebookID(sourceID))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("add book to library: %w", err))
+	}
+	if added {
+		return connect.NewResponse(&apiv1.ImportBookResponse{NotebookId: bookNotebookID(sourceID)}), nil
+	}
 	title, author, raw, err := gutenberg.Fetch(ctx, h.bookHTTPClient, sourceID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("fetch book %s: %w", sourceID, err))
@@ -86,10 +97,27 @@ func (h *NotebookHandler) ImportBook(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse book %s: %w", sourceID, err))
 	}
-	if err := h.store.ImportShippedBundle(ctx, "book", displayName, notebook.HashBundle(files), notebook.BundleBytes(files), content); err != nil {
+	if err := h.store.ImportLibraryBook(ctx, userID, displayName, notebook.HashBundle(files), notebook.BundleBytes(files), content); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("store book: %w", err))
 	}
 	return connect.NewResponse(&apiv1.ImportBookResponse{NotebookId: notebookID}), nil
+}
+
+// bookNotebookID is the shared notebook id of a Project Gutenberg book.
+func bookNotebookID(sourceID string) string { return "gutenberg-" + sourceID }
+
+// isGutenbergID reports whether sourceID is a Project Gutenberg book number;
+// it becomes part of both the download URL and the notebook id.
+func isGutenbergID(sourceID string) bool {
+	if sourceID == "" {
+		return false
+	}
+	for _, r := range sourceID {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // buildBookBundle parses a raw Project Gutenberg plain-text book into stored
@@ -104,7 +132,7 @@ func buildBookBundle(sourceID, title, author, raw string) (notebookID string, fi
 	if err != nil {
 		return "", nil, "", err
 	}
-	notebookID = "gutenberg-" + sourceID
+	notebookID = bookNotebookID(sourceID)
 
 	files = make([]notebook.NotebookFile, 0, len(bundle.Files))
 	for _, f := range bundle.Files {

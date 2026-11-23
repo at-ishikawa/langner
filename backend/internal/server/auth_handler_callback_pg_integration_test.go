@@ -48,7 +48,6 @@ func TestAuthHandler_Callback_MintsUsableWebRefreshToken(t *testing.T) {
 		State:          state,
 		Users:          auth.NewUserRepository(db),
 		RefreshTokens:  refreshRepo,
-		AllowedEmails:  []string{"admin@example.com"},
 		FrontendURL:    "http://frontend.example",
 		AllowedOrigins: []string{"http://frontend.example"},
 		CookieSameSite: http.SameSiteLaxMode,

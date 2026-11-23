@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Spinner, Text, VStack } from "@chakra-ui/react";
 import { setAccessToken } from "@/lib/authToken";
@@ -13,8 +13,14 @@ import { setAccessToken } from "@/lib/authToken";
 // token it falls back to /login.
 export default function AuthCallbackPage() {
   const router = useRouter();
+  // The fragment is read once: React runs this effect twice in development
+  // (Strict Mode), and the second run would find the scrubbed URL and send a
+  // signed-in user to /login.
+  const handled = useRef(false);
 
   useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
     const hash = window.location.hash.startsWith("#")
       ? window.location.hash.slice(1)
       : window.location.hash;

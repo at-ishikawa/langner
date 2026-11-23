@@ -68,9 +68,25 @@ Unlike standard SM-2 which resets to day 1 on any mistake, Langner uses **propor
 | 6-9 reviews | × 0.6 | -0.30 |
 | 10+ reviews | × 0.7 | -0.20 |
 
-## Configuration
+## Choosing Your Schedule
 
-Choose the algorithm in your `config.yaml`:
+Each person picks their own schedule on the **Settings** page, under
+**Review schedule**:
+
+- **Fixed steps** (the Fixed Levels algorithm) — enter the waits in days,
+  shortest first, for example `1, 7, 30, 90, 365`. Each wait must be longer
+  than the one before it, between 1 and 3650 days, with at most 12 steps.
+- **Adaptive** (the Modified SM-2 algorithm).
+
+Until you choose, you follow the server's default schedule, and **Use the
+default** switches you back to it. A new schedule applies to your next
+answers only: words you have already studied keep the review dates they have
+now, and move to the new schedule the next time you answer them.
+
+## Server Default
+
+The default for people who have not chosen a schedule is set in the server's
+`config.yml`:
 
 ```yaml
 quiz:
@@ -78,11 +94,15 @@ quiz:
   fixed_intervals: [1, 7, 30, 90, 365]
 ```
 
-The default algorithm is `modified_sm2` for backward compatibility.
+or with the `QUIZ_ALGORITHM` and `QUIZ_FIXED_INTERVALS` (comma-separated, e.g.
+`1,7,30,90`) environment variables. The default algorithm is `modified_sm2`.
+The command-line quizzes, which run without a database, always use this
+default.
 
 ## Recalculating Intervals
 
-Intervals are derived from each word's review history by the configured
-algorithm whenever the history is read, so changing the algorithm or the
-`fixed_intervals` takes effect automatically on the next quiz — there is no
-separate recalculate step to run.
+Each answer is scheduled when you give it, using the schedule you have at
+that moment; changing the schedule does not rewrite earlier answers. The
+admin command `langner-admin migrate repair-intervals` replays each person's
+latest answer with their own schedule (or the default) and reports, or with
+`--apply` fixes, any review date that does not match.

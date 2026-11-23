@@ -143,6 +143,8 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	// populates it on a data-only import — seed one unowned public row.
 	seedIfEmpty(ctx, t, db, "notebooks",
 		`INSERT INTO notebooks (notebook_id, visibility) VALUES ('roundtrip-seed', 'public')`)
+	seedIfEmpty(ctx, t, db, "user_library",
+		`INSERT INTO user_library (user_id, notebook_id) SELECT (SELECT MIN(id) FROM users), (SELECT MIN(notebook_id) FROM notebooks)`)
 	seedIfEmpty(ctx, t, db, "note_images",
 		`INSERT INTO note_images (note_id, url, sort_order) SELECT MIN(id), 'https://example.com/ice.png', 0 FROM notes`)
 	seedIfEmpty(ctx, t, db, "note_references",
@@ -198,6 +200,11 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		`INSERT INTO user_llm_credentials (user_id, provider, api_key_encrypted, model)
 		 SELECT id, 'openai', '\x0123456789abcdef'::bytea, 'gpt-4o-mini'
 		 FROM users WHERE google_sub='roundtrip-seed-sub'`)
+	// user_interval_settings (migration 042): a per-user review schedule; the
+	// INTEGER[] ladder exercises the int-array round trip.
+	seedIfEmpty(ctx, t, db, "user_interval_settings",
+		`INSERT INTO user_interval_settings (user_id, algorithm, fixed_intervals)
+		 SELECT id, 'fixed', '{1,3,10,30}' FROM users WHERE google_sub='roundtrip-seed-sub'`)
 	// user_notebook_definitions (migration 036): a per-user private book-highlight
 	// registration, attributed to the seeded user and an existing note, so the new
 	// table dumps + restores (examples is JSON text).
