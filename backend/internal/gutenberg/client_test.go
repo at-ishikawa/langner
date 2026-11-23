@@ -106,12 +106,13 @@ func TestSearchRejectsMalformedFeed(t *testing.T) {
 	}
 }
 
-// TestFetch: one request to the plain-text cache; title/author come from the
-// text's own Project Gutenberg header (CRLF line endings, BOM, as served).
+// TestFetch: one request to the mirror's plain-text cache; title/author come
+// from the text's own Project Gutenberg header (CRLF line endings, BOM, as
+// served).
 func TestFetch(t *testing.T) {
 	text := readFixture(t, "pg11.txt")
 	client := fakeClient{responses: map[string]string{
-		"https://www.gutenberg.org/cache/epub/11/pg11.txt": text,
+		"https://gutenberg.pglaf.org/cache/epub/11/pg11.txt": text,
 	}}
 
 	title, author, raw, err := Fetch(context.Background(), client, "11")
@@ -170,6 +171,8 @@ func TestParseHeader(t *testing.T) {
 	}
 }
 
+// The mirror doesn't have book 5 here, so Fetch falls back to
+// www.gutenberg.org; that text has no Title: line, so the id names the book.
 func TestFetchFallsBackToIDTitle(t *testing.T) {
 	client := fakeClient{responses: map[string]string{
 		"https://www.gutenberg.org/cache/epub/5/pg5.txt": "*** START OF THE PROJECT GUTENBERG EBOOK ***\nBody.\n",
@@ -180,5 +183,11 @@ func TestFetchFallsBackToIDTitle(t *testing.T) {
 	}
 	if title != "Project Gutenberg eBook #5" {
 		t.Errorf("title = %q, want the id fallback", title)
+	}
+}
+
+func TestFetchFailsWhenNoSourceHasTheText(t *testing.T) {
+	if _, _, _, err := Fetch(context.Background(), fakeClient{}, "11"); err == nil {
+		t.Fatal("Fetch with no source serving the text: want error, got nil")
 	}
 }

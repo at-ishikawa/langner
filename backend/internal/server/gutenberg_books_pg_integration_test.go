@@ -41,7 +41,7 @@ import (
 // Postgres-only, so it skips without LANGNER_INTEGRATION_DB_URL.
 
 // fakeGutenbergClient serves a canned Project Gutenberg plain-text file at the
-// gutenberg.org cache URL so ImportBook runs without real network (the dev
+// Gutenberg mirror's cache URL so ImportBook runs without real network (the dev
 // container/CI has no egress). The title/author come from the text's header.
 type fakeGutenbergClient struct {
 	sourceID string
@@ -51,7 +51,7 @@ type fakeGutenbergClient struct {
 }
 
 func (c fakeGutenbergClient) Do(req *http.Request) (*http.Response, error) {
-	textURL := fmt.Sprintf("https://www.gutenberg.org/cache/epub/%s/pg%s.txt", c.sourceID, c.sourceID)
+	textURL := fmt.Sprintf("https://gutenberg.pglaf.org/cache/epub/%s/pg%s.txt", c.sourceID, c.sourceID)
 	if req.URL.String() != textURL {
 		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}

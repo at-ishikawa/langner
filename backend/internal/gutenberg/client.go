@@ -19,6 +19,10 @@ import (
 // without the real network.
 const (
 	gutenbergBaseURL = "https://www.gutenberg.org"
+	// mirrorBaseURL is an official Project Gutenberg mirror. Gutenberg asks
+	// automated clients to download texts from mirrors, and the mirror stays up
+	// while www.gutenberg.org is down for maintenance.
+	mirrorBaseURL = "https://gutenberg.pglaf.org"
 
 	// searchPageSize is how many books one OPDS search page holds; start_index
 	// (1-based) pages through the results in steps of this size.
@@ -137,11 +141,18 @@ func Search(ctx context.Context, httpClient HTTPClient, query string, page int) 
 	}, nil
 }
 
-// Fetch downloads a book's UTF-8 plain text from the Gutenberg cache and reads
-// its title/author from the text's own header, so an import needs ONE request.
-// The returned raw text is ready for Parse.
+// Fetch downloads a book's UTF-8 plain text from the Gutenberg cache (the
+// mirror first, then www.gutenberg.org) and reads its title/author from the
+// text's own header, so an import needs ONE successful request. The returned
+// raw text is ready for Parse.
 func Fetch(ctx context.Context, httpClient HTTPClient, sourceID string) (title, author, raw string, err error) {
-	body, err := fetchBytes(ctx, resolveClient(httpClient), textURL(sourceID))
+	client := resolveClient(httpClient)
+	var body []byte
+	for _, u := range textURLs(sourceID) {
+		if body, err = fetchBytes(ctx, client, u); err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return "", "", "", fmt.Errorf("download text: %w", err)
 	}
@@ -153,10 +164,20 @@ func Fetch(ctx context.Context, httpClient HTTPClient, sourceID string) (title, 
 	return title, author, raw, nil
 }
 
-// textURL is the plain-text (UTF-8) download URL for a Gutenberg book id.
+// textURL is the plain-text (UTF-8) download URL for a Gutenberg book id on
+// www.gutenberg.org.
 func textURL(sourceID string) string {
+	return cacheTextURL(gutenbergBaseURL, sourceID)
+}
+
+// textURLs lists where Fetch looks for a book's text, in order.
+func textURLs(sourceID string) []string {
+	return []string{cacheTextURL(mirrorBaseURL, sourceID), textURL(sourceID)}
+}
+
+func cacheTextURL(base, sourceID string) string {
 	id := url.PathEscape(sourceID)
-	return fmt.Sprintf("%s/cache/epub/%s/pg%s.txt", gutenbergBaseURL, id, id)
+	return fmt.Sprintf("%s/cache/epub/%s/pg%s.txt", base, id, id)
 }
 
 // toBook maps an OPDS search entry to our Book; ok is false for the feed's
