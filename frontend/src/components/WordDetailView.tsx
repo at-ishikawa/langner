@@ -49,7 +49,7 @@ export function WordDetailView({ wordDetail }: WordDetailViewProps) {
       {originParts.length > 0 && (
         <Box>
           <Text fontWeight="bold" fontSize="sm">
-            Etymology
+            Word roots
           </Text>
           <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
             {originParts.map((p, i) => (

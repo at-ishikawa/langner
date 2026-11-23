@@ -91,7 +91,7 @@ describe("LearnHubPage", () => {
       expect(screen.getByText("Vocabulary A")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Etymology"));
+    fireEvent.click(screen.getByText("Word roots"));
 
     await waitFor(() => {
       expect(screen.getByText("Word Roots")).toBeInTheDocument();

@@ -382,11 +382,14 @@ var quizTypeOrder = []string{
 	string(notebook.QuizTypeGrammar),
 }
 
+// User-facing labels for the analytics breakdown. Kept jargon-free to match the
+// quiz UI: no "Standard"/"Reverse"/"Freeform"/"Etymology" — say what the learner
+// actually does. (The map keys are the backend quiz-type values, unchanged.)
 var quizTypeLabels = map[string]string{
-	string(notebook.QuizTypeNotebook):        "Notebook",
-	string(notebook.QuizTypeReverse):         "Reverse",
-	string(notebook.QuizTypeFreeform):        "Freeform",
-	string(notebook.QuizTypeEtymologyOrigin): "Etymology",
+	string(notebook.QuizTypeNotebook):        "What does it mean?",
+	string(notebook.QuizTypeReverse):         "Which word is it?",
+	string(notebook.QuizTypeFreeform):        "Free practice",
+	string(notebook.QuizTypeEtymologyOrigin): "Word roots",
 	string(notebook.QuizTypeGrammar):         "Grammar",
 }
 

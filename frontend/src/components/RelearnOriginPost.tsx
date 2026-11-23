@@ -198,7 +198,7 @@ export function RelearnOriginPost({
     <Box pb={{ base: selected ? 80 : 0, md: 0 }} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
         <Text fontSize="xs" color="brand.fg" fontWeight="medium">
-          Etymology — recall each word
+          Word roots — type each word
         </Text>
         <Text fontSize="xs" color="fg.muted" aria-live="polite">
           {correctCount} / {orderedKeys.length} correct
