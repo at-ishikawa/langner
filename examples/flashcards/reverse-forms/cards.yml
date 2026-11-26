@@ -1,0 +1,26 @@
+# Cards whose examples use a different surface form than the expression. Each
+# `highlight` names the exact form the reverse quiz blanks in that example, and
+# that form is also accepted as the answer.
+- title: "Answer forms"
+  description: "Irregular forms, placeholders and spelling"
+  date: 2025-03-10T00:00:00Z
+  cards:
+    - expression: "go"
+      meaning: "to move or travel from one place to another"
+      examples:
+        - text: "Last summer we went to the seaside."
+          highlight: "went"
+    - expression: "keep one's cool"
+      meaning: "to stay calm in a difficult situation"
+      examples:
+        - text: "When the train was cancelled, she kept her cool."
+          highlight: "kept her cool"
+    - expression: "spill the beans"
+      meaning: "to tell people secret information"
+      examples:
+        - text: "Who spilled the beans about the surprise party?"
+          highlight: "spilled the beans"
+    - expression: "millennium"
+      meaning: "a period of a thousand years"
+      examples:
+        - "The city celebrated the new millennium with fireworks."

@@ -277,13 +277,9 @@ func TestQuizHandler_Reverse_LivePostgres_Integration(t *testing.T) {
 	require.NotEmpty(t, startResp.Msg.GetFlashcards())
 	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
 
+	// The exact answer is graded deterministically (matchReverseAnswer), so
+	// the mock grader expects no call.
 	answer := func(t *testing.T) {
-		mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(
-			inference.ValidateWordFormResponse{
-				Classification: inference.ClassificationSameWord,
-				Reason:         "exact match",
-				Quality:        4,
-			}, nil)
 		_, err := handler.SubmitReverseAnswer(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.SubmitReverseAnswerRequest{
 				NoteId: noteID, Answer: "serendipity", ResponseTimeMs: 1000,

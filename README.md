@@ -127,7 +127,7 @@ Test yourself with several quiz modes, all powered by spaced repetition:
 
 **Vocabulary Quizzes**
 - **Standard** - See a word, type its meaning
-- **Reverse** - See a meaning and context, type the word
+- **Reverse** - See a meaning and context, type the word. Any form of the word counts, including the exact form the example sentence uses ("stepped on my toes" for "step on someone's toes"). A misspelled single word counts as wrong, while small typos in idioms and phrases are forgiven
 - **Freeform** - Recall any word and its meaning from memory
 
 Words with etymology origins are quizzed as part of these vocabulary quizzes, and each word's origin (its roots, prefixes, and suffixes with their meanings) is shown in the feedback.

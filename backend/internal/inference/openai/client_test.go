@@ -1152,3 +1152,70 @@ func TestGetRequestBody_GradesAgainstStoredMeaning(t *testing.T) {
 	assert.Contains(t, last, "reference_meaning")
 	assert.Contains(t, last, "the land alongside a river")
 }
+
+// TestValidateWordFormRules pins the shared reverse-quiz rules: the stored
+// meaning and accepted forms are ground truth, spelling is strict for a single
+// word and lenient for a multi-word expression, and the reason is one short
+// sentence to the learner.
+func TestValidateWordFormRules(t *testing.T) {
+	for _, want := range []string{
+		"GROUND TRUTH",
+		"AUTHORITATIVE",
+		`every entry of "accepted_forms" are correct answers`,
+		`NEVER "synonym": "lost his way" for "lose one's way", "broke my promise" for "break one's promise"`,
+		`Single word: a misspelling is "wrong"`,
+		`Spelling variants such as "colour"/"color" stay "same_word"`,
+		"Multi-word expression (idiom, phrasal verb, fixed phrase): ignore spelling mistakes",
+		`One short sentence written to the learner as "you"`,
+		"Do not start with or restate the verdict",
+		"Never define the expected word",
+	} {
+		assert.Contains(t, validateWordFormRules, want)
+	}
+	assert.NotContains(t, validateWordFormRules, "small spelling errors that clearly show the user knows the word")
+}
+
+// TestValidateWordForm_PromptsShareRulesAndSendAcceptedForms checks that both
+// the single-answer and the batched prompt embed validateWordFormRules and
+// pass the card's accepted forms to the model.
+func TestValidateWordForm_PromptsShareRulesAndSendAcceptedForms(t *testing.T) {
+	params := inference.ValidateWordFormRequest{
+		Expected:      "step on someone's toes",
+		AcceptedForms: []string{"step on someone's toes", "stepped on my toes"},
+		UserAnswer:    "stepped over my toes",
+		Meaning:       "to upset someone",
+	}
+	capture := func(t *testing.T, content string) (*ChatCompletionRequest, *Client) {
+		got := &ChatCompletionRequest{}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.NoError(t, json.NewDecoder(r.Body).Decode(got))
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(ChatCompletionResponse{
+				Choices: []Choice{{Message: ChoiceMessage{Role: RoleAssistant, Content: content}}},
+			})
+		}))
+		t.Cleanup(server.Close)
+		return got, &Client{httpClient: resty.New().SetBaseURL(server.URL), model: "gpt-4"}
+	}
+
+	t.Run("single answer", func(t *testing.T) {
+		got, client := capture(t, `{"classification":"wrong","reason":"You changed the preposition.","quality":1}`)
+		_, err := client.ValidateWordForm(context.Background(), params)
+		require.NoError(t, err)
+		require.Len(t, got.Messages, 2)
+		assert.Contains(t, got.Messages[0].Content, validateWordFormRules)
+		assert.Contains(t, got.Messages[1].Content, "Also accepted (forms used on this card): step on someone's toes; stepped on my toes")
+	})
+
+	t.Run("batch", func(t *testing.T) {
+		got, client := capture(t, `[{"index":0,"classification":"wrong","reason":"You changed the preposition.","quality":1}]`)
+		_, err := client.ValidateWordFormBatch(context.Background(), []inference.ValidateWordFormRequest{params})
+		require.NoError(t, err)
+		require.Len(t, got.Messages, 2)
+		assert.Contains(t, got.Messages[0].Content, validateWordFormRules)
+		var items []validateWordFormBatchItem
+		require.NoError(t, json.Unmarshal([]byte(got.Messages[1].Content), &items))
+		require.Len(t, items, 1)
+		assert.Equal(t, params.AcceptedForms, items[0].AcceptedForms)
+	})
+}

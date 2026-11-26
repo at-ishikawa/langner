@@ -1624,12 +1624,20 @@ type ReverseCard struct {
 	ConceptHead    string
 	ConceptMembers []string
 	ConceptMeaning string
+
+	// AcceptedForms lists every form this card accepts as the answer: the
+	// lemma, the alt form, the highlight of each shown example and, for a
+	// family concept, every member (see reverseAcceptedForms). It is grading-only and never sent to
+	// the client, since it would reveal the answer.
+	AcceptedForms []string
 }
 
 // ReverseContext represents a context sentence with masking info.
 type ReverseContext struct {
 	Context       string
 	MaskedContext string
+	// Highlight is the example's surface form that was masked, if any.
+	Highlight string
 }
 
 // LoadReverseCards loads reverse quiz cards for the given notebooks.
@@ -1760,6 +1768,9 @@ func (s *Service) loadReverseCards(userID int64, notebookIDs []string, listMissi
 	// Collapse member rows into one concept card per concept, mirroring
 	// LoadCards. Run before shuffle so concept ordering is stable.
 	cards = collapseConceptReverseCards(cards, buildAllConceptIndexes(reader, notebookIDs))
+	for i := range cards {
+		cards[i].AcceptedForms = reverseAcceptedForms(cards[i])
+	}
 	if !s.disableShuffle {
 		rand.Shuffle(len(cards), func(i, j int) {
 			cards[i], cards[j] = cards[j], cards[i]
@@ -2020,7 +2031,7 @@ func reverseHintContext(text, expression, altForm, highlight string) (ReverseCon
 			return ReverseContext{}, false
 		}
 	}
-	return ReverseContext{Context: text, MaskedContext: masked}, true
+	return ReverseContext{Context: text, MaskedContext: masked, Highlight: highlight}, true
 }
 
 // maskOccurrences replaces every case-insensitive occurrence of target in
@@ -2204,6 +2215,11 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, userID int64, card Rev
 	if strings.TrimSpace(answer) == "" {
 		return GradeResult{Correct: false, Reason: "No answer provided.", Quality: int(notebook.QualityWrong)}, nil
 	}
+	// An answer that is certainly right (or a certain misspelling) is settled
+	// without the LLM — e.g. the exact form the example sentence blanked.
+	if result, ok := matchReverseAnswer(card.AcceptedForms, answer, responseTimeMs); ok {
+		return result, nil
+	}
 	var contextStr string
 	if len(card.Contexts) > 0 {
 		contextStr = card.Contexts[0].Context
@@ -2217,6 +2233,7 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, userID int64, card Rev
 	}
 	validation, err := client.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
 		Expected:       card.Expression,
+		AcceptedForms:  card.AcceptedForms,
 		UserAnswer:     answer,
 		Meaning:        card.Meaning,
 		Context:        contextStr,
@@ -2262,10 +2279,10 @@ func emptyAnswerGrade() GradeResult {
 
 // GradeReverseAnswerBatch grades several reverse answers with a SINGLE LLM call
 // (ValidateWordFormBatch) instead of one call per answer — the fix for the
-// batch-submit 429 burst. Empty answers are graded deterministically and never
-// reach the model. Results are returned in the same order as the inputs, with
-// the same per-item semantics (classification, correctness, quality) as
-// GradeReverseAnswer. The three slices must be the same length.
+// batch-submit 429 burst. Empty answers and answers matchReverseAnswer settles
+// are graded deterministically and never reach the model. Results are returned
+// in the same order as the inputs, with the same per-item semantics
+// (classification, correctness, quality) as GradeReverseAnswer. The three slices must be the same length.
 //
 // It returns inference.ErrMalformedResponse (wrapped) when the batched response
 // is unusable (unparseable or wrong-length) so the caller can fall back to
@@ -2280,12 +2297,17 @@ func (s *Service) GradeReverseAnswerBatch(ctx context.Context, userID int64, car
 			results[i] = emptyAnswerGrade()
 			continue
 		}
+		if result, ok := matchReverseAnswer(cards[i].AcceptedForms, answers[i], responseTimes[i]); ok {
+			results[i] = result
+			continue
+		}
 		var contextStr string
 		if len(cards[i].Contexts) > 0 {
 			contextStr = cards[i].Contexts[0].Context
 		}
 		reqs = append(reqs, inference.ValidateWordFormRequest{
 			Expected:       cards[i].Expression,
+			AcceptedForms:  cards[i].AcceptedForms,
 			UserAnswer:     answers[i],
 			Meaning:        cards[i].Meaning,
 			Context:        contextStr,

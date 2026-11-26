@@ -1,0 +1,13 @@
+- event: Office Talk - Monday Meeting
+  date: 2025-03-03T00:00:00Z
+  scenes:
+    - scene: After the meeting
+      conversations:
+        - speaker: Anna
+          quote: Yesterday he {{ stepped on my toes }} in the meeting.
+        - speaker: Ben
+          quote: Try to keep calm and talk to him about it.
+      definitions:
+        - expression: stepped on my toes
+          definition: step on someone's toes
+          meaning: to upset someone by getting involved in something that is their responsibility
