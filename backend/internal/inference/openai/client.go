@@ -1075,6 +1075,65 @@ func (client *Client) lookupWord(
 	return inference.LookupWordResponse{Definitions: defs}, nil
 }
 
+// validateWordFormRules are the classification, spelling, reason and quality
+// rules shared by the single-answer (validateWordForm) and batched
+// (validateWordFormBatch) reverse-quiz prompts, so the two cannot drift apart.
+const validateWordFormRules = `GROUND TRUTH — THE MOST IMPORTANT RULE
+- The meaning shown is the learner's stored meaning and is AUTHORITATIVE. Never judge whether the expected word can carry that meaning, and never cite another sense of it.
+- The expected expression and every entry of "accepted_forms" are correct answers. An answer that is any of them, or a form of any of them, is "same_word", whatever else the word can mean.
+- The context sentence shows how the expression is used. An answer that fills it the way the sentence does is "same_word".
+
+CLASSIFICATION RULES:
+
+1. "same_word" - The user's answer IS the expected word/expression (or one of "accepted_forms"), just in a different form:
+   - Different tense: "ran" for "run", "swimming" for "swim"
+   - Different number: "boxes" for "box", "children" for "child"
+   - Different case: "Hello" for "hello"
+   - With/without articles: "a book" for "book", missing "a" or "the" within expressions
+   - Spelling variants: "colour" for "color"
+   - Placeholders: filling "one's" / "someone's" / "someone" / "oneself" with any pronoun or possessive, combined with any tense, is ALWAYS "same_word", NEVER "synonym": "lost his way" for "lose one's way", "broke my promise" for "break one's promise"
+   - Optional parenthetical parts omitted: if expected has "(word)" meaning optional, omitting it is OK
+   - Minor word omissions: missing small words (articles, prepositions) that don't change the core meaning
+   - Preposition variants in fixed expressions: "in" vs "on" when the core phrase is identical
+   - KEY: If the user's answer contains the essential words of the expected expression, classify as "same_word"
+
+2. "synonym" - A different word or expression with the same or very similar meaning:
+   - Single words: "joyful" when expected "happy", "big" when expected "large"
+   - Multi-word expressions: a different idiom/phrase with similar meaning (e.g., "give up" when expected "throw in the towel")
+   - The user clearly knows the meaning but produced a different word/expression
+   - Classify as "synonym" so the user gets a chance to retry with the specific expected word
+
+3. "wrong" - The user's answer is incorrect:
+   - Wrong definition entirely
+   - Antonym (opposite meaning)
+   - Unrelated word or expression
+   - A misspelled single word (see SPELLING)
+   - Gibberish or empty
+
+SPELLING:
+- Single word: a misspelling is "wrong", and the reason says it is a spelling mistake. Spelling variants such as "colour"/"color" stay "same_word".
+- Multi-word expression (idiom, phrasal verb, fixed phrase): ignore spelling mistakes. If the words are recognisably the expression's words, it is "same_word".
+
+NOTE ON MULTI-WORD EXPRESSIONS:
+- Minor omissions (missing articles like "a"/"the", optional words) within the SAME expression should be classified as "same_word"; spelling mistakes follow SPELLING above
+- A completely different expression with similar meaning should be classified as "synonym", NOT "wrong"
+
+REASON:
+- One short sentence written to the learner as "you".
+- Do not start with or restate the verdict ("Incorrect", "Correct", "User's answer is...").
+- Never define the expected word or give its meaning; the app already shows the stored meaning.
+- For "wrong", say what differs (e.g. "You changed the preposition.", "Check the spelling.", "That's a different word with a related meaning.").
+- For "synonym", say it is close but not the expression being asked for.
+
+QUALITY ASSESSMENT:
+Also assess response speed quality (1-5) based on response time and expression complexity:
+- If wrong: quality = 1
+- If correct (same_word or synonym), evaluate response time relative to expression complexity:
+  - Fast (quick recall for this expression's length/complexity): quality = 5
+  - Normal (reasonable time for this expression): quality = 4
+  - Slow (took long relative to expression complexity): quality = 3
+- Consider that longer/more complex expressions (idioms, phrasal verbs) naturally take more time than single words.`
+
 // ValidateWordForm validates if the user's answer matches the expected word
 func (client *Client) ValidateWordForm(
 	ctx context.Context,
@@ -1114,50 +1173,12 @@ func (client *Client) validateWordForm(
 The user was shown a MEANING and asked to produce a SPECIFIC word/expression.
 You must classify their answer into one of three categories.
 
-CLASSIFICATION RULES:
-
-1. "same_word" - The user's answer IS the expected word/expression, just in a different form:
-   - Different tense: "ran" for "run", "swimming" for "swim"
-   - Different number: "boxes" for "box", "children" for "child"
-   - Different case: "Hello" for "hello"
-   - With/without articles: "a book" for "book", missing "a" or "the" within expressions
-   - Spelling variants: "colour" for "color"
-   - Pronoun variants in expressions: "lost his way" for "lose one's way"
-   - Optional parenthetical parts omitted: if expected has "(word)" meaning optional, omitting it is OK
-   - Minor word omissions: missing small words (articles, prepositions) that don't change the core meaning
-   - Preposition variants in fixed expressions: "in" vs "on" when the core phrase is identical
-   - Minor typos: transposed letters, missing/extra letter, or small spelling errors that clearly show the user knows the word
-   - KEY: If the user's answer contains the essential words of the expected expression, classify as "same_word"
-
-2. "synonym" - A different word or expression with the same or very similar meaning:
-   - Single words: "joyful" when expected "happy", "big" when expected "large"
-   - Multi-word expressions: a different idiom/phrase with similar meaning (e.g., "give up" when expected "throw in the towel")
-   - The user clearly knows the meaning but produced a different word/expression
-   - Classify as "synonym" so the user gets a chance to retry with the specific expected word
-
-3. "wrong" - The user's answer is incorrect:
-   - Wrong definition entirely
-   - Antonym (opposite meaning)
-   - Unrelated word or expression
-   - Gibberish or empty
-
-NOTE ON MULTI-WORD EXPRESSIONS:
-- Minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should be classified as "same_word"
-- A completely different expression with similar meaning should be classified as "synonym", NOT "wrong"
-
-QUALITY ASSESSMENT:
-Also assess response speed quality (1-5) based on response time and expression complexity:
-- If wrong: quality = 1
-- If correct (same_word or synonym), evaluate response time relative to expression complexity:
-  - Fast (quick recall for this expression's length/complexity): quality = 5
-  - Normal (reasonable time for this expression): quality = 4
-  - Slow (took long relative to expression complexity): quality = 3
-- Consider that longer/more complex expressions (idioms, phrasal verbs) naturally take more time than single words.
+` + validateWordFormRules + `
 
 OUTPUT FORMAT (JSON only):
 {
   "classification": "same_word" | "synonym" | "wrong",
-  "reason": "<brief explanation>",
+  "reason": "<one short sentence to the learner, see REASON>",
   "quality": <1-5>
 }
 
@@ -1173,11 +1194,16 @@ Do NOT include any text outside the JSON.`
 		responseTimeInfo = fmt.Sprintf("\nResponse time: %dms", params.ResponseTimeMs)
 	}
 
-	userMessage := fmt.Sprintf(`Expected word: %s
+	acceptedInfo := ""
+	if len(params.AcceptedForms) > 0 {
+		acceptedInfo = fmt.Sprintf("\nAlso accepted (forms used on this card): %s", strings.Join(params.AcceptedForms, "; "))
+	}
+
+	userMessage := fmt.Sprintf(`Expected word: %s%s
 Meaning shown: %s%s%s
 User's answer: %s
 
-Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTimeInfo, params.UserAnswer)
+Classify this answer.`, params.Expected, acceptedInfo, params.Meaning, contextInfo, responseTimeInfo, params.UserAnswer)
 
 	requestBody := ChatCompletionRequest{
 		Model:       client.model,
@@ -1280,12 +1306,13 @@ func (client *Client) ValidateWordFormBatch(
 // It mirrors ValidateWordFormRequest but carries an explicit index so the model
 // is anchored to return results in the same order.
 type validateWordFormBatchItem struct {
-	Index          int    `json:"index"`
-	Expected       string `json:"expected"`
-	Meaning        string `json:"meaning"`
-	Context        string `json:"context,omitempty"`
-	ResponseTimeMs int64  `json:"response_time_ms,omitempty"`
-	UserAnswer     string `json:"user_answer"`
+	Index          int      `json:"index"`
+	Expected       string   `json:"expected"`
+	AcceptedForms  []string `json:"accepted_forms,omitempty"`
+	Meaning        string   `json:"meaning"`
+	Context        string   `json:"context,omitempty"`
+	ResponseTimeMs int64    `json:"response_time_ms,omitempty"`
+	UserAnswer     string   `json:"user_answer"`
 }
 
 // validateWordFormBatch issues the single batched grading request and returns
@@ -1298,55 +1325,17 @@ func (client *Client) validateWordFormBatch(
 	systemPrompt := `You are a vocabulary quiz validator for a reverse quiz (meaning → word production).
 
 You will receive a JSON ARRAY of items. Each item has an "index", the "expected"
-word/expression, the "meaning" shown to the user, an optional "context", an
-optional "response_time_ms", and the "user_answer". For EACH item, classify the
-user's answer into one of three categories.
+word/expression, optional "accepted_forms", the "meaning" shown to the user, an
+optional "context", an optional "response_time_ms", and the "user_answer". For
+EACH item, classify the user's answer into one of three categories.
 
-CLASSIFICATION RULES:
-
-1. "same_word" - The user's answer IS the expected word/expression, just in a different form:
-   - Different tense: "ran" for "run", "swimming" for "swim"
-   - Different number: "boxes" for "box", "children" for "child"
-   - Different case: "Hello" for "hello"
-   - With/without articles: "a book" for "book", missing "a" or "the" within expressions
-   - Spelling variants: "colour" for "color"
-   - Pronoun variants in expressions: "lost his way" for "lose one's way"
-   - Optional parenthetical parts omitted: if expected has "(word)" meaning optional, omitting it is OK
-   - Minor word omissions: missing small words (articles, prepositions) that don't change the core meaning
-   - Preposition variants in fixed expressions: "in" vs "on" when the core phrase is identical
-   - Minor typos: transposed letters, missing/extra letter, or small spelling errors that clearly show the user knows the word
-   - KEY: If the user's answer contains the essential words of the expected expression, classify as "same_word"
-
-2. "synonym" - A different word or expression with the same or very similar meaning:
-   - Single words: "joyful" when expected "happy", "big" when expected "large"
-   - Multi-word expressions: a different idiom/phrase with similar meaning (e.g., "give up" when expected "throw in the towel")
-   - The user clearly knows the meaning but produced a different word/expression
-   - Classify as "synonym" so the user gets a chance to retry with the specific expected word
-
-3. "wrong" - The user's answer is incorrect:
-   - Wrong definition entirely
-   - Antonym (opposite meaning)
-   - Unrelated word or expression
-   - Gibberish or empty
-
-NOTE ON MULTI-WORD EXPRESSIONS:
-- Minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should be classified as "same_word"
-- A completely different expression with similar meaning should be classified as "synonym", NOT "wrong"
-
-QUALITY ASSESSMENT:
-Also assess response speed quality (1-5) based on response time and expression complexity:
-- If wrong: quality = 1
-- If correct (same_word or synonym), evaluate response time relative to expression complexity:
-  - Fast (quick recall for this expression's length/complexity): quality = 5
-  - Normal (reasonable time for this expression): quality = 4
-  - Slow (took long relative to expression complexity): quality = 3
-- Consider that longer/more complex expressions (idioms, phrasal verbs) naturally take more time than single words.
+` + validateWordFormRules + `
 
 OUTPUT FORMAT (JSON only): a JSON ARRAY with exactly one object per input item.
 Each object MUST echo the SAME "index" as the input item it grades, so results
 can be matched back even if the array order changes:
 [
-  {"index": <the item's index>, "classification": "same_word" | "synonym" | "wrong", "reason": "<brief explanation>", "quality": <1-5>}
+  {"index": <the item's index>, "classification": "same_word" | "synonym" | "wrong", "reason": "<one short sentence to the learner, see REASON>", "quality": <1-5>}
 ]
 
 Return exactly one object per input item, each with the correct "index" (every
@@ -1357,6 +1346,7 @@ input "index" appears exactly once). Do NOT include any text outside the JSON ar
 		items[i] = validateWordFormBatchItem{
 			Index:          i,
 			Expected:       p.Expected,
+			AcceptedForms:  p.AcceptedForms,
 			Meaning:        p.Meaning,
 			Context:        p.Context,
 			ResponseTimeMs: p.ResponseTimeMs,

@@ -1,0 +1,10 @@
+# A short invented conversation whose word is stored in an inflected surface
+# form. `expression` is the form the scene uses ("stepped on my toes") and
+# `definition` is the dictionary form ("step on someone's toes"), so the
+# reverse quiz blanks "stepped on my toes" in the example and must accept that
+# exact form as the answer.
+id: office-talk
+kind: Conversations
+name: Office Talk
+notebooks:
+  - ./episode1.yml

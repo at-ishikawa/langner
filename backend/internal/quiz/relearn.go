@@ -458,13 +458,8 @@ func (s *Service) LoadRelearnPool(userID int64, windowStart time.Time) ([]Relear
 			ContextScenes: relearnScenesFromCard(fc),
 		}
 		if c.format == notebook.QuizTypeReverse {
-			masked := relearnMaskedContexts(fc)
-			card.Contexts = masked
-			card.reverseCard = ReverseCard{
-				NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
-				Meaning: fc.Meaning, Contexts: masked, Expression: fc.Expression, AltForm: fc.OriginalExpression,
-				WordDetail: fc.WordDetail, Images: fc.Images,
-			}
+			card.reverseCard = relearnReverseCard(fc)
+			card.Contexts = card.reverseCard.Contexts
 		} else {
 			card.Examples = relearnExampleHints(fc)
 			card.vocabCard = Card{
@@ -542,13 +537,8 @@ func buildEtymologyOriginCard(fc FreeformCard, op WordOriginPart, direction note
 		ContextScenes: relearnScenesFromCard(fc),
 	}
 	if direction == notebook.QuizTypeReverse {
-		masked := relearnMaskedContexts(fc)
-		card.Contexts = masked
-		card.reverseCard = ReverseCard{
-			NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
-			Meaning: fc.Meaning, Contexts: masked, Expression: fc.Expression, AltForm: fc.OriginalExpression,
-			WordDetail: fc.WordDetail, Images: fc.Images,
-		}
+		card.reverseCard = relearnReverseCard(fc)
+		card.Contexts = card.reverseCard.Contexts
 		return card
 	}
 	card.Examples = relearnExampleHints(fc)
@@ -760,6 +750,19 @@ func (s *Service) relearnGrammarIndex(userID int64) (map[string][]relearnGrammar
 		}
 	}
 	return byID, nil
+}
+
+// relearnReverseCard is the card the reverse grader sees for a relearn word,
+// shared by the plain and origin-family reverse cards: the masked example hints
+// and the forms they mask as its AcceptedForms, like the normal reverse quiz.
+func relearnReverseCard(fc FreeformCard) ReverseCard {
+	card := ReverseCard{
+		NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
+		Meaning: fc.Meaning, Contexts: relearnMaskedContexts(fc), Expression: fc.Expression, AltForm: fc.OriginalExpression,
+		WordDetail: fc.WordDetail, Images: fc.Images,
+	}
+	card.AcceptedForms = reverseAcceptedForms(card)
+	return card
 }
 
 // relearnMaskedContexts builds reverse-quiz-style masked contexts from a vocab
